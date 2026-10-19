@@ -33,7 +33,7 @@ def next_tag(bump: str, tags: list[str], fragments: list[str], release_date: dat
             "major"
             if any(fragment.endswith(".breaking.md") for fragment in fragments)
             else "minor"
-            if any(fragment.endswith(".feature.md") for fragment in fragments)
+            if any(fragment.endswith((".feature.md", ".breaking.minor.md")) for fragment in fragments)
             else "patch"
         )
     match bump:

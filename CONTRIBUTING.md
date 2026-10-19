@@ -10,9 +10,10 @@ opening the PR. Use `feature` for additions, `change` for changed behavior, `bug
 documentation. Other types are `breaking`, `security`, `performance`, `deprecation`, `removal`, and `packaging`. Keep
 separate changes in separate fragments.
 
-For both additions and drops in supported Python versions, use a `feature` fragment. The automatic selector makes a
-minor release, and users who need a dropped runtime can continue using earlier releases. State the exact version change.
-This rule takes precedence over the `breaking` type for Python runtime support changes.
+For Python support additions, use a `feature` fragment. For support drops, use a filename ending in
+`.breaking.minor.md`, such as `+drop-python-3-9.breaking.minor.md`. Towncrier keeps that entry under Breaking changes,
+while release-creator selects a minor bump because users can continue using earlier releases. State the exact version
+change. Use ordinary `.breaking.md` fragments for other changes that require a major release.
 
 Write a complete sentence and credit verified human authors:
 
