@@ -133,6 +133,27 @@ def test_render_markdown_selects_package_history() -> None:
     )
 
 
+def test_render_markdown_package_contributor_anchor() -> None:
+    changelog = dedent("""\
+        ## pyproject-fmt
+
+        ### 2.30.4 (today)
+
+        #### Added
+
+        - Support a new option by [@alice](https://github.com/alice).
+        """)
+    generated = "## New Contributors\n* @alice made their first contribution in #42\n"
+
+    result = render_markdown(
+        changelog,
+        ReleaseContext(tag="pyproject-fmt/2.30.4", repository="tox-dev/toml-fmt", package="pyproject-fmt"),
+        generated,
+    )
+
+    assert '<a name="release-pyproject-fmt-2-30-4-new-contributors"></a>' in result
+
+
 @pytest.mark.parametrize(
     ("changelog", "count"),
     [

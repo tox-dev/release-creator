@@ -263,7 +263,7 @@ def _new_contributors(notes: str, generated_notes: str, tag: str) -> str:
     ]
     if not entries:
         return ""
-    anchor = f"release-{tag.replace('.', '-')}-new-contributors"
+    anchor = f"release-{tag.replace('.', '-').replace('/', '-')}-new-contributors"
     return f'<a name="{anchor}"></a>\n\n### New Contributors\n\n' + "\n".join(entries)
 
 
