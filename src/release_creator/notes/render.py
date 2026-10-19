@@ -112,7 +112,11 @@ def _new_contributors(notes: str, generated_notes: str, tag: str) -> str:
             match := re.fullmatch(
                 r"""
                 [-*]\ @(?P<handle>[A-Za-z0-9-]+)  # Generated contributor bullet
-                \ made\ their\ first\ contribution\ in\ \#
+                \ made\ their\ first\ contribution\ in\s+
+                (?P<reference>
+                    \#                            # Short PR reference
+                    |https://github\.com/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+/pull/  # GitHub PR URL
+                )
                 (?P<number>\d+)                   # First PR number
                 """,
                 line.strip(),

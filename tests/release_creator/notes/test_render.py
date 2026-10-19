@@ -56,14 +56,21 @@ def test_render_markdown_first_release_without_artifact() -> None:
     assert result == "**Full Changelog**: https://github.com/tox-dev/example/commits/0.1.0\n"
 
 
-def test_render_markdown_keeps_credited_new_contributors() -> None:
+@pytest.mark.parametrize(
+    "reference",
+    [
+        pytest.param("#42", id="short-reference"),
+        pytest.param("https://github.com/tox-dev/example/pull/42", id="pull-url"),
+    ],
+)
+def test_render_markdown_keeps_credited_new_contributors(reference: str) -> None:
     changelog = "## 1.2.3 (today)\n\n### Added\n\n- New option by [@alice](https://github.com/alice).\n"
-    generated = dedent("""\
+    generated = dedent(f"""\
         <!-- Release notes generated using configuration in .github/release.yml at main -->
         ## What's Changed
         * Generated change
         ## New Contributors
-        * @alice made their first contribution in #42
+        * @alice made their first contribution in {reference}
         * @dependabot[bot] made their first contribution in #43
         * @uncredited made their first contribution in #44
         **Full Changelog**: unrelated
