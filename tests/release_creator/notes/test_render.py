@@ -56,6 +56,24 @@ def test_render_markdown_first_release_without_artifact() -> None:
     assert result == "**Full Changelog**: https://github.com/tox-dev/example/commits/0.1.0\n"
 
 
+@pytest.mark.parametrize(
+    "comparison",
+    [
+        pytest.param("**Full Changelog**: https://github.com/tox-dev/example/compare/old...1.2.3", id="bold"),
+        pytest.param("Full Changelog: https://github.com/tox-dev/example/compare/old...1.2.3", id="plain"),
+    ],
+)
+def test_render_markdown_replaces_source_comparison(comparison: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Fixed\n\n- Correct a bug.\n\n{comparison}\n"
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example", previous="1.2.2"))
+
+    assert result == (
+        "### Bug fixes\n\n- Correct a bug.\n\n"
+        "**Full Changelog**: https://github.com/tox-dev/example/compare/1.2.2...1.2.3\n"
+    )
+
+
 def test_render_markdown_cross_checks_pull_request_authors() -> None:
     changelog = dedent("""\
         ## 1.2.3 (today)
@@ -231,6 +249,51 @@ def test_render_rst_keeps_issue_role_as_issue() -> None:
 def test_render_rst_omits_empty_category() -> None:
     changelog = "1.2.3 (today)\n==============\n\nAdded\n-----\n\nFixed\n-----\n\n- Correct a bug.\n"
     result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+    assert result == (
+        '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n- Correct a bug.\n\n'
+        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "comparison",
+    [
+        pytest.param("**Full Changelog**: https://github.com/tox-dev/example/compare/old...1.2.3", id="bold"),
+        pytest.param("Full Changelog: https://github.com/tox-dev/example/compare/old...1.2.3", id="plain"),
+    ],
+)
+def test_render_rst_replaces_source_comparison(comparison: str) -> None:
+    changelog = f"1.2.3 (today)\n==============\n\nFixed\n-----\n\n- Correct a bug.\n\n{comparison}\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example", previous="1.2.2"))
+
+    assert result == (
+        '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n- Correct a bug.\n\n'
+        "**Full Changelog**: https://github.com/tox-dev/example/compare/1.2.2...1.2.3\n"
+    )
+
+
+def test_render_rst_stops_at_linked_previous_version() -> None:
+    changelog = dedent("""\
+        1.2.3 (2026-10-19)
+        ==================
+
+        Fixed
+        -----
+
+        - Correct a bug.
+
+        `1.2.2 <https://github.com/tox-dev/example/tree/1.2.2>`_ - 2026-10-18
+        =====================================================================
+
+        Bugfixes
+        --------
+
+        - An older fix.
+        """)
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
     assert result == (
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n- Correct a bug.\n\n'
         "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"

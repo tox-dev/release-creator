@@ -213,19 +213,23 @@ def _new_contributors(notes: str, generated_notes: str, tag: str) -> str:
 
 
 def _extract_rst_body(changelog: str, context: ReleaseContext, issue_role: str) -> str:
-    lines = changelog.splitlines()
+    lines = [line for line in changelog.splitlines() if not _is_comparison_line(line)]
     version = re.compile(
         r"""
-        ^v?                             # Optional release prefix
-        (?P<tag>\d+\.\d+\.\d+)        # Numeric version
-        \ \((?P<date>[^)]+)\)$          # Parenthesized release date
+        ^(?:
+            v?(?P<tag>\d+\.\d+\.\d+)\ \((?P<date>[^)]+)\)  # Plain version with parenthesized date
+            |
+            `(?P<link_tag>\d+\.\d+\.\d+)\ <https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/tree/
+            (?P=link_tag)>`_\ -\ (?P<link_date>\d{4}-\d{2}-\d{2})  # Linked version with date
+        )$
         """,
         re.VERBOSE,
     )
     headings = [
         index
         for index, line in enumerate(lines)
-        if (match := version.fullmatch(line.strip())) and match["tag"] == context.tag.removeprefix("v")
+        if (match := version.fullmatch(line.strip()))
+        and (match["tag"] or match["link_tag"]) == context.tag.removeprefix("v")
     ]
     if len(headings) != 1:
         msg = f"expected one changelog section for {context.tag}, found {len(headings)}"
@@ -382,7 +386,7 @@ def _extract_body(changelog: str, tag: str) -> str:
         """,
         re.VERBOSE,
     )
-    lines = changelog.splitlines()
+    lines = [line for line in changelog.splitlines() if not _is_comparison_line(line)]
     headings = [index for index, line in enumerate(lines) if (match := version.fullmatch(line)) and match["tag"] == tag]
     if len(headings) != 1:
         msg = f"expected one changelog section for {tag}, found {len(headings)}"
@@ -417,6 +421,10 @@ def _extract_body(changelog: str, tag: str) -> str:
         body.append(author.sub(lambda match: f"@{match['handle']}", line))
 
     return "\n".join(body).strip()
+
+
+def _is_comparison_line(line: str) -> bool:
+    return line.strip().startswith(("**Full Changelog**:", "Full Changelog:"))
 
 
 __all__ = [

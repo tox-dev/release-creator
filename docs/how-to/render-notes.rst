@@ -74,7 +74,8 @@ authors there; do not credit bots or reviewers for work they did not author.
 ``notes`` requires exactly one section for ``--tag`` and rejects unknown categories. It renames ``Fixed`` to
 ``Bug fixes`` and ``Added`` to ``Features`` while keeping each release bullet on one line. For Markdown, leave empty
 headings out of the tagged changelog; the supplied Towncrier template does this. The reStructuredText reader omits
-empty categories. The source's category anchors remain stable. See :doc:`the format reference
+empty categories. If the source section already has a ``Full Changelog`` line, ``notes`` replaces it with one link
+built from ``--previous`` and ``--tag``. The source's category anchors remain stable. See :doc:`the format reference
 <../reference/formats>` for every category name.
 
 Omit ``--artifact-url`` if there is no external artifact. Use ``--artifact-label`` to name another ecosystem's
