@@ -137,6 +137,10 @@ jobs:
           grep -Fq "## $version (" docs/changelog.md
           git diff --cached --check
           uvx prek run --all-files
+          if ! git diff --quiet || [[ -n $(git ls-files --others --exclude-standard) ]]; then
+            echo "::error::prek changed the validated release patch; inspect the generated changelog and rerun"
+            exit 1
+          fi
           git -c user.name=release-validation -c user.email=release-validation@users.noreply.github.com commit -m "release $version"
           git tag "$version"
           uv run --no-default-groups release-creator tags "$version"
