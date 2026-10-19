@@ -67,6 +67,36 @@ def test_render_markdown_preserves_legacy_other_changes() -> None:
     )
 
 
+def test_render_markdown_accepts_two_part_historical_tags() -> None:
+    changelog = dedent("""\
+        # Changelog
+
+        ## [0.2] - 2021-12-29
+
+        ### Other changes
+
+        - Old maintenance entry.
+
+        <a name="release-0-1"></a>
+
+        ## [0.1] - 2021-06-17
+
+        ### Added
+
+        - First release.
+
+        [0.2]: https://github.com/tox-dev/example/compare/0.1...0.2
+        [0.1]: https://github.com/tox-dev/example/commits/0.1
+        """)
+
+    result = render_markdown(changelog, ReleaseContext(tag="0.2", repository="tox-dev/example", previous="0.1"))
+
+    assert result == (
+        "### Other changes\n\n- Old maintenance entry.\n\n"
+        "**Full Changelog**: https://github.com/tox-dev/example/compare/0.1...0.2\n"
+    )
+
+
 @pytest.mark.parametrize(
     "heading",
     [
@@ -359,6 +389,25 @@ def test_render_rst_preserves_legacy_other_changes() -> None:
         '<a name="release-1-2-3-other-changes"></a>\n\n'
         "### Other changes\n\n- Update development tooling.\n\n"
         "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        pytest.param("0.2 (2021-12-29)", id="plain"),
+        pytest.param("`0.2 <https://github.com/tox-dev/example/tree/0.2>`_ - 2021-12-29", id="linked"),
+    ],
+)
+def test_render_rst_accepts_two_part_historical_tags(heading: str) -> None:
+    changelog = f"{heading}\n================\n\nOther changes\n-------------\n\n- Old maintenance entry.\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="0.2", repository="tox-dev/example"))
+
+    assert result == (
+        '<a name="release-0-2-other-changes"></a>\n\n'
+        "### Other changes\n\n- Old maintenance entry.\n\n"
+        "**Full Changelog**: https://github.com/tox-dev/example/commits/0.2\n"
     )
 
 

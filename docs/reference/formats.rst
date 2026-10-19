@@ -31,7 +31,8 @@ Changelog sections
 Markdown versions use ``## 1.2.3 (date)``, ``## v1.2.3 (date)``, or ``## [1.2.3] - date`` with level-three category
 headings. With ``--package``, the package heading is level two, versions are level three, and categories are level
 four. Package-prefixed Git tags such as ``pyproject-fmt/2.30.4`` retain that prefix in comparison links. RST versions
-use ``1.2.3 (date)`` and category headings with underlines. Empty categories are omitted.
+use ``1.2.3 (date)`` and category headings with underlines. Two-part versions such as ``0.2`` are accepted when
+rendering older releases. New releases use three-part versions. Empty categories are omitted.
 
 Each release item belongs under a listed category. Uncategorized bullets, loose prose, and headings without entries
 fail rendering, so they cannot become GitHub Release notes. A version with no entries can still render its comparison

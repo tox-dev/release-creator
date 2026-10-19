@@ -53,9 +53,9 @@ _RE_GENERATED_PR_AUTHOR: Final = re.compile(
 _RE_RST_VERSION: Final = re.compile(
     r"""
     ^(?:
-        v?(?P<tag>\d+\.\d+\.\d+)\ \((?P<date>[^)]+)\)  # Plain version with parenthesized date
+        v?(?P<tag>\d+\.\d+(?:\.\d+)?)\ \((?P<date>[^)]+)\)  # Plain version with parenthesized date
         |
-        `(?P<link_tag>\d+\.\d+\.\d+)\ <https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/tree/
+        `(?P<link_tag>\d+\.\d+(?:\.\d+)?)\ <https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/tree/
         (?P=link_tag)>`_\ -\ (?P<link_date>\d{4}-\d{2}-\d{2})  # Linked version with date
     )$
     """,
@@ -71,7 +71,7 @@ _RE_MARKDOWN_VERSION: Final = re.compile(
     r"""
     ^(?P<level>\#{2,3})\          # Markdown version heading level
     (?P<open>\[)?                   # Optional Keep a Changelog link bracket
-    (?P<tag>v?\d+\.\d+\.\d+)     # Release tag
+    (?P<tag>v?\d+\.\d+(?:\.\d+)?)  # Release tag with optional patch component
     (?(open)\])                     # Close the optional bracket
     (?:\ \([^)]+\)|\ -\ [^\n]+)? # Parenthesized or dash-separated date
     $                               # End of heading
@@ -81,7 +81,7 @@ _RE_MARKDOWN_VERSION: Final = re.compile(
 _RE_MARKDOWN_VERSION_ANCHOR: Final = re.compile(
     r"""
     ^<a\ name="release-             # Version anchor prefix
-    (?P<version>v?\d+(?:-\d+){2})  # Dotted version encoded for an anchor
+    (?P<version>v?\d+(?:-\d+){1,2})  # Dotted version encoded for an anchor
     "></a>$                         # Anchor terminator
     """,
     re.VERBOSE,
@@ -95,7 +95,7 @@ _RE_MARKDOWN_AUTHOR: Final = re.compile(
 )
 _RE_MARKDOWN_LINK_DEFINITION: Final = re.compile(
     r"""
-    ^\[(?P<version>v?\d+\.\d+\.\d+|unreleased)\]:  # Version comparison reference
+    ^\[(?P<version>v?\d+\.\d+(?:\.\d+)?|unreleased)\]:  # Version comparison reference
     \s+https://github\.com/[^\s]+                    # GitHub destination
     $                                                   # End of definition
     """,
