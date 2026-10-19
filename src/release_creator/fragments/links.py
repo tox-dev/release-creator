@@ -55,7 +55,7 @@ def add_pull_request_links(directory: Path, repository: str, commit_subjects: di
         link = f"([#{match['number']}](https://github.com/{repository}/pull/{match['number']}))"
         content, count = re.subn(
             r"""
-            (?P<before>\s+)            # Space before author credit
+            (?P<before>,?\s+)           # Optional comma and space before author credit
             by
             (?P<after>\s+)             # Space after credit marker
             (?=\[@|:user:)              # Markdown or RST author link

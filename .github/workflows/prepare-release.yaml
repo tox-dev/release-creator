@@ -36,7 +36,7 @@ jobs:
           fi
           uv run --no-default-groups release-creator fragments --repository "$GITHUB_REPOSITORY" --git
           uv run --no-default-groups --group release towncrier build --yes --version "$VERSION"
-          uv run --no-default-groups mdformat --wrap 120 docs/changelog.md
+          uvx prek exec mdformat -- mdformat --wrap 120 docs/changelog.md
           uvx prek run --all-files
           git diff HEAD --binary > "$RUNNER_TEMP/release.patch"
           test -s "$RUNNER_TEMP/release.patch"

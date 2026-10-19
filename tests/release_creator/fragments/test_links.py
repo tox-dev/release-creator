@@ -30,6 +30,17 @@ def test_add_pull_request_links_for_multiple_fragments(tmp_path: Path) -> None:
     assert second.read_text() == "Fix a bug ([#42](https://github.com/tox-dev/example/pull/42)).\n"
 
 
+def test_add_pull_request_links_removes_credit_comma(tmp_path: Path) -> None:
+    fragment = tmp_path / "+fix.bugfix.md"
+    fragment.write_text("Fix a bug, by [@alice](https://github.com/alice).\n")
+
+    add_pull_request_links(tmp_path, "tox-dev/example", {fragment.name: "Fix a bug (#42)"})
+
+    assert fragment.read_text() == (
+        "Fix a bug ([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n"
+    )
+
+
 @pytest.mark.parametrize(
     ("repository_name", "subject", "content", "message"),
     [
