@@ -69,8 +69,10 @@ _RE_RST_HEADING_UNDERLINE: Final = re.compile(
 _RE_MARKDOWN_VERSION: Final = re.compile(
     r"""
     ^\#\#\                         # Markdown version heading
-    (?P<tag>[^\s(]+)               # Release tag
-    (?:\ \([^)]+\))?                # Optional release date
+    (?P<open>\[)?                   # Optional Keep a Changelog link bracket
+    (?P<tag>v?\d+\.\d+\.\d+)     # Release tag
+    (?(open)\])                     # Close the optional bracket
+    (?:\ \([^)]+\)|\ -\ [^\n]+)? # Parenthesized or dash-separated date
     $                               # End of heading
     """,
     re.VERBOSE,
@@ -89,6 +91,14 @@ _RE_MARKDOWN_AUTHOR: Final = re.compile(
     \(https://github\.com/(?P=handle)\)  # Matching profile URL
     """,
     re.VERBOSE,
+)
+_RE_MARKDOWN_LINK_DEFINITION: Final = re.compile(
+    r"""
+    ^\[(?P<version>v?\d+\.\d+\.\d+|unreleased)\]:  # Version comparison reference
+    \s+https://github\.com/[^\s]+                    # GitHub destination
+    $                                                   # End of definition
+    """,
+    re.VERBOSE | re.IGNORECASE,
 )
 
 
@@ -401,11 +411,15 @@ def _validate_context(context: ReleaseContext) -> None:
 
 
 def _extract_body(changelog: str, tag: str) -> str:
-    lines = [line for line in changelog.splitlines() if not _is_comparison_line(line)]
+    lines = [
+        line
+        for line in changelog.splitlines()
+        if not _is_comparison_line(line) and not _RE_MARKDOWN_LINK_DEFINITION.fullmatch(line)
+    ]
     headings = [
         index
         for index, line in enumerate(lines)
-        if (match := _RE_MARKDOWN_VERSION.fullmatch(line)) and match["tag"] == tag
+        if (match := _RE_MARKDOWN_VERSION.fullmatch(line)) and match["tag"].removeprefix("v") == tag.removeprefix("v")
     ]
     if len(headings) != 1:
         msg = f"expected one changelog section for {tag}, found {len(headings)}"

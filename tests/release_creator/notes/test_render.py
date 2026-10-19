@@ -57,6 +57,41 @@ def test_render_markdown_first_release_without_artifact() -> None:
 
 
 @pytest.mark.parametrize(
+    "heading",
+    [
+        pytest.param("## [1.2.3] - 2026-10-19", id="linked-date"),
+        pytest.param("## v1.2.3 (2026-10-19)", id="v-prefixed"),
+    ],
+)
+def test_render_markdown_accepts_existing_version_headings(heading: str) -> None:
+    changelog = dedent(f"""\
+        # Changelog
+
+        {heading}
+
+        ### Added
+
+        - Support another platform.
+
+        ## [1.2.2] - 2026-10-18
+
+        ### Fixed
+
+        - Old fix.
+
+        [1.2.3]: https://github.com/tox-dev/example/compare/v1.2.2...v1.2.3
+        [unreleased]: https://github.com/tox-dev/example/compare/v1.2.3...HEAD
+        """)
+
+    result = render_markdown(changelog, ReleaseContext(tag="v1.2.3", repository="tox-dev/example"))
+
+    assert result == (
+        "### Features\n\n- Support another platform.\n\n"
+        "**Full Changelog**: https://github.com/tox-dev/example/commits/v1.2.3\n"
+    )
+
+
+@pytest.mark.parametrize(
     "comparison",
     [
         pytest.param("**Full Changelog**: https://github.com/tox-dev/example/compare/old...1.2.3", id="bold"),
