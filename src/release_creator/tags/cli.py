@@ -34,7 +34,7 @@ def _select(args: argparse.Namespace) -> None:
         version = next_tag(
             args.next,
             sys.stdin.read().splitlines(),
-            [path.name for path in args.directory.glob("*.*.md")],
+            [path.name for extension in ("md", "rst") for path in args.directory.glob(f"*.*.{extension}")],
             datetime.now(UTC).date(),
         )
         sys.stdout.write(f"{version}\n")

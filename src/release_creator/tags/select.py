@@ -31,9 +31,9 @@ def next_tag(bump: str, tags: list[str], fragments: list[str], release_date: dat
     if bump == "auto":
         bump = (
             "major"
-            if any(fragment.endswith(".breaking.md") for fragment in fragments)
+            if any(fragment.endswith((".breaking.md", ".breaking.rst")) for fragment in fragments)
             else "minor"
-            if any(fragment.endswith(".feature.md") for fragment in fragments)
+            if any(fragment.endswith((".feature.md", ".feature.rst")) for fragment in fragments)
             else "patch"
         )
     match bump:

@@ -17,8 +17,11 @@ def test_tags_validate(monkeypatch: pytest.MonkeyPatch) -> None:
     main()
 
 
-def test_tags_next(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    (tmp_path / "+one.feature.md").write_text("Add a feature.\n")
+@pytest.mark.parametrize("extension", [pytest.param("md", id="markdown"), pytest.param("rst", id="rst")])
+def test_tags_next(
+    extension: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / f"+one.feature.{extension}").write_text("Add a feature.\n")
     monkeypatch.setattr(sys, "argv", ["release-creator", "tags", "--next", "auto", "--directory", str(tmp_path)])
     monkeypatch.setattr(sys, "stdin", StringIO("0.1.0\njunk\n"))
 
