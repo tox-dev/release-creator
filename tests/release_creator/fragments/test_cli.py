@@ -4,10 +4,13 @@ import shutil
 import subprocess  # ruff: ignore[suspicious-subprocess-import]  # Test the fragment command against real Git history.
 import sys
 from typing import TYPE_CHECKING
+from unittest.mock import create_autospec
 
 import pytest
 
 from release_creator.cli import main
+from release_creator.fragments import cli as fragments_cli
+from release_creator.fragments.pull_requests import PullRequestAuthor
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -30,6 +33,41 @@ def test_fragments_cli_links_squash_pull_request(tmp_path: Path, monkeypatch: py
     main()
 
     assert fragment.read_text() == "Add a feature ([#3](https://github.com/tox-dev/example/pull/3)).\n"
+
+
+def test_fragments_cli_resolves_authors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    directory = tmp_path / "changelog.d"
+    directory.mkdir()
+    fragment = directory / "+topic.feature.md"
+    fragment.write_text("Add a feature.\n")
+    commits = tmp_path / "commits.tsv"
+    commits.write_text("+topic.feature.md\tAdd a feature (#3)\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "release-creator",
+            "fragments",
+            "--repository",
+            "tox-dev/example",
+            "--commit-map",
+            str(commits),
+            "--resolve-authors",
+        ],
+    )
+    resolve = create_autospec(
+        fragments_cli.pull_request_authors,
+        return_value={"3": PullRequestAuthor(handle="alice", is_bot=False)},
+    )
+    monkeypatch.setattr(fragments_cli, "pull_request_authors", resolve)
+
+    main()
+
+    assert fragment.read_text() == (
+        "Add a feature ([#3](https://github.com/tox-dev/example/pull/3)) by [@alice](https://github.com/alice).\n"
+    )
+    resolve.assert_called_once_with("tox-dev/example", {"+topic.feature.md": "Add a feature (#3)"})
 
 
 def test_fragments_cli_reports_missing_commit_map(

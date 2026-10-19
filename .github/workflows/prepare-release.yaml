@@ -23,6 +23,7 @@ jobs:
     runs-on: ubuntu-26.04
     permissions:
       contents: read
+      pull-requests: read
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -45,11 +46,12 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Build release patch
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           git tag --list | uv run --no-default-groups release-creator tags "$VERSION" --require-newer
-          uv run --no-default-groups release-creator fragments --repository "$GITHUB_REPOSITORY" --git
+          uv run --no-default-groups release-creator fragments --repository "$GITHUB_REPOSITORY" --git --resolve-authors
           uv run --no-default-groups --group release towncrier build --yes --version "$VERSION"
           uvx prek exec mdformat -- mdformat --wrap 120 docs/changelog.md
           uvx prek run --all-files

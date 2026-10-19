@@ -20,6 +20,35 @@ _CATEGORIES: Final = {
     "Removed": "Removals",
     "Packaging": "Packaging",
 }
+_RE_RELEASE_PULL: Final = re.compile(
+    r"""
+    https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/(?P<number>\d+)  # PR link
+    """,
+    re.VERBOSE,
+)
+_RE_GITHUB_CREDIT: Final = re.compile(
+    r"""
+    \bby\s+                      # Author credit marker
+    (?P<credits>.*)$              # GitHub mentions following the marker
+    """,
+    re.VERBOSE,
+)
+_RE_GITHUB_HANDLE: Final = re.compile(
+    r"""
+    @(?P<handle>[A-Za-z0-9-]+)   # GitHub mention
+    """,
+    re.VERBOSE,
+)
+_RE_GENERATED_PR_AUTHOR: Final = re.compile(
+    r"""
+    \bby\s+@(?P<handle>[A-Za-z0-9-]+)  # GitHub generated PR author
+    (?P<bot>\[bot\])?                 # Bot accounts are not credited
+    \s+in\s+https://github\.com/
+    (?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)  # Repository in the generated link
+    /pull/(?P<number>\d+)              # Pull request number
+    """,
+    re.VERBOSE,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -69,8 +98,10 @@ def render_rst(
 
 
 def _finish(notes: str, context: ReleaseContext, generated_notes: str | None) -> str:
-    if generated_notes is not None and (contributors := _new_contributors(notes, generated_notes, context.tag)):
-        notes = f"{notes}\n\n{contributors}" if notes else contributors
+    if generated_notes is not None:
+        _verify_authors(notes, generated_notes, context)
+        if contributors := _new_contributors(notes, generated_notes, context.tag):
+            notes = f"{notes}\n\n{contributors}" if notes else contributors
     if context.artifact_url is not None:
         link = f"[{context.artifact_label}]({context.artifact_url})"
         notes = f"{notes}\n\n{link}" if notes else link
@@ -80,6 +111,56 @@ def _finish(notes: str, context: ReleaseContext, generated_notes: str | None) ->
     if notes:
         notes += "\n\n"
     return f"{notes}**Full Changelog**: https://github.com/{context.repository}/{comparison}\n"
+
+
+def _verify_authors(notes: str, generated_notes: str, context: ReleaseContext) -> None:
+    generated_authors, generated_bots = _generated_pr_authors(generated_notes, context.repository)
+    for number, entries in _release_entries(notes, context.repository).items():
+        if number not in generated_authors:
+            msg = f"generated notes have no author for pull request #{number}"
+            raise ValueError(msg)
+        if (bot := generated_bots.get(number)) is not None and any(bot in handles for handles in entries):
+            msg = f"changelog credit for pull request #{number} must not name bot @{bot}"
+            raise ValueError(msg)
+        if (author := generated_authors[number]) is not None and any(author not in handles for handles in entries):
+            msg = f"changelog credit for pull request #{number} does not include @{author}"
+            raise ValueError(msg)
+
+
+def _generated_pr_authors(generated_notes: str, repository: str) -> tuple[dict[str, str | None], dict[str, str]]:
+    authors: dict[str, str | None] = {}
+    bots: dict[str, str] = {}
+    for line in generated_notes.splitlines():
+        if (match := _RE_GENERATED_PR_AUTHOR.search(line)) is None or match["repository"] != repository:
+            continue
+        number = match["number"]
+        author = None if match["bot"] is not None else match["handle"]
+        if match["bot"] is not None:
+            bots[number] = match["handle"]
+        if number in authors and authors[number] != author:
+            msg = f"conflicting generated authors for pull request #{number}"
+            raise ValueError(msg)
+        authors[number] = author
+    return authors, bots
+
+
+def _release_entries(notes: str, repository: str) -> dict[str, list[set[str]]]:
+    entries: dict[str, list[set[str]]] = {}
+    for line in notes.splitlines():
+        pull_requests = [
+            match["number"] for match in _RE_RELEASE_PULL.finditer(line) if match["repository"] == repository
+        ]
+        if not pull_requests:
+            continue
+        credit_text = _RE_GITHUB_CREDIT.search(line)
+        handles = (
+            {match["handle"] for match in _RE_GITHUB_HANDLE.finditer(credit_text["credits"])}
+            if credit_text is not None
+            else set()
+        )
+        for number in pull_requests:
+            entries.setdefault(number, []).append(handles)
+    return entries
 
 
 def _new_contributors(notes: str, generated_notes: str, tag: str) -> str:

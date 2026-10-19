@@ -13,7 +13,7 @@ Given this fragment:
 
 .. code-block:: markdown
 
-   Avoid stale cache reads by [@alice](https://github.com/alice).
+   Avoid stale cache reads.
 
 and an introducing squash subject of ``Fix stale cache reads (#42)``, run:
 
@@ -21,17 +21,21 @@ and an introducing squash subject of ``Fix stale cache reads (#42)``, run:
 
    uvx --from release-creator release-creator fragments \
      --repository owner/project \
-     --git
+     --git \
+     --resolve-authors
 
 ``--git`` reads the subject of the commit that added each named fragment. ``--repository`` supplies the target for
-the pull request link. The command edits the fragment in place:
+the pull request link. ``--resolve-authors`` reads the merged PR author through ``gh api`` and adds a linked human
+credit when the fragment has none. In GitHub Actions, grant ``pull-requests: read`` and set ``GH_TOKEN`` to the
+workflow token. The command edits the fragment in place:
 
 .. code-block:: markdown
 
    Avoid stale cache reads ([#42](https://github.com/owner/project/pull/42)) by [@alice](https://github.com/alice).
 
-The author credit stays in the fragment and later in the changelog. For a fragment without ``by``, the link goes at
-the end of its sentence. Towncrier then copies the linked text into the release section.
+Towncrier copies both links into the release section. For shared authorship, list each verified human in the fragment;
+the linker checks that the list includes the merged PR author. It does not credit bot accounts. A bot PR gets no
+automatic author credit, even when that PR supplies a user-visible fragment.
 
 Rules and failure cases
 =======================
@@ -41,9 +45,9 @@ a user-visible change needs no fragment. A bot pull request needs a fragment onl
 The command does not decide whether a change is newsworthy; review that before merging.
 
 The linker processes filenames beginning with ``+`` in the fragment directory. It requires the introducing squash
-subject to end in ``(#number)`` and rejects a fragment that already has a pull request link for this repository.
-Numbered fragments are left alone. A missing Git history, missing pull request marker, or duplicate link stops the
-command before Towncrier builds the changelog.
+subject to end in ``(#number)`` and rejects a fragment that already links that pull request. When author resolution
+is enabled, a failed GitHub lookup or a credit that omits the PR author stops the command before Towncrier builds the
+changelog. The linker validates every fragment before writing any of them.
 
 Other input sources
 ===================

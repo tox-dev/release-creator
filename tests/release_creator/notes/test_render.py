@@ -56,6 +56,81 @@ def test_render_markdown_first_release_without_artifact() -> None:
     assert result == "**Full Changelog**: https://github.com/tox-dev/example/commits/0.1.0\n"
 
 
+def test_render_markdown_cross_checks_pull_request_authors() -> None:
+    changelog = dedent("""\
+        ## 1.2.3 (today)
+
+        ### Added
+
+        - Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).
+        """)
+    generated = "* Add a feature by @alice in https://github.com/tox-dev/example/pull/42\n"
+
+    result = render_markdown(
+        changelog,
+        ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
+        generated,
+    )
+
+    assert "by @alice" in result
+
+
+@pytest.mark.parametrize(
+    ("changelog", "generated", "message"),
+    [
+        pytest.param(
+            "## 1.2.3 (today)\n\n### Added\n\n- Add a feature ([#42](https://github.com/tox-dev/example/pull/42)).\n",
+            "* Add a feature by @alice in https://github.com/tox-dev/example/pull/42\n",
+            "does not include @alice",
+            id="missing-changelog-credit",
+        ),
+        pytest.param(
+            "## 1.2.3 (today)\n\n### Added\n\n- Add a feature "
+            "([#42](https://github.com/tox-dev/example/pull/42)) by @alice.\n",
+            "* Add a feature\n",
+            "no author for pull request #42",
+            id="missing-generated-author",
+        ),
+        pytest.param(
+            "## 1.2.3 (today)\n\n### Added\n\n- Add a feature "
+            "([#42](https://github.com/tox-dev/example/pull/42)) by @alice.\n",
+            "* Add a feature by @alice in https://github.com/tox-dev/other/pull/42\n",
+            "no author for pull request #42",
+            id="different-repository",
+        ),
+        pytest.param(
+            "## 1.2.3 (today)\n\n### Added\n\n- Add a feature "
+            "([#42](https://github.com/tox-dev/example/pull/42)) by @alice.\n",
+            "* Add a feature by @alice in https://github.com/tox-dev/example/pull/42\n"
+            "* Add a feature by @bob in https://github.com/tox-dev/example/pull/42\n",
+            "conflicting generated authors",
+            id="conflicting-generated-authors",
+        ),
+        pytest.param(
+            "## 1.2.3 (today)\n\n### Added\n\n- Add a feature "
+            "([#42](https://github.com/tox-dev/example/pull/42)) by @dependabot.\n",
+            "* Add a feature by @dependabot[bot] in https://github.com/tox-dev/example/pull/42\n",
+            "must not name bot @dependabot",
+            id="bot-credit",
+        ),
+    ],
+)
+def test_render_markdown_rejects_author_mismatches(changelog: str, generated: str, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+def test_render_markdown_does_not_credit_bot_authors() -> None:
+    changelog = (
+        "## 1.2.3 (today)\n\n### Added\n\n- Add a feature ([#42](https://github.com/tox-dev/example/pull/42)).\n"
+    )
+    generated = "* Add a feature by @dependabot[bot] in https://github.com/tox-dev/example/pull/42\n"
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "@dependabot" not in result
+
+
 @pytest.mark.parametrize(
     "reference",
     [

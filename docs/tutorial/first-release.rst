@@ -57,7 +57,7 @@ Add ``changelog.d/+cache.bugfix.md`` to the pull request:
 
 .. code-block:: markdown
 
-   Avoid stale cache reads by [@alice](https://github.com/alice).
+   Avoid stale cache reads.
 
 The filename needs no pull request number. The sentence describes the change for users, and the linked handle credits
 its author. Write another fragment if the same pull request also changes another user-visible behavior. Routine
@@ -69,16 +69,18 @@ Towncrier deletes the fragment:
 .. code-block:: bash
 
    uvx --from release-creator release-creator fragments \
-     --repository owner/project --git
+     --repository owner/project --git --resolve-authors
 
-The command finds the squash commit that introduced the file and edits the fragment to read:
+The command finds the squash commit, reads the human PR author through the GitHub CLI, and edits the fragment to read:
 
 .. code-block:: markdown
 
    Avoid stale cache reads ([#42](https://github.com/owner/project/pull/42)) by [@alice](https://github.com/alice).
 
-It fails if the squash subject lacks ``(#42)`` or the fragment already has a PR link. See :doc:`linking named
-fragments <../how-to/link-fragments>` for a checkout without Git history.
+It fails if the squash subject lacks ``(#42)``, the PR author cannot be read, or the fragment already has a PR link.
+In GitHub Actions, give the job ``pull-requests: read`` and set ``GH_TOKEN`` to ``github.token``. For shared
+authorship, list each human you verified from the PR and include its merged author. Bot PRs receive no automatic credit.
+See :doc:`linking named fragments <../how-to/link-fragments>` for a checkout without Git history.
 
 3. Check the version and build the changelog
 ============================================
