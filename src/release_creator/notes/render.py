@@ -68,7 +68,7 @@ _RE_RST_HEADING_UNDERLINE: Final = re.compile(
 )
 _RE_MARKDOWN_VERSION: Final = re.compile(
     r"""
-    ^\#\#\                         # Markdown version heading
+    ^(?P<level>\#{2,3})\          # Markdown version heading level
     (?P<open>\[)?                   # Optional Keep a Changelog link bracket
     (?P<tag>v?\d+\.\d+\.\d+)     # Release tag
     (?(open)\])                     # Close the optional bracket
@@ -111,6 +111,7 @@ class ReleaseContext:
     previous: str | None = None
     artifact_url: str | None = None
     artifact_label: str = "PyPI release"
+    package: str | None = None
 
 
 def render_markdown(changelog: str, context: ReleaseContext, generated_notes: str | None = None) -> str:
@@ -122,7 +123,7 @@ def render_markdown(changelog: str, context: ReleaseContext, generated_notes: st
 
     """
     _validate_context(context)
-    notes = mdformat.text(_extract_body(changelog, context.tag), options={"wrap": "no"}, extensions={"gfm"}).strip()
+    notes = mdformat.text(_extract_body(changelog, context), options={"wrap": "no"}, extensions={"gfm"}).strip()
     return _finish(notes, context, generated_notes)
 
 
@@ -139,6 +140,9 @@ def render_rst(
 
     """
     _validate_context(context)
+    if context.package is not None:
+        msg = "package selection requires a Markdown changelog"
+        raise ValueError(msg)
     if issue_role not in {"issue", "pull"}:
         msg = f"invalid issue role: {issue_role}"
         raise ValueError(msg)
@@ -378,7 +382,8 @@ def _convert_rst(line: str, repository: str, issue_role: str) -> str:
 def _validate_context(context: ReleaseContext) -> None:
     if not re.fullmatch(
         r"""
-        (?P<tag>[A-Za-z0-9][A-Za-z0-9_.-]*)  # URL-safe release tag
+        (?P<tag>[A-Za-z0-9][A-Za-z0-9_.-]*)     # Release tag or package prefix
+        (?:/(?P<version>[A-Za-z0-9][A-Za-z0-9_.-]*))?  # Optional package version
         """,
         context.tag,
         re.VERBOSE,
@@ -387,13 +392,21 @@ def _validate_context(context: ReleaseContext) -> None:
         raise ValueError(msg)
     if context.previous is not None and not re.fullmatch(
         r"""
-        (?P<tag>[A-Za-z0-9][A-Za-z0-9_.-]*)  # URL-safe previous tag
+        (?P<tag>[A-Za-z0-9][A-Za-z0-9_.-]*)     # Previous tag or package prefix
+        (?:/(?P<version>[A-Za-z0-9][A-Za-z0-9_.-]*))?  # Optional package version
         """,
         context.previous,
         re.VERBOSE,
     ):
         msg = f"invalid previous tag: {context.previous}"
         raise ValueError(msg)
+    if context.package is not None:
+        if not re.fullmatch(r"(?P<package>[A-Za-z0-9][A-Za-z0-9_.-]*)", context.package, re.VERBOSE):
+            msg = f"invalid package: {context.package}"
+            raise ValueError(msg)
+        if "/" in context.tag and not context.tag.startswith(f"{context.package}/"):
+            msg = f"release tag does not match package: {context.tag}"
+            raise ValueError(msg)
     if not re.fullmatch(
         r"""
         (?P<owner>[A-Za-z0-9_.-]+)  # GitHub owner
@@ -410,41 +423,56 @@ def _validate_context(context: ReleaseContext) -> None:
         raise ValueError(msg)
 
 
-def _extract_body(changelog: str, tag: str) -> str:
+def _extract_body(changelog: str, context: ReleaseContext) -> str:
     lines = [
         line
         for line in changelog.splitlines()
         if not _is_comparison_line(line) and not _RE_MARKDOWN_LINK_DEFINITION.fullmatch(line)
     ]
+    heading_level = "###" if context.package is not None else "##"
+    if context.package is not None:
+        packages = [index for index, line in enumerate(lines) if line == f"## {context.package}"]
+        if len(packages) != 1:
+            msg = f"expected one changelog package section for {context.package}, found {len(packages)}"
+            raise ValueError(msg)
+        end = next(
+            (index for index in range(packages[0] + 1, len(lines)) if lines[index].startswith("## ")), len(lines)
+        )
+        lines = lines[packages[0] + 1 : end]
+    version = context.tag.rsplit("/", 1)[-1].removeprefix("v")
     headings = [
         index
         for index, line in enumerate(lines)
-        if (match := _RE_MARKDOWN_VERSION.fullmatch(line)) and match["tag"].removeprefix("v") == tag.removeprefix("v")
+        if (match := _RE_MARKDOWN_VERSION.fullmatch(line))
+        and match["level"] == heading_level
+        and match["tag"].removeprefix("v") == version
     ]
     if len(headings) != 1:
-        msg = f"expected one changelog section for {tag}, found {len(headings)}"
+        msg = f"expected one changelog section for {context.tag}, found {len(headings)}"
         raise ValueError(msg)
 
     body: list[str] = []
     for source_line in lines[headings[0] + 1 :]:
-        if _RE_MARKDOWN_VERSION.fullmatch(source_line) or _RE_MARKDOWN_VERSION_ANCHOR.fullmatch(source_line):
+        if (
+            (match := _RE_MARKDOWN_VERSION.fullmatch(source_line)) is not None and match["level"] == heading_level
+        ) or _RE_MARKDOWN_VERSION_ANCHOR.fullmatch(source_line):
             break
         body.append(source_line)
-    return _convert_markdown_body(body)
+    return _convert_markdown_body(body, "#### " if context.package is not None else "### ")
 
 
-def _convert_markdown_body(lines: list[str]) -> str:
+def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
     body: list[str] = []
     in_category = False
     in_item = False
     category_has_item = False
     for source_line in lines:
         line = source_line
-        if source_line.startswith("### "):
+        if source_line.startswith(category_prefix):
             if in_category and not category_has_item:
                 msg = "empty changelog category"
                 raise ValueError(msg)
-            category = source_line[4:]
+            category = source_line[len(category_prefix) :]
             if category not in _CATEGORIES:
                 msg = f"unknown changelog category: {category}"
                 raise ValueError(msg)

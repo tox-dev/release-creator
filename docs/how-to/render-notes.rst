@@ -82,6 +82,23 @@ Omit ``--artifact-url`` if there is no external artifact. Use ``--artifact-label
 package link. If ``--previous`` is absent, the final link points to the commits at this tag instead of a comparison.
 Artifact links must use HTTPS.
 
+Shared changelog with separate packages
+=======================================
+
+When packages have separate histories in one Markdown file, name the package section explicitly. For example,
+``toml-fmt`` has ``## pyproject-fmt`` above ``### 2.30.4 (date)`` and ``#### Fixed``. Its Git tag is
+``pyproject-fmt/2.30.4``:
+
+.. code-block:: bash
+
+   uvx --from release-creator release-creator notes \
+     --changelog CHANGELOG.md --package pyproject-fmt \
+     --tag pyproject-fmt/2.30.4 --repository tox-dev/toml-fmt \
+     --previous pyproject-fmt/2.30.3 > release-notes.md
+
+The package selector prevents a matching version in another package's history from entering the output. It does not
+change the repository used for GitHub links.
+
 First-time contributors
 =======================
 

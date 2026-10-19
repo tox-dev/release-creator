@@ -91,6 +91,63 @@ def test_render_markdown_accepts_existing_version_headings(heading: str) -> None
     )
 
 
+def test_render_markdown_selects_package_history() -> None:
+    changelog = dedent("""\
+        # Changelog
+
+        ## pyproject-fmt
+
+        ### 2.30.4 (2026-10-19)
+
+        #### Fixed
+
+        - Preserve formatted input.
+
+        ### 2.30.3 (2026-10-18)
+
+        #### Added
+
+        - Old feature.
+
+        ## tox-toml-fmt
+
+        ### 2.30.4 (2026-10-19)
+
+        #### Added
+
+        - Different package feature.
+        """)
+    context = ReleaseContext(
+        tag="pyproject-fmt/2.30.4",
+        repository="tox-dev/toml-fmt",
+        package="pyproject-fmt",
+        previous="pyproject-fmt/2.30.3",
+    )
+
+    result = render_markdown(changelog, context)
+
+    assert result == (
+        "### Bug fixes\n\n- Preserve formatted input.\n\n"
+        "**Full Changelog**: https://github.com/tox-dev/toml-fmt/compare/"
+        "pyproject-fmt/2.30.3...pyproject-fmt/2.30.4\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("changelog", "count"),
+    [
+        pytest.param("## other\n", 0, id="absent"),
+        pytest.param("## example\n\n## example\n", 2, id="duplicate"),
+    ],
+)
+def test_render_markdown_requires_one_package_history(changelog: str, count: int) -> None:
+    with pytest.raises(ValueError, match=f"package section for example, found {count}"):
+        render_markdown(
+            changelog,
+            ReleaseContext(tag="example/1.2.3", repository="tox-dev/example", package="example"),
+        )
+
+
 @pytest.mark.parametrize(
     "comparison",
     [
@@ -261,6 +318,11 @@ def test_render_rst_maps_categories_and_credits() -> None:
     )
 
 
+def test_render_rst_rejects_package_selection() -> None:
+    with pytest.raises(ValueError, match="requires a Markdown changelog"):
+        render_rst("", ReleaseContext(tag="1.2.3", repository="tox-dev/example", package="example"))
+
+
 def test_render_rst_converts_explicit_author_link() -> None:
     changelog = dedent("""\
         1.2.3 (2026-10-18)
@@ -359,8 +421,15 @@ def test_render_rst_rejects_invalid_input(changelog: str, issue_role: str, messa
 @pytest.mark.parametrize(
     ("changelog", "overrides", "message"),
     [
-        pytest.param("## 1.2.3 (today)\n", {"tag": "bad/tag"}, "invalid release tag", id="tag"),
-        pytest.param("## 1.2.3 (today)\n", {"previous": "bad/tag"}, "invalid previous tag", id="previous"),
+        pytest.param("## 1.2.3 (today)\n", {"tag": "bad//tag"}, "invalid release tag", id="tag"),
+        pytest.param("## 1.2.3 (today)\n", {"previous": "bad//tag"}, "invalid previous tag", id="previous"),
+        pytest.param("## 1.2.3 (today)\n", {"package": "bad/name"}, "invalid package", id="package"),
+        pytest.param(
+            "## 1.2.3 (today)\n",
+            {"tag": "other/1.2.3", "package": "example"},
+            "does not match package",
+            id="package-tag",
+        ),
         pytest.param("## 1.2.3 (today)\n", {"repository": "bad"}, "invalid repository", id="repository"),
         pytest.param("## 1.2.3 (today)\n", {"artifact_url": "http://bad"}, "artifact URL", id="artifact"),
         pytest.param("", {}, "found 0", id="absent"),

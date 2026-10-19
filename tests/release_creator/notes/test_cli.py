@@ -59,6 +59,33 @@ def test_notes_cli_renders_rst(
     assert "- Correct a bug ([#4](https://github.com/tox-dev/example/pull/4))." in capsys.readouterr().out
 
 
+def test_notes_cli_selects_package(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("## example\n\n### 1.2.3 (today)\n\n#### Fixed\n\n- Correct a bug.\n")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "release-creator",
+            "notes",
+            "--changelog",
+            str(changelog),
+            "--tag",
+            "example/1.2.3",
+            "--repository",
+            "tox-dev/example",
+            "--package",
+            "example",
+        ],
+    )
+
+    main()
+
+    assert "### Bug fixes\n\n- Correct a bug." in capsys.readouterr().out
+
+
 def test_notes_cli_reads_generated_notes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
