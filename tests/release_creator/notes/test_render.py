@@ -56,6 +56,17 @@ def test_render_markdown_first_release_without_artifact() -> None:
     assert result == "**Full Changelog**: https://github.com/tox-dev/example/commits/0.1.0\n"
 
 
+def test_render_markdown_preserves_legacy_other_changes() -> None:
+    changelog = "## 1.2.3 (today)\n\n### Other changes\n\n- Update development tooling.\n"
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert result == (
+        "### Other changes\n\n- Update development tooling.\n\n"
+        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+    )
+
+
 @pytest.mark.parametrize(
     "heading",
     [
@@ -336,6 +347,18 @@ def test_render_rst_maps_categories_and_credits() -> None:
         "- Discard bad cache entries ([#42](https://github.com/tox-dev/example/pull/42)) by @alice and @bob. "
         "Preserve `None` in the cache.\n\n"
         "**Full Changelog**: https://github.com/tox-dev/example/compare/1.2.2...1.2.3\n"
+    )
+
+
+def test_render_rst_preserves_legacy_other_changes() -> None:
+    changelog = "1.2.3 (today)\n==============\n\nOther changes\n-------------\n\n- Update development tooling.\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert result == (
+        '<a name="release-1-2-3-other-changes"></a>\n\n'
+        "### Other changes\n\n- Update development tooling.\n\n"
+        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
     )
 
 

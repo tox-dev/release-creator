@@ -19,6 +19,7 @@ _CATEGORIES: Final = {
     "Deprecated": "Deprecations",
     "Removed": "Removals",
     "Packaging": "Packaging",
+    "Other changes": "Other changes",
 }
 _RE_RELEASE_PULL: Final = re.compile(
     r"""
