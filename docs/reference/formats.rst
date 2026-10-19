@@ -19,6 +19,10 @@ template matching the tracked changelog in ``[tool.towncrier]``:
 For a ``.rst`` changelog, use ``release_creator.fragments:template.rst.jinja2`` instead. Both templates omit empty
 categories and add stable version and category anchors.
 
+For RST, set Towncrier's ``underlines`` to match the headings already in the changelog. Use ``["*", "=", "-"]``
+when versions have star overlines, ``["-", "~"]`` when versions have dash underlines, or ``["=", "-", "~"]``
+when versions have equals underlines. The first character marks the version and the second marks categories.
+
 Towncrier still requires category definitions in the project's ``pyproject.toml``.
 
 Changelog sections

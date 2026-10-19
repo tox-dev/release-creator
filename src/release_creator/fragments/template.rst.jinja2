@@ -2,8 +2,14 @@
 {% set heading = versiondata.version + " (" + versiondata.date + ")" %}
 .. _{{ release }}:
 
+{% if top_underline == "*" %}
+{{ "*" * (heading | length + 2) }}
+ {{ heading }}
+{{ "*" * (heading | length + 2) }}
+{% else %}
 {{ heading }}
-{{ "=" * (heading | length) }}
+{{ top_underline * (heading | length) }}
+{% endif %}
 
 {% for section, _ in sections.items() %}
 {% for category, _ in definitions.items() if category in sections[section] %}
@@ -12,7 +18,7 @@
 .. _{{ release }}-{{ name | lower | replace(" ", "-") }}:
 
 {{ name }}
-{{ "-" * (name | length) }}
+{{ underlines[0] * (name | length) }}
 
 {% for text, values in sections[section][category].items() %}
 - {{ text }}{{ (" (" + (values | join(", ")) + ")") if values else "" }}

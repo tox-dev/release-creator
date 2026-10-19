@@ -7,6 +7,8 @@ import sys
 from textwrap import dedent
 lazy from pathlib import Path
 
+import pytest
+
 from release_creator.notes.render import ReleaseContext, render_markdown, render_rst
 
 
@@ -50,10 +52,25 @@ def test_markdown_template_keeps_numbered_and_named_pull_requests(tmp_path: Path
     )
 
 
-def test_rst_template_renders_notes_with_stable_anchors(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("underlines", "expected_category"),
+    [
+        pytest.param("", "Fixed\n-----", id="default"),
+        pytest.param('underlines = ["*", "=", "-"]', "Fixed\n=====", id="overline"),
+        pytest.param('underlines = ["-", "~"]', "Fixed\n~~~~~", id="dash"),
+    ],
+)
+def test_rst_template_renders_notes_with_stable_anchors(
+    underlines: str, expected_category: str, tmp_path: Path
+) -> None:
     (tmp_path / "changelog.d").mkdir()
     (tmp_path / "changelog.d" / "1.bugfix.rst").write_text("Fix the loader.\n")
-    (tmp_path / "changelog.rst").write_text("Changelog\n=========\n\n.. towncrier release notes start\n")
+    old_release = (
+        "\n********************\n 0.9.0 (2026-01-01)\n********************\n"
+        if underlines.startswith('underlines = ["*"')
+        else "\n0.9.0 (2026-01-01)\n==================\n"
+    )
+    (tmp_path / "changelog.rst").write_text("Changelog\n=========\n\n.. towncrier release notes start\n" + old_release)
     (tmp_path / "pyproject.toml").write_text(
         dedent("""\
         [tool.towncrier]
@@ -63,10 +80,11 @@ def test_rst_template_renders_notes_with_stable_anchors(tmp_path: Path) -> None:
         template = "release_creator.fragments:template.rst.jinja2"
         title_format = false
             issue_format = ":pr:`{issue}`"
+        @UNDERLINES@
         type = [
           { directory = "bugfix", name = "Fixed", showcontent = true },
         ]
-        """)
+        """).replace("@UNDERLINES@", underlines)
     )
 
     subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Fixed command and temporary checkout.
@@ -76,8 +94,10 @@ def test_rst_template_renders_notes_with_stable_anchors(tmp_path: Path) -> None:
         check=True,
     )
 
+    changelog = (tmp_path / "changelog.rst").read_text()
+    assert expected_category in changelog
     assert render_rst(
-        (tmp_path / "changelog.rst").read_text(),
+        changelog,
         ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
     ) == (
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'

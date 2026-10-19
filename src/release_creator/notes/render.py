@@ -49,6 +49,23 @@ _RE_GENERATED_PR_AUTHOR: Final = re.compile(
     """,
     re.VERBOSE,
 )
+_RE_RST_VERSION: Final = re.compile(
+    r"""
+    ^(?:
+        v?(?P<tag>\d+\.\d+\.\d+)\ \((?P<date>[^)]+)\)  # Plain version with parenthesized date
+        |
+        `(?P<link_tag>\d+\.\d+\.\d+)\ <https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/tree/
+        (?P=link_tag)>`_\ -\ (?P<link_date>\d{4}-\d{2}-\d{2})  # Linked version with date
+    )$
+    """,
+    re.VERBOSE,
+)
+_RE_RST_HEADING_UNDERLINE: Final = re.compile(
+    r"""
+    (?P<underline>[-*=~^]{3,})  # RST heading adornment
+    """,
+    re.VERBOSE,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -214,28 +231,17 @@ def _new_contributors(notes: str, generated_notes: str, tag: str) -> str:
 
 def _extract_rst_body(changelog: str, context: ReleaseContext, issue_role: str) -> str:
     lines = [line for line in changelog.splitlines() if not _is_comparison_line(line)]
-    version = re.compile(
-        r"""
-        ^(?:
-            v?(?P<tag>\d+\.\d+\.\d+)\ \((?P<date>[^)]+)\)  # Plain version with parenthesized date
-            |
-            `(?P<link_tag>\d+\.\d+\.\d+)\ <https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/tree/
-            (?P=link_tag)>`_\ -\ (?P<link_date>\d{4}-\d{2}-\d{2})  # Linked version with date
-        )$
-        """,
-        re.VERBOSE,
-    )
     headings = [
         index
         for index, line in enumerate(lines)
-        if (match := version.fullmatch(line.strip()))
+        if (match := _RE_RST_VERSION.fullmatch(line.strip()))
         and (match["tag"] or match["link_tag"]) == context.tag.removeprefix("v")
     ]
     if len(headings) != 1:
         msg = f"expected one changelog section for {context.tag}, found {len(headings)}"
         raise ValueError(msg)
     end = next(
-        (index for index in range(headings[0] + 1, len(lines)) if version.fullmatch(lines[index].strip())),
+        (index for index in range(headings[0] + 1, len(lines)) if _RE_RST_VERSION.fullmatch(lines[index].strip())),
         len(lines),
     )
     sections: dict[str, list[str]] = {}
@@ -243,13 +249,7 @@ def _extract_rst_body(changelog: str, context: ReleaseContext, issue_role: str) 
     index = headings[0] + 1
     while index < end:
         line = lines[index].strip()
-        if index + 1 < end and re.fullmatch(
-            r"""
-            (?P<underline>[-=~^]{3,})   # RST heading underline
-            """,
-            lines[index + 1].strip(),
-            re.VERBOSE,
-        ):
+        if line and index + 1 < end and _RE_RST_HEADING_UNDERLINE.fullmatch(lines[index + 1].strip()):
             category = _require_category(line)
             sections.setdefault(category, [])
             index += 2
@@ -259,7 +259,7 @@ def _extract_rst_body(changelog: str, context: ReleaseContext, issue_role: str) 
                 msg = f"release item outside a category: {line}"
                 raise ValueError(msg)
             sections[category].append(_convert_rst(line, context.repository, issue_role))
-        elif line and line[0] not in "*=~^" and not line.startswith(".. _"):
+        elif line and _RE_RST_HEADING_UNDERLINE.fullmatch(line) is None and not line.startswith(".. _"):
             if category is None or not sections[category]:
                 msg = f"unexpected release text: {line}"
                 raise ValueError(msg)
