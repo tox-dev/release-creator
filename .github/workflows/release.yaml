@@ -30,6 +30,7 @@ jobs:
             echo "::error::docs/changelog.md has no section for $TAG"
             exit 1
           fi
+          uv run --no-default-groups release-creator notes --changelog docs/changelog.md --tag "$TAG" --repository "$GITHUB_REPOSITORY" > /dev/null
       - name: Check the tagged source
         run: uvx prek run --all-files
       - name: Build package

@@ -31,6 +31,10 @@ Changelog sections
 Markdown versions use ``## 1.2.3 (date)`` with level-three category headings. RST versions use ``1.2.3 (date)`` and
 category headings with underlines. Empty categories are omitted.
 
+Each release item belongs under a listed category. Uncategorized bullets, loose prose, and headings without entries
+fail rendering, so they cannot become GitHub Release notes. A version with no entries can still render its comparison
+link for historical first releases.
+
 .. list-table:: Category names
    :header-rows: 1
 

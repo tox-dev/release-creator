@@ -331,6 +331,21 @@ def test_render_rst_rejects_invalid_input(changelog: str, issue_role: str, messa
         pytest.param("", {}, "found 0", id="absent"),
         pytest.param("## 1.2.3 (today)\n## 1.2.3 (today)\n", {}, "found 2", id="duplicate"),
         pytest.param("## 1.2.3 (today)\n### Maintenance\n", {}, "unknown changelog category", id="category"),
+        pytest.param("## 1.2.3 (today)\n- Plain bullet.\n", {}, "outside a category", id="uncategorized-bullet"),
+        pytest.param("## 1.2.3 (today)\nPlain note.\n", {}, "outside an item", id="uncategorized-prose"),
+        pytest.param("## 1.2.3 (today)\n### Fixed\n", {}, "empty changelog category", id="empty-category"),
+        pytest.param(
+            "## 1.2.3 (today)\n### Added\n### Fixed\n- Fix a bug.\n",
+            {},
+            "empty changelog category",
+            id="empty-category-before-entry",
+        ),
+        pytest.param(
+            "## 1.2.3 (today)\n### Fixed\n- Fix the bug.\nPlain note.\n",
+            {},
+            "outside an item",
+            id="prose-after-bullet",
+        ),
     ],
 )
 def test_render_markdown_rejects_invalid_input(

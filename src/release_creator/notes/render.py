@@ -66,6 +66,30 @@ _RE_RST_HEADING_UNDERLINE: Final = re.compile(
     """,
     re.VERBOSE,
 )
+_RE_MARKDOWN_VERSION: Final = re.compile(
+    r"""
+    ^\#\#\                         # Markdown version heading
+    (?P<tag>[^\s(]+)               # Release tag
+    (?:\ \([^)]+\))?                # Optional release date
+    $                               # End of heading
+    """,
+    re.VERBOSE,
+)
+_RE_MARKDOWN_VERSION_ANCHOR: Final = re.compile(
+    r"""
+    ^<a\ name="release-             # Version anchor prefix
+    (?P<version>v?\d+(?:-\d+){2})  # Dotted version encoded for an anchor
+    "></a>$                         # Anchor terminator
+    """,
+    re.VERBOSE,
+)
+_RE_MARKDOWN_AUTHOR: Final = re.compile(
+    r"""
+    \[@(?P<handle>[A-Za-z0-9-]+)\]  # GitHub handle in link text
+    \(https://github\.com/(?P=handle)\)  # Matching profile URL
+    """,
+    re.VERBOSE,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -377,48 +401,61 @@ def _validate_context(context: ReleaseContext) -> None:
 
 
 def _extract_body(changelog: str, tag: str) -> str:
-    version = re.compile(
-        r"""
-        ^\#\#\                         # Markdown version heading
-        (?P<tag>[^\s(]+)               # Release tag
-        (?:\ \([^)]+\))?                # Optional release date
-        $                               # End of heading
-        """,
-        re.VERBOSE,
-    )
     lines = [line for line in changelog.splitlines() if not _is_comparison_line(line)]
-    headings = [index for index, line in enumerate(lines) if (match := version.fullmatch(line)) and match["tag"] == tag]
+    headings = [
+        index
+        for index, line in enumerate(lines)
+        if (match := _RE_MARKDOWN_VERSION.fullmatch(line)) and match["tag"] == tag
+    ]
     if len(headings) != 1:
         msg = f"expected one changelog section for {tag}, found {len(headings)}"
         raise ValueError(msg)
 
     body: list[str] = []
-    version_anchor = re.compile(
-        r"""
-        ^<a\ name="release-             # Version anchor prefix
-        (?P<version>v?\d+(?:-\d+){2})  # Dotted version encoded for an anchor
-        "></a>$                         # Anchor terminator
-        """,
-        re.VERBOSE,
-    )
-    author = re.compile(
-        r"""
-        \[@(?P<handle>[A-Za-z0-9-]+)\]  # GitHub handle in link text
-        \(https://github\.com/(?P=handle)\)  # Matching profile URL
-        """,
-        re.VERBOSE,
-    )
     for source_line in lines[headings[0] + 1 :]:
-        if version.fullmatch(source_line) or version_anchor.fullmatch(source_line):
+        if _RE_MARKDOWN_VERSION.fullmatch(source_line) or _RE_MARKDOWN_VERSION_ANCHOR.fullmatch(source_line):
             break
+        body.append(source_line)
+    return _convert_markdown_body(body)
+
+
+def _convert_markdown_body(lines: list[str]) -> str:
+    body: list[str] = []
+    in_category = False
+    in_item = False
+    category_has_item = False
+    for source_line in lines:
         line = source_line
         if source_line.startswith("### "):
+            if in_category and not category_has_item:
+                msg = "empty changelog category"
+                raise ValueError(msg)
             category = source_line[4:]
             if category not in _CATEGORIES:
                 msg = f"unknown changelog category: {category}"
                 raise ValueError(msg)
             line = f"### {_CATEGORIES[category]}"
-        body.append(author.sub(lambda match: f"@{match['handle']}", line))
+            in_category = True
+            in_item = False
+            category_has_item = False
+        elif source_line.startswith("- "):
+            if not in_category:
+                msg = f"release item outside a category: {source_line}"
+                raise ValueError(msg)
+            in_item = True
+            category_has_item = True
+        elif (
+            source_line.strip()
+            and not (source_line.startswith('<a name="release-') and source_line.endswith('"></a>'))
+            and (not in_item or not source_line[0].isspace())
+        ):
+            msg = f"release text outside an item: {source_line}"
+            raise ValueError(msg)
+        body.append(_RE_MARKDOWN_AUTHOR.sub(lambda match: f"@{match['handle']}", line))
+
+    if in_category and not category_has_item:
+        msg = "empty changelog category"
+        raise ValueError(msg)
 
     return "\n".join(body).strip()
 
