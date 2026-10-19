@@ -1,5 +1,59 @@
 """Validate numeric tags and find their predecessors."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from datetime import date
+
+
+def next_tag(bump: str, tags: list[str], fragments: list[str], release_date: date) -> str:
+    """Choose a release version from existing tags and pending fragments.
+
+    Returns:
+        The next major.minor.patch or year.month.patch version.
+
+    Raises:
+        ValueError: The bump is unknown, no fragments exist, or the result is not newer.
+
+    """
+    if not fragments:
+        msg = "no changelog fragments to release"
+        raise ValueError(msg)
+    versions: list[tuple[int, int, int]] = []
+    for tag in tags:
+        try:
+            versions.append(parse_tag(tag))
+        except ValueError:
+            continue
+    current = max(versions, default=(0, 0, 0))
+    if bump == "auto":
+        bump = (
+            "major"
+            if any(fragment.endswith(".breaking.md") for fragment in fragments)
+            else "minor"
+            if any(fragment.endswith(".feature.md") for fragment in fragments)
+            else "patch"
+        )
+    match bump:
+        case "major":
+            version = (current[0] + 1, 0, 0)
+        case "minor":
+            version = (current[0], current[1] + 1, 0)
+        case "patch":
+            version = (current[0], current[1], current[2] + 1)
+        case "calver":
+            year_month = release_date.year, release_date.month
+            version = (*year_month, current[2] + 1 if current[:2] == year_month else 0)
+        case _:
+            msg = f"unknown version bump: {bump}"
+            raise ValueError(msg)
+    if version <= current:
+        msg = f"calculated version must be newer than {'.'.join(map(str, current))}"
+        raise ValueError(msg)
+    return ".".join(map(str, version))
+
 
 def parse_tag(tag: str) -> tuple[int, int, int]:
     """Parse a major.minor.patch release tag.
@@ -58,6 +112,7 @@ def require_newer_tag(tag: str, tags: list[str]) -> None:
 
 
 __all__ = [
+    "next_tag",
     "parse_tag",
     "previous_tag",
     "require_newer_tag",

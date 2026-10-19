@@ -83,11 +83,13 @@ fragments <../how-to/link-fragments>` for a checkout without Git history.
 3. Check the version and build the changelog
 ============================================
 
-For this first release, choose ``0.1.0``. ``tags --require-newer`` checks its format and that no equal or newer
-numeric tag exists. It prints nothing on success:
+This example contains only a bug fix, so ``--next auto`` would choose ``0.0.1``. Choose a minor bump to start the
+project at ``0.1.0``. ``tags --require-newer`` then checks that no equal or newer numeric tag exists:
 
 .. code-block:: bash
 
+   git tag --list | uvx --from release-creator release-creator tags \
+     --next minor --directory changelog.d
    git tag --list | uvx --from release-creator release-creator tags 0.1.0 --require-newer
 
 Now let Towncrier consume the linked fragment and assemble the reviewed changelog section. The date is fixed here so
@@ -116,8 +118,8 @@ the example output is reproducible; normal release automation can use the curren
 
    - Avoid stale cache reads ([#42](https://github.com/owner/project/pull/42)) by [@alice](https://github.com/alice).
 
-Review this file and run the project's checks before committing and tagging it. The tagged file, rather than the
-commit list, will supply the GitHub description.
+Format the assembled file with the project's Markdown hook, then run the full checks before committing and tagging.
+The tagged file, rather than the commit list, supplies the GitHub description.
 
 4. Render and publish the GitHub notes
 ======================================
@@ -151,7 +153,7 @@ Review the complete body, then create the GitHub Release if the repository does 
 
 .. code-block:: bash
 
-   gh release create 0.1.0 --verify-tag --title 0.1.0 --notes-file release-notes.md
+   gh release create 0.1.0 --verify-tag --title v0.1.0 --notes-file release-notes.md
 
 For later releases, pass ``--previous`` to compare two tags. The :doc:`tag guide <../how-to/select-release-tag>`
 shows how to select that predecessor; the :doc:`notes guide <../how-to/render-notes>` covers contributor credits and

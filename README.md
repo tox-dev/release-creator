@@ -54,9 +54,11 @@ Named Towncrier fragments need no issue or PR number. Before Towncrier builds th
 adds its PR link, and fails if the subject does not end in `(#number)`. For a checkout without Git history, pass a
 tab-separated subject map with `--commit-map commits.tsv` instead.
 
-The `tags` command validates numeric release versions and selects the preceding tag for GitHub comparisons:
+The `tags` command calculates a version from pending fragments, validates numeric tags, and selects the preceding tag
+for GitHub comparisons:
 
 ```bash
+git tag --list | uvx --from 'release-creator' release-creator tags --next auto
 git tag --list | uvx --from 'release-creator' release-creator tags 1.2.3 --require-newer
 git tag --list | uvx --from 'release-creator' release-creator tags 1.2.3 --previous
 ```

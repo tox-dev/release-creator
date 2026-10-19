@@ -2,9 +2,17 @@ name: Prepare release
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: Version to release, without a v prefix
+      bump:
+        description: Version bump type
         required: true
+        type: choice
+        options:
+          - auto
+          - major
+          - minor
+          - patch
+          - calver
+        default: auto
 permissions: {}
 concurrency:
   group: prepare-release
@@ -15,6 +23,8 @@ jobs:
     runs-on: ubuntu-26.04
     permissions:
       contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -24,16 +34,21 @@ jobs:
         with:
           python-version: "3.15"
           enable-cache: false
+      - name: Calculate next version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          version=$(git tag --list | uv run --no-default-groups release-creator tags --next "$BUMP")
+          echo "Next version: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Build release patch
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           git tag --list | uv run --no-default-groups release-creator tags "$VERSION" --require-newer
-          if ! compgen -G 'changelog.d/*.md' > /dev/null; then
-            echo "::error::no changelog fragments to release"
-            exit 1
-          fi
           uv run --no-default-groups release-creator fragments --repository "$GITHUB_REPOSITORY" --git
           uv run --no-default-groups --group release towncrier build --yes --version "$VERSION"
           uvx prek exec mdformat -- mdformat --wrap 120 docs/changelog.md
@@ -66,7 +81,7 @@ jobs:
           enable-cache: false
       - name: Validate release patch
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.assemble.outputs.version }}
         run: |
           set -euo pipefail
           git fetch origin main
@@ -92,7 +107,7 @@ jobs:
           permission-contents: write
       - name: Commit and tag the release
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.assemble.outputs.version }}
           GH_TOKEN: ${{ steps.token.outputs.token }}
           APP_SLUG: ${{ steps.token.outputs.app-slug }}
         run: |
