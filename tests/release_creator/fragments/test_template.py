@@ -7,7 +7,47 @@ import sys
 from textwrap import dedent
 lazy from pathlib import Path
 
-from release_creator.notes.render import ReleaseContext, render_rst
+from release_creator.notes.render import ReleaseContext, render_markdown, render_rst
+
+
+def test_markdown_template_keeps_numbered_and_named_pull_requests(tmp_path: Path) -> None:
+    (tmp_path / "changelog.d").mkdir()
+    (tmp_path / "changelog.d" / "123.bugfix.md").write_text("Fix a numbered bug.\n")
+    (tmp_path / "changelog.d" / "+named.bugfix.md").write_text(
+        "Fix a named bug ([#124](https://github.com/tox-dev/example/pull/124)) by [@alice](https://github.com/alice).\n"
+    )
+    (tmp_path / "CHANGELOG.md").write_text("# Changelog\n\n<!-- towncrier release notes start -->\n")
+    (tmp_path / "pyproject.toml").write_text(
+        dedent("""\
+        [tool.towncrier]
+        name = "example"
+        directory = "changelog.d"
+        filename = "CHANGELOG.md"
+        template = "release_creator.fragments:template.jinja2"
+        title_format = false
+        issue_format = "[#{issue}](https://github.com/tox-dev/example/pull/{issue})"
+        type = [
+          { directory = "bugfix", name = "Fixed", showcontent = true },
+        ]
+        """)
+    )
+
+    subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Fixed command and temporary checkout.
+        [str(Path(sys.executable).with_name("towncrier")), "build", "--yes", "--version", "1.2.3"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+
+    assert render_markdown(
+        (tmp_path / "CHANGELOG.md").read_text(),
+        ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
+    ) == (
+        '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
+        "- Fix a numbered bug. ([#123](https://github.com/tox-dev/example/pull/123))\n"
+        "- Fix a named bug ([#124](https://github.com/tox-dev/example/pull/124)) by @alice.\n\n"
+        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+    )
 
 
 def test_rst_template_renders_notes_with_stable_anchors(tmp_path: Path) -> None:
