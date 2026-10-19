@@ -1,0 +1,23 @@
+{% set release = "release-" + versiondata.version | replace(".", "-") %}
+{% set heading = versiondata.version + " (" + versiondata.date + ")" %}
+.. _{{ release }}:
+
+{{ heading }}
+{{ "=" * (heading | length) }}
+
+{% for section, _ in sections.items() %}
+{% for category, _ in definitions.items() if category in sections[section] %}
+{% if sections[section][category] %}
+{% set name = definitions[category]["name"] %}
+.. _{{ release }}-{{ name | lower | replace(" ", "-") }}:
+
+{{ name }}
+{{ "-" * (name | length) }}
+
+{% for text, values in sections[section][category].items() %}
+- {{ text }}{{ (" (" + (values | join(", ")) + ")") if values else "" }}
+{% endfor %}
+
+{% endif %}
+{% endfor %}
+{% endfor %}

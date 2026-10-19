@@ -9,11 +9,15 @@ The fragment linker accepts filenames such as ``+short-name.feature.md``. With `
 introducing squash commit. With ``--commit-map`` it reads a UTF-8 TSV with one fragment filename and one subject per
 line. A subject ends with ``(#number)``. The default fragment directory is ``changelog.d``.
 
-The package ships a Towncrier template. After installing release-creator, use it in ``[tool.towncrier]``:
+The package ships Markdown and reStructuredText Towncrier templates. After installing release-creator, select the
+template matching the tracked changelog in ``[tool.towncrier]``:
 
 .. code-block:: toml
 
    template = "release_creator.fragments:template.jinja2"
+
+For a ``.rst`` changelog, use ``release_creator.fragments:template.rst.jinja2`` instead. Both templates omit empty
+categories and add stable version and category anchors.
 
 Towncrier still requires category definitions in the project's ``pyproject.toml``.
 

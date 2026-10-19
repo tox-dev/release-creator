@@ -32,7 +32,7 @@ scripts.release-creator = "release_creator.cli:main"
 
 [dependency-groups]
 dev = [ { include-group = "test" }, { include-group = "type" }, { include-group = "pkg-meta" } ]
-test = [ "covdefaults>=2.3", "diff-cover>=10.2", "pytest>=9", "pytest-cov>=7" ]
+test = [ "covdefaults>=2.3", "diff-cover>=10.2", "pytest>=9", "pytest-cov>=7", { include-group = "release" } ]
 type = [ "ty>=0.0.84", { include-group = "test" }, { include-group = "docs" } ]
 docs = [
   "furo>=2025.12.19",
