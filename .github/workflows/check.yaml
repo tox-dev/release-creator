@@ -86,10 +86,83 @@ jobs:
             echo '::error::add a changelog fragment or apply the skip news label'
             exit 1
           fi
+  release-dry-run:
+    name: Release without publishing
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.15"
+          enable-cache: false
+      - name: Assemble and validate a local release
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git checkout -B release-validation "$BASE_SHA"
+          git merge --squash "$HEAD_SHA"
+          printf 'Validate the release pipeline on this pull request.\n' > "changelog.d/+validation-${PR_NUMBER}.bugfix.md"
+          git add -A
+          git -c user.name=release-validation -c user.email=release-validation@users.noreply.github.com commit -m "Validate release pipeline (#${PR_NUMBER})"
+          version=$(git tag --list | uv run --no-default-groups release-creator tags --next auto)
+          git tag --list | uv run --no-default-groups release-creator tags "$version" --require-newer
+          previous=$(git tag --list | uv run --no-default-groups release-creator tags "$version" --previous)
+          uv run --no-default-groups release-creator fragments --repository "$GITHUB_REPOSITORY" --git --resolve-authors
+          uv run --no-default-groups --group release towncrier build --yes --version "$version"
+          uvx prek exec mdformat -- mdformat --wrap 120 docs/changelog.md
+          uvx prek run --all-files
+          git diff HEAD --binary > "$RUNNER_TEMP/release.patch"
+          test -s "$RUNNER_TEMP/release.patch"
+          git reset --hard HEAD
+          git apply --check "$RUNNER_TEMP/release.patch"
+          git apply --index "$RUNNER_TEMP/release.patch"
+          while IFS= read -r path; do
+            case "$path" in
+              docs/changelog.md|changelog.d/*.md) ;;
+              *) echo "::error::unexpected release path: $path"; exit 1 ;;
+            esac
+          done < <(git diff --cached --name-only)
+          grep -Fq "## $version (" docs/changelog.md
+          git diff --cached --check
+          uvx prek run --all-files
+          git -c user.name=release-validation -c user.email=release-validation@users.noreply.github.com commit -m "release $version"
+          git tag "$version"
+          uv run --no-default-groups release-creator tags "$version"
+          uv build --python 3.15 --python-preference only-managed --sdist --wheel . --out-dir "$RUNNER_TEMP/dist"
+          args=()
+          if [[ -n "$previous" ]]; then
+            args+=(--previous "$previous")
+          fi
+          uv run --no-default-groups release-creator notes --changelog docs/changelog.md --tag "$version" --repository "$GITHUB_REPOSITORY" --artifact-url "https://pypi.org/project/release-creator/${version}/" "${args[@]}" > "$RUNNER_TEMP/release-notes.md"
+          test "$(grep -c '^\*\*Full Changelog\*\*:' "$RUNNER_TEMP/release-notes.md")" -eq 1
+          sha256sum "$RUNNER_TEMP"/dist/* > "$RUNNER_TEMP/dist.sha256"
+          cp docs/changelog.md "$RUNNER_TEMP/changelog.md"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-dry-run
+          path: |
+            ${{ runner.temp }}/release.patch
+            ${{ runner.temp }}/release-notes.md
+            ${{ runner.temp }}/changelog.md
+            ${{ runner.temp }}/dist.sha256
+            ${{ runner.temp }}/dist/*
+          if-no-files-found: error
   gate:
     name: Required checks pass
     if: always()
-    needs: [test, check, changelog]
+    needs: [test, check, changelog, release-dry-run]
     runs-on: ubuntu-26.04
     steps:
       - env:
@@ -99,6 +172,7 @@ jobs:
             all(
               to_entries[];
               .value.result == "success" or
-              (.key == "changelog" and .value.result == "skipped")
+              (.key == "changelog" and .value.result == "skipped") or
+              (.key == "release-dry-run" and .value.result == "skipped")
             )
           ' <<< "$NEEDS_JSON"
