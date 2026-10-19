@@ -85,6 +85,10 @@ jobs:
         run: |
           set -euo pipefail
           git fetch origin main
+          if [[ $(git rev-parse origin/main) != "$GITHUB_SHA" ]]; then
+            echo "::error::main changed during release preparation; dispatch again"
+            exit 1
+          fi
           git reset --hard origin/main
           git apply --check "$RUNNER_TEMP/release-patch/release.patch"
           git apply --index "$RUNNER_TEMP/release-patch/release.patch"
@@ -115,7 +119,7 @@ jobs:
           app_user_id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
           git config user.name "${APP_SLUG}[bot]"
           git config user.email "${app_user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
-          git commit -m "chore: prepare $VERSION"
+          git commit -m "release $VERSION"
           git tag "$VERSION"
           gh auth setup-git --hostname github.com --force
           git push --atomic origin HEAD:main "refs/tags/$VERSION"
