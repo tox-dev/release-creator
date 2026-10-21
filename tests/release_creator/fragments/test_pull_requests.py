@@ -83,6 +83,33 @@ def test_pull_request_authors_deduplicates_numbers_and_skips_bots(monkeypatch: p
     ]
 
 
+def test_pull_request_authors_uses_numbered_pr_stems(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pull_requests.shutil, "which", create_autospec(pull_requests.shutil.which, return_value="gh"))
+    run = create_autospec(
+        pull_requests.subprocess.run,
+        side_effect=[
+            subprocess.CompletedProcess([], 0, "gaborbernat\tUser\n", ""),
+            subprocess.CompletedProcess([], 0, "alice\tUser\n", ""),
+        ],
+    )
+    monkeypatch.setattr(pull_requests.subprocess, "run", run)
+
+    authors = pull_requests.pull_request_authors(
+        "quotaline/quotaline",
+        {"6.feature.md": "Backfill history (#12)", "+new.feature.md": "Add feature (#13)"},
+        numbered_prs=True,
+    )
+
+    assert authors == {
+        "6": PullRequestAuthor(handle="gaborbernat", is_bot=False),
+        "13": PullRequestAuthor(handle="alice", is_bot=False),
+    }
+    assert [call.args[0][2] for call in run.call_args_list] == [
+        "repos/quotaline/quotaline/pulls/6",
+        "repos/quotaline/quotaline/pulls/13",
+    ]
+
+
 def test_pull_request_authors_requires_gh(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pull_requests.shutil, "which", create_autospec(pull_requests.shutil.which, return_value=None))
 

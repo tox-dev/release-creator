@@ -66,6 +66,31 @@ def test_fragments_cli_links_knope_changeset(tmp_path: Path, monkeypatch: pytest
     )
 
 
+def test_fragments_cli_rejects_numbered_prs_for_knope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "release-creator",
+            "fragments",
+            "--format",
+            "knope",
+            "--numbered-prs",
+            "--repository",
+            "tox-dev/peryx",
+            "--git",
+        ],
+    )
+
+    with pytest.raises(SystemExit, match="2"):
+        main()
+
+    assert "--numbered-prs applies only to Towncrier" in capsys.readouterr().err
+
+
 def test_fragments_cli_rejects_unsupported_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -119,7 +144,7 @@ def test_fragments_cli_resolves_authors(tmp_path: Path, monkeypatch: pytest.Monk
     assert fragment.read_text() == (
         "Add a feature ([#3](https://github.com/tox-dev/example/pull/3)) by [@alice](https://github.com/alice).\n"
     )
-    resolve.assert_called_once_with("tox-dev/example", {"+topic.feature.md": "Add a feature (#3)"})
+    resolve.assert_called_once_with("tox-dev/example", {"+topic.feature.md": "Add a feature (#3)"}, numbered_prs=False)
 
 
 def test_fragments_cli_resolves_numbered_issue_author(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -154,7 +179,59 @@ def test_fragments_cli_resolves_numbered_issue_author(tmp_path: Path, monkeypatc
     assert fragment.read_text() == (
         "Add a feature ([#4](https://github.com/tox-dev/example/pull/4)) by [@alice](https://github.com/alice).\n"
     )
-    resolve.assert_called_once_with("tox-dev/example", {"3.feature.md": "Add a feature (#4)"})
+    resolve.assert_called_once_with("tox-dev/example", {"3.feature.md": "Add a feature (#4)"}, numbered_prs=False)
+
+
+def test_fragments_cli_uses_numbered_prs_and_named_squash_commits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    directory = tmp_path / "changelog.d"
+    directory.mkdir()
+    historical = directory / "6.feature.md"
+    historical.write_text("Support GNOME Shell 51, including Fedora 45.\n")
+    current = directory / "+new.feature.md"
+    current.write_text("Add a new feature.\n")
+    commits = tmp_path / "commits.tsv"
+    commits.write_text("6.feature.md\tBackfill history (#12)\n+new.feature.md\tAdd a new feature (#13)\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "release-creator",
+            "fragments",
+            "--repository",
+            "quotaline/quotaline",
+            "--commit-map",
+            str(commits),
+            "--numbered-prs",
+            "--resolve-authors",
+        ],
+    )
+    resolve = create_autospec(
+        fragments_cli.pull_request_authors,
+        return_value={
+            "6": PullRequestAuthor(handle="gaborbernat", is_bot=False),
+            "13": PullRequestAuthor(handle="alice", is_bot=False),
+        },
+    )
+    monkeypatch.setattr(fragments_cli, "pull_request_authors", resolve)
+
+    main()
+
+    assert historical.read_text() == (
+        "Support GNOME Shell 51, including Fedora 45 "
+        "([#6](https://github.com/quotaline/quotaline/pull/6)) by [@gaborbernat](https://github.com/gaborbernat).\n"
+    )
+    assert current.read_text() == (
+        "Add a new feature ([#13](https://github.com/quotaline/quotaline/pull/13)) "
+        "by [@alice](https://github.com/alice).\n"
+    )
+    resolve.assert_called_once_with(
+        "quotaline/quotaline",
+        {"6.feature.md": "Backfill history (#12)", "+new.feature.md": "Add a new feature (#13)"},
+        numbered_prs=True,
+    )
 
 
 def test_fragments_cli_reports_missing_commit_map(

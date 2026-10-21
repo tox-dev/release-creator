@@ -198,7 +198,7 @@ def test_add_pull_request_links_knope(tmp_path: Path, heading: str, author: Pull
         "tox-dev/example",
         {fragment.name: "Patch trust roots (#42)"},
         {"42": author},
-        knope=True,
+        mode="knope",
     )
 
     assert fragment.read_text() == f"---\ndefault: security\n---\n\n# {expected}\n\nMore context.\n"
@@ -214,7 +214,7 @@ def test_add_pull_request_links_knope_is_repeatable(tmp_path: Path) -> None:
             "tox-dev/example",
             {fragment.name: "Patch trust roots (#42)"},
             {"42": PullRequestAuthor(handle="alice", is_bot=False)},
-            knope=True,
+            mode="knope",
         )
 
     assert fragment.read_text() == (
@@ -235,7 +235,7 @@ def test_add_pull_request_links_knope_rejects_invalid_changeset(tmp_path: Path, 
     fragment.write_text(content)
 
     with pytest.raises(ValueError, match=message):
-        add_pull_request_links(tmp_path, "tox-dev/example", {fragment.name: "Patch trust roots (#42)"}, knope=True)
+        add_pull_request_links(tmp_path, "tox-dev/example", {fragment.name: "Patch trust roots (#42)"}, mode="knope")
 
     assert fragment.read_text() == content
 

@@ -18,6 +18,9 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
     fragments.add_argument("--directory", type=Path, help="fragment directory; defaults to changelog.d or .changeset")
     fragments.add_argument("--repository", required=True, help="GitHub owner/repository")
     fragments.add_argument(
+        "--numbered-prs", action="store_true", help="treat numeric Towncrier fragment stems as PR numbers"
+    )
+    fragments.add_argument(
         "--resolve-authors",
         action="store_true",
         help="add verified human PR authors using GitHub CLI read access",
@@ -36,6 +39,9 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
 def _link(args: argparse.Namespace) -> None:
     validate_repository(args.repository)
     knope = args.format == "knope"
+    if knope and args.numbered_prs:
+        msg = "--numbered-prs applies only to Towncrier fragments"
+        raise ValueError(msg)
     directory = args.directory or Path(".changeset" if knope else "changelog.d")
     (pending_changesets if knope else pending_fragments)(directory)
     commit_subjects = (
@@ -43,8 +49,13 @@ def _link(args: argparse.Namespace) -> None:
         if args.commit_map is not None
         else commit_subjects_from_git(directory, knope=knope)
     )
-    authors = pull_request_authors(args.repository, commit_subjects) if args.resolve_authors else None
-    add_pull_request_links(directory, args.repository, commit_subjects, authors, knope=knope)
+    authors = (
+        pull_request_authors(args.repository, commit_subjects, numbered_prs=args.numbered_prs)
+        if args.resolve_authors
+        else None
+    )
+    mode = "knope" if knope else "numbered-prs" if args.numbered_prs else "towncrier"
+    add_pull_request_links(directory, args.repository, commit_subjects, authors, mode=mode)
 
 
 def _check(args: argparse.Namespace) -> None:

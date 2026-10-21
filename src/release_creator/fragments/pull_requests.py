@@ -6,7 +6,10 @@ import re
 import shutil
 import subprocess  # ruff: ignore[suspicious-subprocess-import]  # GitHub CLI reads PR metadata without write access.
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Final, cast
+
+from release_creator.fragments.names import fragment_number
 
 _RE_REPOSITORY: Final = re.compile(
     r"""
@@ -56,7 +59,21 @@ def pull_request_number(subject: str) -> str:
     return cast("str", match["number"])
 
 
-def pull_request_authors(repository: str, commit_subjects: dict[str, str]) -> dict[str, PullRequestAuthor]:
+def fragment_pull_request_number(name: str, subject: str, *, numbered_prs: bool = False) -> str:
+    """Use a numbered stem as its PR only where the repository declares that convention.
+
+    Returns:
+        Original PR number for opted-in numeric fragments; otherwise the squash PR number.
+
+    """
+    if numbered_prs and (number := fragment_number(Path(name))) is not None:
+        return number
+    return pull_request_number(subject)
+
+
+def pull_request_authors(
+    repository: str, commit_subjects: dict[str, str], *, numbered_prs: bool = False
+) -> dict[str, PullRequestAuthor]:
     """Read human pull request authors with the GitHub CLI.
 
     Returns:
@@ -72,7 +89,10 @@ def pull_request_authors(repository: str, commit_subjects: dict[str, str]) -> di
         msg = "GitHub CLI is required to resolve pull request authors"
         raise FileNotFoundError(msg)
     authors: dict[str, PullRequestAuthor] = {}
-    for number in dict.fromkeys(pull_request_number(subject) for subject in commit_subjects.values()):
+    for number in dict.fromkeys(
+        fragment_pull_request_number(name, subject, numbered_prs=numbered_prs)
+        for name, subject in commit_subjects.items()
+    ):
         result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Fixed, validated gh arguments.
             [
                 gh,
@@ -119,6 +139,7 @@ def validate_repository(repository: str) -> None:
 
 __all__ = [
     "PullRequestAuthor",
+    "fragment_pull_request_number",
     "pull_request_authors",
     "pull_request_number",
     "validate_repository",

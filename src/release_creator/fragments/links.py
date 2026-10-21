@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, Literal
 lazy from pathlib import Path
 
 from release_creator.fragments.knope import changeset_parts
 from release_creator.fragments.names import fragment_number, pending_changesets, pending_fragments
-from release_creator.fragments.pull_requests import PullRequestAuthor, pull_request_number, validate_repository
+from release_creator.fragments.pull_requests import PullRequestAuthor, fragment_pull_request_number, validate_repository
 
 _RE_PULL_REQUEST_LINK: Final = re.compile(
     r"""
@@ -43,6 +43,7 @@ _RE_RST_USER: Final = re.compile(
     """,
     re.VERBOSE,
 )
+type _LinkMode = Literal["towncrier", "knope", "numbered-prs"]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -60,13 +61,16 @@ def add_pull_request_links(
     commit_subjects: dict[str, str],
     authors: dict[str, PullRequestAuthor] | None = None,
     *,
-    knope: bool = False,
+    mode: _LinkMode = "towncrier",
 ) -> None:
     """Keep fragment links and credits tied to their introducing pull requests."""
     validate_repository(repository)
     updates: list[tuple[Path, str]] = [
-        (fragment, _link_fragment(fragment, repository, commit_subjects, authors, knope=knope))
-        for fragment in (pending_changesets(directory) if knope else pending_fragments(directory))
+        (
+            fragment,
+            _link_fragment(fragment, repository, commit_subjects, authors, mode=mode),
+        )
+        for fragment in (pending_changesets(directory) if mode == "knope" else pending_fragments(directory))
     ]
     for fragment, content in updates:
         fragment.write_text(content, encoding="utf-8")
@@ -78,9 +82,11 @@ def _link_fragment(
     commit_subjects: dict[str, str],
     authors: dict[str, PullRequestAuthor] | None,
     *,
-    knope: bool,
+    mode: _LinkMode,
 ) -> str:
-    number = pull_request_number(commit_subjects.get(fragment.name, ""))
+    number = fragment_pull_request_number(
+        fragment.name, commit_subjects.get(fragment.name, ""), numbered_prs=mode == "numbered-prs"
+    )
     content = fragment.read_text(encoding="utf-8")
     author = None
     if authors is not None:
@@ -88,8 +94,8 @@ def _link_fragment(
             msg = f"no author data for pull request #{number}"
             raise ValueError(msg)
         author = authors[number]
-    target = _LinkTarget(fragment=fragment, repository=repository, number=number, author=author, knope=knope)
-    if knope:
+    target = _LinkTarget(fragment=fragment, repository=repository, number=number, author=author, knope=mode == "knope")
+    if mode == "knope":
         frontmatter, heading, remainder = changeset_parts(fragment, content)
         return f"{frontmatter}# {_link_text(heading, target)}{remainder}"
     return f"{_link_text(content.rstrip(), target)}\n"
