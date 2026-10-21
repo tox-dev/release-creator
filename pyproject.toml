@@ -24,7 +24,7 @@ classifiers = [
   "Typing :: Typed",
 ]
 dynamic = [ "readme", "version" ]
-dependencies = [ "mdformat>=1,<2", "mdformat-gfm>=1,<2", "tomli-w>=1.2" ]
+dependencies = [ "mdformat>=1,<2", "mdformat-gfm>=1,<2", "packaging>=26", "pyyaml>=6", "tomli-w>=1.2" ]
 urls.Changelog = "https://release-creator.readthedocs.io/en/latest/changelog.html"
 urls.Documentation = "https://release-creator.readthedocs.io/"
 urls.Homepage = "https://release-creator.readthedocs.io/"
