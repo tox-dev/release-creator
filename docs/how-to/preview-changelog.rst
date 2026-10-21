@@ -64,10 +64,17 @@ For ``.changeset/*.md`` files, use the category names from ``knope.toml``:
       --format knope --changelog CHANGELOG.md --config knope.toml \
       --fragments .changeset --output site/data/changelog.md
 
-A changeset with ``default: security`` and ``# Remove a distrusted root`` appears under ``## Draft`` and ``###
-Security``. Its full text remains visible. The copy retains existing release and category anchors; the draft has
-``draft`` and ``draft-security`` anchors. The command rejects missing front matter, unknown types, and empty summaries.
+A changeset with ``default: security`` and ``# Remove a distrusted root`` appears under the Draft section's Security
+heading. Its full text remains visible. The copy retains existing release and category anchors; the draft has ``draft``
+and ``draft-security`` anchors. The command rejects missing front matter, unknown types, and empty summaries.
 
-Towncrier reStructuredText changelogs already have an upstream draft renderer. Add ``.. towncrier-draft-entries::
-Draft`` above ``.. towncrier release notes start`` in the tracked RST page and enable Towncrier's Sphinx extension. No
-preview copy or ``changelog`` command is needed for those sites.
+Towncrier reStructuredText changelogs already have an upstream draft renderer. Enable Towncrier's Sphinx extension and
+put its draft directive above the release notes start marker in the tracked RST page:
+
+.. code-block:: rst
+
+    .. towncrier-draft-entries:: Draft
+
+    .. towncrier release notes start
+
+No preview copy or ``changelog`` command is needed for those sites.
