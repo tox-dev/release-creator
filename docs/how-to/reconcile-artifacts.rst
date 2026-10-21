@@ -16,9 +16,10 @@ Stage the files PyPI lacks in a fresh directory:
       --mode stage --missing-dir "$RUNNER_TEMP/missing" \
       --github-output "$GITHUB_OUTPUT"
 
-The command prints the missing file count and writes ``missing_count=N`` to the GitHub step output. Pass the staged
-directory to the trusted publisher only when the count is greater than zero. Keep the full ``dist`` directory for the
-post-upload check:
+The command prints the missing file count and writes ``missing_count=N`` to the GitHub step output. If staging and
+publishing run in separate jobs, transfer the missing filenames rather than a second copy of the wheels. Select those
+names from the original validated ``dist`` artifact in the publishing job. Run the publisher only when the count is
+greater than zero, then check the full original set:
 
 .. code-block:: bash
 
