@@ -730,6 +730,18 @@ def test_render_rst_keeps_role_display(source: str, expected: str) -> None:
     )
 
 
+def test_render_rst_links_pep_role() -> None:
+    changelog = "1.2.3 (today)\n==============\n\nAdded\n-----\n\n- Support :PEP:`751`.\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert result == (
+        '<a name="release-1-2-3-added"></a>\n\n### Features\n\n'
+        "- Support [PEP 751](https://peps.python.org/pep-0751/).\n\n"
+        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+    )
+
+
 def test_render_rst_keeps_issue_role_as_issue() -> None:
     changelog = "1.2.3 (today)\n==============\n\nFixed\n-----\n\n- Fix a bug (:issue:`5`).\n"
     result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))

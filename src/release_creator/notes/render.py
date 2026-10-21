@@ -326,6 +326,16 @@ def _convert_rst(line: str, repository: str, issue_role: str) -> str:
     issue_target = "pull" if issue_role == "pull" else "issues"
     line = re.sub(
         r"""
+        :PEP:`                   # Sphinx PEP role
+        (?P<number>\d+)          # PEP number
+        `                        # Role terminator
+        """,
+        lambda match: f"[PEP {match['number']}](https://peps.python.org/pep-{int(match['number']):04d}/)",
+        line,
+        flags=re.VERBOSE | re.IGNORECASE,
+    )
+    line = re.sub(
+        r"""
         :(?:pr|pull):`       # Pull request role
         (?P<number>\d+)       # Pull request number
         `                     # Role terminator
