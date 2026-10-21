@@ -730,14 +730,25 @@ def test_render_rst_keeps_role_display(source: str, expected: str) -> None:
     )
 
 
-def test_render_rst_links_pep_role() -> None:
-    changelog = "1.2.3 (today)\n==============\n\nAdded\n-----\n\n- Support :PEP:`751`.\n"
+@pytest.mark.parametrize(
+    ("role", "expected"),
+    [
+        pytest.param(":PEP:`751`", "[PEP 751](https://peps.python.org/pep-0751/)", id="pep"),
+        pytest.param(
+            ":PEP:`517#in-tree-build-backends`",
+            "[PEP 517](https://peps.python.org/pep-0517/#in-tree-build-backends)",
+            id="section",
+        ),
+    ],
+)
+def test_render_rst_links_pep_role(role: str, expected: str) -> None:
+    changelog = f"1.2.3 (today)\n==============\n\nAdded\n-----\n\n- Support {role}.\n"
 
     result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
 
     assert result == (
         '<a name="release-1-2-3-added"></a>\n\n### Features\n\n'
-        "- Support [PEP 751](https://peps.python.org/pep-0751/).\n\n"
+        f"- Support {expected}.\n\n"
         "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
     )
 

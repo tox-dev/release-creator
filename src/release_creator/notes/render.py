@@ -328,9 +328,13 @@ def _convert_rst(line: str, repository: str, issue_role: str) -> str:
         r"""
         :PEP:`                   # Sphinx PEP role
         (?P<number>\d+)          # PEP number
+        (?:\#(?P<anchor>[A-Za-z0-9_-]+))?  # Optional section anchor
         `                        # Role terminator
         """,
-        lambda match: f"[PEP {match['number']}](https://peps.python.org/pep-{int(match['number']):04d}/)",
+        lambda match: (
+            f"[PEP {match['number']}](https://peps.python.org/pep-{int(match['number']):04d}/"
+            f"{'#' + match['anchor'] if match['anchor'] else ''})"
+        ),
         line,
         flags=re.VERBOSE | re.IGNORECASE,
     )
