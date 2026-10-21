@@ -3,6 +3,7 @@
 import argparse
 
 lazy from release_creator.anchors.cli import register as register_anchors
+lazy from release_creator.artifacts.cli import register as register_artifacts
 lazy from release_creator.build_constraints.cli import register as register_build_constraints
 lazy from release_creator.changelog.cli import register as register_changelog
 lazy from release_creator.fragments.cli import register as register_fragments
@@ -38,6 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     register_tags(commands)
     register_locks(commands)
     register_build_constraints(commands)
+    register_artifacts(commands)
     register_hooks(commands)
     return parser
 

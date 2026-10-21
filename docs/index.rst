@@ -26,6 +26,9 @@ Run each command at the stage it serves:
     - - :doc:`changelog <how-to/preview-changelog>`
       - Before each pull request documentation build
       - Writes a copy of released history with pending fragments under Draft
+    - - :doc:`artifacts <how-to/reconcile-artifacts>`
+      - Before and after a PyPI upload
+      - Stages only missing files and verifies the published file set
     - - :doc:`locks <how-to/export-lock>`
       - When project dependencies change or during the weekly lock refresh
       - Writes one ``pylock.toml`` for runtime, groups, extras, and build dependencies
@@ -55,6 +58,7 @@ The :doc:`changelog <changelog>` includes an ``Unreleased`` section in PR builds
     how-to/link-fragments
     how-to/render-notes
     how-to/preview-changelog
+    how-to/reconcile-artifacts
     how-to/select-release-tag
     how-to/export-lock
     how-to/update-hooks
