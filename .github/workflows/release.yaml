@@ -19,6 +19,7 @@ jobs:
       contents: read
     outputs:
       tag: ${{ steps.notes.outputs.previous }}
+      commit: ${{ steps.commit.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,6 +36,11 @@ jobs:
           uv pip sync --preview-features pylock --python "$RUNNER_TEMP/release-tools/bin/python" --group build --group project-runtime pylock.toml
           uv pip install --python "$RUNNER_TEMP/release-tools/bin/python" --no-deps --no-build-isolation .
           echo "$RUNNER_TEMP/release-tools/bin" >>"$GITHUB_PATH"
+      - id: commit
+        name: Resolve tagged commit
+        env:
+          TAG: ${{ github.ref_name }}
+        run: echo "sha=$(git rev-parse "${TAG}^{commit}")" >>"$GITHUB_OUTPUT"
       - id: notes
         uses: tox-dev/github-workflows/render-release-notes@a250ca3524857236e288764651851010939b6f71
         with:
@@ -198,7 +204,7 @@ jobs:
           wait-seconds: "120"
           local-tool-source: "true"
   github-release:
-    needs: [notes, verify-pypi]
+    needs: [previous, notes, verify-pypi]
     runs-on: ubuntu-26.04
     permissions:
       contents: write
@@ -213,6 +219,6 @@ jobs:
         with:
           repository: ${{ github.repository }}
           tag: ${{ github.ref_name }}
-          commit: ${{ github.sha }}
+          commit: ${{ needs.previous.outputs.commit }}
           title: v${{ github.ref_name }}
           notes-file: ${{ runner.temp }}/release-notes.md
