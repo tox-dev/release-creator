@@ -4,7 +4,7 @@ on:
 permissions: {}
 jobs:
   validate:
-    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@a250ca3524857236e288764651851010939b6f71
+    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@e8d429040f73cd95af722543a0a09717bf3bb0aa
     permissions:
       contents: read
       pull-requests: read
