@@ -76,7 +76,7 @@ def test_markdown_template_keeps_numbered_and_named_pull_requests(
     ("underlines", "expected_category"),
     [
         pytest.param("", "Fixed\n-----", id="default"),
-        pytest.param('underlines = ["*", "=", "-"]', "Fixed\n-----", id="overline"),
+        pytest.param('underlines = ["*", "=", "-"]', "Fixed\n=====", id="overline"),
         pytest.param('underlines = ["-", "~"]', "Fixed\n~~~~~", id="dash"),
     ],
 )
@@ -133,7 +133,7 @@ def test_rst_template_renders_notes_with_stable_anchors(
     )
 
 
-def test_rst_template_avoids_git_conflict_marker(tmp_path: Path) -> None:
+def test_rst_template_preserves_configured_category_style(tmp_path: Path) -> None:
     (tmp_path / "changelog.d").mkdir()
     (tmp_path / "changelog.d" / "1.change.rst").write_text("Change a setting.\n")
     (tmp_path / "changelog.rst").write_text("Changelog\n=========\n\n.. towncrier release notes start\n")
@@ -157,4 +157,4 @@ def test_rst_template_avoids_git_conflict_marker(tmp_path: Path) -> None:
         check=True,
     )
 
-    assert "Changes\n-------" in (tmp_path / "changelog.rst").read_text()
+    assert "Changes\n=======" in (tmp_path / "changelog.rst").read_text()
