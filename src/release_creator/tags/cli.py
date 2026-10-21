@@ -35,7 +35,7 @@ def _select(args: argparse.Namespace) -> None:
         args.package is not None
         and re.fullmatch(
             r"""
-        (?P<package>[A-Za-z0-9_.-]+)  # One Git tag path component
+        (?P<package>[A-Za-z0-9][A-Za-z0-9_.-]*)  # One non-relative Git tag path component
         """,
             args.package,
             re.VERBOSE,
