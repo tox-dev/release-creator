@@ -1,6 +1,6 @@
-#####################################
+##################################
  Show draft news in documentation
-#####################################
+##################################
 
 ``changelog`` writes a documentation copy of released history with the current fragments under ``Draft``. Run it before
 the documentation builder on every pull request. Readers can then review the full pending text before a release; the
@@ -50,8 +50,8 @@ Only ``## pyproject-fmt`` and its released versions enter the output. A ``+pytho
 
     - Require Python 3.11.
 
-The preview requires the same named or numbered fragment form, category, and single paragraph that the package
-assembler accepts. A malformed fragment fails the documentation build instead of disappearing from the page.
+The preview requires the same named or numbered fragment form, category, and single paragraph that the package assembler
+accepts. A malformed fragment fails the documentation build instead of disappearing from the page.
 
 Knope Markdown changelog
 ========================
@@ -64,10 +64,10 @@ For ``.changeset/*.md`` files, use the category names from ``knope.toml``:
       --format knope --changelog CHANGELOG.md --config knope.toml \
       --fragments .changeset --output site/data/changelog.md
 
-A changeset with ``default: security`` and ``# Remove a distrusted root`` appears under ``## Draft`` and
-``### Security``. Its full text remains visible. The copy retains existing release and category anchors; the draft has
+A changeset with ``default: security`` and ``# Remove a distrusted root`` appears under ``## Draft`` and ``###
+Security``. Its full text remains visible. The copy retains existing release and category anchors; the draft has
 ``draft`` and ``draft-security`` anchors. The command rejects missing front matter, unknown types, and empty summaries.
 
-Towncrier reStructuredText changelogs already have an upstream draft renderer. Add
-``.. towncrier-draft-entries:: Draft`` above ``.. towncrier release notes start`` in the tracked RST page and enable
-Towncrier's Sphinx extension. No preview copy or ``changelog`` command is needed for those sites.
+Towncrier reStructuredText changelogs already have an upstream draft renderer. Add ``.. towncrier-draft-entries::
+Draft`` above ``.. towncrier release notes start`` in the tracked RST page and enable Towncrier's Sphinx extension. No
+preview copy or ``changelog`` command is needed for those sites.
