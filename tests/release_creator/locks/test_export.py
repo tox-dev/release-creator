@@ -294,6 +294,34 @@ def test_export_lock_keeps_existing_uv_lock(tmp_path: Path, mocker: MockerFixtur
     assert (tmp_path / "uv.lock").read_text() == "existing"
 
 
+def test_export_lock_restores_existing_uv_lock_after_later_failure(tmp_path: Path, mocker: MockerFixture) -> None:
+    project = tmp_path / "pyproject.toml"
+    project.write_text(
+        "[build-system]\nrequires = ['hatchling']\n"
+        "[project]\nname = 'demo'\nversion = '1.0'\nrequires-python = '>=3.15'\n"
+    )
+    lock_path = tmp_path / "uv.lock"
+    lock_path.write_text("reviewed lock")
+    output = tmp_path / "pylock.toml"
+    output.write_text("reviewed export")
+    mocker.patch("shutil.which", return_value="/usr/bin/uv")
+
+    def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if command[1] == "lock":
+            lock_path.write_text("unreviewed upgrade")
+            return subprocess.CompletedProcess(command, 0, "", "")
+        if command[1] == "export":
+            return subprocess.CompletedProcess(command, 0, "packages = []\n", "")
+        return subprocess.CompletedProcess(command, 1, "", "build resolver failed")
+
+    mocker.patch("subprocess.run", side_effect=run)
+
+    with pytest.raises(ValueError, match="build resolver failed"):
+        export_lock(project, output)
+
+    assert (lock_path.read_text(), output.read_text()) == ("reviewed lock", "reviewed export")
+
+
 def test_export_lock_reports_uv_failure(tmp_path: Path, mocker: MockerFixture) -> None:
     project = tmp_path / "pyproject.toml"
     project.write_text("[project]\nname = 'demo'\nrequires-python = '>=3.11'\n")

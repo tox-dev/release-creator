@@ -44,11 +44,15 @@ def export_lock(
         msg = "build is reserved for the project's build dependencies"
         raise ValueError(msg)
     lock_path = project.parent / "uv.lock"
-    created_lock = not lock_path.exists()
+    previous = (
+        lock_path.read_bytes() if lock_path.exists() else None,
+        output.read_bytes() if output.exists() else None,
+    )
     if (uv := shutil.which("uv")) is None:
         msg = "uv is required to export a project lock"
         raise FileNotFoundError(msg)
     cutoff_options = [option for item in exclude_newer_packages for option in ("--exclude-newer-package", item)]
+    completed = False
     try:
         _run_uv(uv, project.parent, "lock", "--upgrade", *cutoff_options)
         packages: dict[str, dict[str, object]] = {}
@@ -69,24 +73,46 @@ def export_lock(
                 "build",
                 "dependency_groups",
             )
-        lock = {
-            "lock-version": "1.0",
-            "created-by": "release-creator (uv)",
-            "requires-python": requires_python,
-            "extras": extras,
-            "dependency-groups": ["project-runtime", *groups, *(["build"] if build else [])],
-            "default-groups": [],
-            "packages": [],
-        }
-        for key, package in sorted(
-            packages.items(), key=lambda entry: (entry[1]["name"], entry[1].get("version", ""), entry[0])
-        ):
-            package["marker"] = " or ".join(sorted(markers[key]))
-            lock["packages"].append(package)
-        output.write_text(tomli_w.dumps(lock), encoding="utf-8")
+        output.write_text(
+            tomli_w.dumps({
+                "lock-version": "1.0",
+                "created-by": "release-creator (uv)",
+                "requires-python": requires_python,
+                "extras": extras,
+                "dependency-groups": ["project-runtime", *groups, *(["build"] if build else [])],
+                "default-groups": [],
+                "packages": _package_records(packages, markers),
+            }),
+            encoding="utf-8",
+        )
+        completed = True
     finally:
-        if created_lock:
-            lock_path.unlink(missing_ok=True)
+        _restore_exports(lock_path, output, previous, completed=completed)
+
+
+def _restore_exports(
+    lock_path: Path, output: Path, previous: tuple[bytes | None, bytes | None], *, completed: bool
+) -> None:
+    previous_lock, previous_output = previous
+    if previous_lock is None:
+        lock_path.unlink(missing_ok=True)
+    elif not completed:
+        lock_path.write_bytes(previous_lock)
+    if not completed:
+        if previous_output is None:
+            output.unlink(missing_ok=True)
+        else:
+            output.write_bytes(previous_output)
+
+
+def _package_records(packages: dict[str, dict[str, object]], markers: dict[str, set[str]]) -> list[dict[str, object]]:
+    records: list[dict[str, object]] = []
+    for key, package in sorted(
+        packages.items(), key=lambda entry: (entry[1]["name"], entry[1].get("version", ""), entry[0])
+    ):
+        package["marker"] = " or ".join(sorted(markers[key]))
+        records.append(package)
+    return records
 
 
 def _add_selection(
