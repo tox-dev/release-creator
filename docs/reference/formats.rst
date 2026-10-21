@@ -9,6 +9,11 @@ The fragment linker accepts filenames such as ``+short-name.feature.md``. With `
 introducing squash commit. With ``--commit-map`` it reads a UTF-8 TSV with one fragment filename and one subject per
 line. A subject ends with ``(#number)``. The default fragment directory is ``changelog.d``.
 
+With ``--format knope``, the default directory is ``.changeset``. A Knope fragment has a Markdown name such as
+``trust-roots.md``, YAML front matter, and a level-one heading. The linker changes that heading and preserves the rest
+of the file. After Knope writes ``CHANGELOG.md``, run ``release-creator anchors --changelog CHANGELOG.md`` to keep
+version and category anchors attached to their headings.
+
 The package ships Markdown and reStructuredText Towncrier templates. After installing release-creator, select the
 template matching the tracked changelog in ``[tool.towncrier]``:
 

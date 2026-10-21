@@ -37,6 +37,43 @@ Towncrier copies both links into the release section. For shared authorship, lis
 the linker checks that the list includes the merged PR author. It does not credit bot accounts. A bot PR gets no
 automatic author credit, even when that PR supplies a user-visible fragment.
 
+Knope changesets
+================
+
+For a Knope project, select its changeset format. The default directory becomes ``.changeset``:
+
+.. code-block:: bash
+
+   uvx --from release-creator release-creator fragments \
+     --format knope \
+     --repository owner/project \
+     --git \
+     --resolve-authors
+
+For example, a ``trust-roots.md`` changeset can contain:
+
+.. code-block:: markdown
+
+   ---
+   default: security
+   ---
+
+   # Remove a distrusted root certificate from ACME requests
+
+After its squash commit ``Patch trust roots (#42)``, the command adds the PR link and verified human credit to the
+level-one heading. It leaves the YAML front matter and any text after that heading in place. Knope then collects that
+heading in its release notes. An unchanged rerun leaves the linked heading alone.
+
+After ``knope prepare-release`` assembles the changelog, repair its stable section anchors:
+
+.. code-block:: bash
+
+   release-creator anchors --changelog CHANGELOG.md
+
+Knope can insert a new version between an existing anchor and its heading. This command places a
+``release-<version>`` anchor before each version heading and a ``release-<version>-<category>`` anchor before each
+category heading. It moves displaced anchors back to the heading they identify. Repeating it leaves the file unchanged.
+
 Rules and failure cases
 =======================
 
@@ -55,11 +92,17 @@ Write one fragment per user-visible change, including multiple changes in one pu
 a user-visible change needs no fragment. A bot pull request needs a fragment only when that pull request supplies one.
 The command does not decide whether a change is newsworthy; review that before merging.
 
-The linker processes filenames beginning with ``+`` and numeric filenames in the fragment directory. It requires the
+For Towncrier, the linker processes filenames beginning with ``+`` and numeric filenames in the fragment directory. It requires the
 introducing squash subject to end in ``(#number)``. A named fragment that already links its pull request is rejected;
 a numeric fragment can retain an existing link. When author resolution is enabled, a failed GitHub lookup or a credit
 that omits the PR author stops the command before Towncrier builds the changelog. The linker validates every fragment
 before writing any of them.
+
+For Knope, the linker processes Markdown files in ``.changeset`` except ``README.md``. Each file needs YAML front matter
+and a level-one heading after it. The command checks the introducing squash subject and verified author in the same way.
+To validate changed changesets on a pull request, run ``release-creator validate-news --format knope --base main``. It
+reads ``knope.toml``, checks each changed Markdown file's front matter type and summary, then prints a count. Apply the
+repository's news policy to that count for both human and bot pull requests.
 
 Both ``fragments`` and ``tags --next`` reject a named fragment without its ``+`` prefix. Otherwise Towncrier would
 publish the filename stem in place of a pull request link. The pull request check applies the same rule before merge.

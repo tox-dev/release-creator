@@ -35,6 +35,37 @@ def test_fragments_cli_links_squash_pull_request(tmp_path: Path, monkeypatch: py
     assert fragment.read_text() == "Add a feature ([#3](https://github.com/tox-dev/example/pull/3)).\n"
 
 
+def test_fragments_cli_links_knope_changeset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    directory = tmp_path / ".changeset"
+    directory.mkdir()
+    fragment = directory / "trust-roots.md"
+    fragment.write_text("---\ndefault: security\n---\n\n# Remove a distrusted root certificate\n")
+    commits = tmp_path / "commits.tsv"
+    commits.write_text("trust-roots.md\tPatch trust roots (#2377)\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "release-creator",
+            "fragments",
+            "--format",
+            "knope",
+            "--repository",
+            "tox-dev/peryx",
+            "--commit-map",
+            str(commits),
+        ],
+    )
+
+    main()
+
+    assert fragment.read_text() == (
+        "---\ndefault: security\n---\n\n"
+        "# Remove a distrusted root certificate ([#2377](https://github.com/tox-dev/peryx/pull/2377))\n"
+    )
+
+
 def test_fragments_cli_rejects_unsupported_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

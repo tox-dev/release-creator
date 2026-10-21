@@ -22,6 +22,16 @@ def pending_fragments(directory: Path) -> list[Path]:
     return fragments
 
 
+def pending_changesets(directory: Path) -> list[Path]:
+    """List Knope changesets, excluding its directory guide.
+
+    Returns:
+        Pending Markdown changeset paths.
+
+    """
+    return sorted(path for path in directory.glob("*.md") if path.name != "README.md")
+
+
 def fragment_number(fragment: Path) -> str | None:
     """Recognize legacy issue-number fragments before finding their pull requests.
 
@@ -35,5 +45,6 @@ def fragment_number(fragment: Path) -> str | None:
 
 __all__ = [
     "fragment_number",
+    "pending_changesets",
     "pending_fragments",
 ]

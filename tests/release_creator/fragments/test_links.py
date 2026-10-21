@@ -162,6 +162,84 @@ def test_add_pull_request_links_preserves_shared_credits(tmp_path: Path) -> None
     )
 
 
+@pytest.mark.parametrize(
+    ("heading", "author", "expected"),
+    [
+        pytest.param(
+            "Remove a distrusted root certificate",
+            PullRequestAuthor(handle="alice", is_bot=False),
+            "Remove a distrusted root certificate ([#42](https://github.com/tox-dev/example/pull/42)) "
+            "by [@alice](https://github.com/alice)",
+            id="human",
+        ),
+        pytest.param(
+            "Remove a distrusted root certificate",
+            PullRequestAuthor(handle="dependabot", is_bot=True),
+            "Remove a distrusted root certificate ([#42](https://github.com/tox-dev/example/pull/42))",
+            id="bot",
+        ),
+        pytest.param(
+            "Remove a distrusted root certificate by [@alice](https://github.com/alice) "
+            "and [@bob](https://github.com/bob)",
+            PullRequestAuthor(handle="alice", is_bot=False),
+            "Remove a distrusted root certificate ([#42](https://github.com/tox-dev/example/pull/42)) "
+            "by [@alice](https://github.com/alice) and [@bob](https://github.com/bob)",
+            id="shared-credit",
+        ),
+    ],
+)
+def test_add_pull_request_links_knope(tmp_path: Path, heading: str, author: PullRequestAuthor, expected: str) -> None:
+    fragment = tmp_path / "trust-roots.md"
+    fragment.write_text(f"---\ndefault: security\n---\n\n# {heading}\n\nMore context.\n")
+    (tmp_path / "README.md").write_text("Knope guide.\n")
+
+    add_pull_request_links(
+        tmp_path,
+        "tox-dev/example",
+        {fragment.name: "Patch trust roots (#42)"},
+        {"42": author},
+        knope=True,
+    )
+
+    assert fragment.read_text() == f"---\ndefault: security\n---\n\n# {expected}\n\nMore context.\n"
+
+
+def test_add_pull_request_links_knope_is_repeatable(tmp_path: Path) -> None:
+    fragment = tmp_path / "trust-roots.md"
+    fragment.write_text("---\ndefault: security\n---\n\n# Remove a distrusted root certificate\n")
+
+    for _ in range(2):
+        add_pull_request_links(
+            tmp_path,
+            "tox-dev/example",
+            {fragment.name: "Patch trust roots (#42)"},
+            {"42": PullRequestAuthor(handle="alice", is_bot=False)},
+            knope=True,
+        )
+
+    assert fragment.read_text() == (
+        "---\ndefault: security\n---\n\n# Remove a distrusted root certificate "
+        "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice)\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        pytest.param("# Missing front matter\n", "missing YAML front matter", id="front-matter"),
+        pytest.param("---\ndefault: security\n---\n\nNot a heading\n", "missing level-one", id="heading"),
+    ],
+)
+def test_add_pull_request_links_knope_rejects_invalid_changeset(tmp_path: Path, content: str, message: str) -> None:
+    fragment = tmp_path / "trust-roots.md"
+    fragment.write_text(content)
+
+    with pytest.raises(ValueError, match=message):
+        add_pull_request_links(tmp_path, "tox-dev/example", {fragment.name: "Patch trust roots (#42)"}, knope=True)
+
+    assert fragment.read_text() == content
+
+
 def test_add_pull_request_links_preserves_numbered_shared_credits(tmp_path: Path) -> None:
     fragment = tmp_path / "42.feature.md"
     fragment.write_text("Add a feature by [@alice](https://github.com/alice).\n")
