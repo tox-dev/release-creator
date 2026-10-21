@@ -176,7 +176,7 @@ jobs:
           packages-dir: selected-dist
           skip-existing: true
   verify-pypi:
-    if: ${{ !cancelled() && needs.stage-pypi.result == 'success' && (needs.publish-pypi.result == 'success' || needs.publish-pypi.result == 'skipped') }}
+    if: ${{ !cancelled() && needs.stage-pypi.result == 'success' && (needs.publish-pypi.result == 'success' || (needs.publish-pypi.result == 'skipped' && needs.stage-pypi.outputs.missing-count == '0')) }}
     needs: [stage-pypi, publish-pypi]
     runs-on: ubuntu-26.04
     permissions:
