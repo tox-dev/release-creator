@@ -1,10 +1,9 @@
-############################
-Select a numeric release tag
-############################
+##############################
+ Select a numeric release tag
+##############################
 
-``tags`` calculates a version from pending changelog fragments and existing tags. It also checks a proposed version
-and finds the tag for the GitHub comparison link. It reads tag names from standard input and never creates or moves
-a tag.
+``tags`` calculates a version from pending changelog fragments and existing tags. It also checks a proposed version and
+finds the tag for the GitHub comparison link. It reads tag names from standard input and never creates or moves a tag.
 
 Calculate the next version
 ==========================
@@ -13,38 +12,38 @@ Use ``--next auto`` in a release workflow. ``--directory`` defaults to ``changel
 
 .. code-block:: bash
 
-   git tag --list | uvx --from release-creator release-creator tags --next auto
+    git tag --list | uvx --from release-creator release-creator tags --next auto
 
 An ``*.breaking.md`` fragment requests a major bump. Otherwise, an ``*.feature.md`` fragment requests a minor bump;
 other fragments request a patch bump. If several kinds are present, the largest bump wins. From ``1.2.3``, a feature
 produces ``1.3.0`` and a bug fix alone produces ``1.2.4``. With no numeric tags, a feature produces ``0.1.0``.
 
-For repositories with ``v``-prefixed release tags, add ``--prefix v``. Existing ``v1.2.3`` and ``1.2.3`` tags both
-count when selecting the next version; the option controls the new tag's spelling:
+For repositories with ``v``-prefixed release tags, add ``--prefix v``. Existing ``v1.2.3`` and ``1.2.3`` tags both count
+when selecting the next version; the option controls the new tag's spelling:
 
 .. code-block:: bash
 
-   git tag --list | uvx --from release-creator release-creator tags --next auto --prefix v
+    git tag --list | uvx --from release-creator release-creator tags --next auto --prefix v
 
-In a repository that tags several packages, pass ``--package`` and the complete tag list. The command selects only
-that package's tags, reads fragments from ``changelog.d/<package>`` by default, and prints the full package tag:
+In a repository that tags several packages, pass ``--package`` and the complete tag list. The command selects only that
+package's tags, reads fragments from ``changelog.d/<package>`` by default, and prints the full package tag:
 
 .. code-block:: bash
 
-   git tag --list | release-creator tags --next auto --package pyproject-fmt
+    git tag --list | release-creator tags --next auto --package pyproject-fmt
 
-With ``pyproject-fmt/2.30.3`` already tagged and a pending bug fix, this prints
-``pyproject-fmt/2.30.4``. Other packages' tags do not affect the version.
+With ``pyproject-fmt/2.30.3`` already tagged and a pending bug fix, this prints ``pyproject-fmt/2.30.4``. Other
+packages' tags do not affect the version.
 
 For tox-dev libraries, both adding and dropping a supported Python version use a ``feature`` fragment, such as
-``+drop-python-3-9.feature.md``. The note appears under Added and automatic version selection makes a minor release.
-New releases will not install on a dropped Python version. Users who need that version can install an older release.
-State the exact Python version in the fragment. Reserve ``*.breaking.md`` for changes that require a major bump.
+``+drop-python-3-9.feature.md``. The note appears under Added and automatic version selection makes a minor release. New
+releases will not install on a dropped Python version. Users who need that version can install an older release. State
+the exact Python version in the fragment. Reserve ``*.breaking.md`` for changes that require a major bump.
 
 Choose ``--next major``, ``minor``, or ``patch`` to override that classification. ``--next calver`` uses
-``year.month.patch``: the first October 2026 release is ``2026.10.0``, and the next is ``2026.10.1``. CalVer uses
-the runner's current date. Every choice requires at least one fragment and must produce a version newer than all
-existing numeric tags.
+``year.month.patch``: the first October 2026 release is ``2026.10.0``, and the next is ``2026.10.1``. CalVer uses the
+runner's current date. Every choice requires at least one fragment and must produce a version newer than all existing
+numeric tags.
 
 Check a proposed version
 ========================
@@ -53,11 +52,11 @@ Suppose ``git tag --list`` prints ``1.2.1``, ``1.2.2``, and ``docs-preview``. Be
 
 .. code-block:: bash
 
-   git tag --list | uvx --from release-creator release-creator tags 1.2.3 --require-newer
+    git tag --list | uvx --from release-creator release-creator tags 1.2.3 --require-newer
 
-A successful check prints nothing and exits with status zero. If ``1.2.3``, ``v1.2.3``, or a newer numeric tag already exists,
-the command fails. This prevents release preparation from reusing a version or publishing an older one. A name such
-as ``1.2.3rc1`` also fails: this command accepts exactly three numeric components.
+A successful check prints nothing and exits with status zero. If ``1.2.3``, ``v1.2.3``, or a newer numeric tag already
+exists, the command fails. This prevents release preparation from reusing a version or publishing an older one. A name
+such as ``1.2.3rc1`` also fails: this command accepts exactly three numeric components.
 
 Find the comparison base
 ========================
@@ -66,7 +65,7 @@ For the same tag list, run:
 
 .. code-block:: bash
 
-   git tag --list | uvx --from release-creator release-creator tags 1.2.3 --previous
+    git tag --list | uvx --from release-creator release-creator tags 1.2.3 --previous
 
 The output is ``1.2.2``. Pass it to ``notes --previous 1.2.2`` to link the changes since that release. For a first
 numeric release, ``--previous`` prints nothing; ``notes`` then links to the commits at the new tag.
@@ -79,9 +78,9 @@ Rules and failure cases
 =======================
 
 The proposed tag must have three numeric components, ``major.minor.patch`` or ``year.month.patch``, with an optional
-``v`` prefix. Existing tags with other forms, such as ``docs-preview`` or a floating ``v1`` tag, do not take part in
-the comparison. Numeric components are compared as numbers, so ``v1.2.10`` follows ``1.2.9``. ``--previous`` selects
-the greatest numeric tag below the proposed one, retains its prefix, and ignores input order.
+``v`` prefix. Existing tags with other forms, such as ``docs-preview`` or a floating ``v1`` tag, do not take part in the
+comparison. Numeric components are compared as numbers, so ``v1.2.10`` follows ``1.2.9``. ``--previous`` selects the
+greatest numeric tag below the proposed one, retains its prefix, and ignores input order.
 
 Without ``--previous`` or ``--require-newer``, the command only validates the proposed tag's format and does not read
 standard input. Choose one option at a time; they answer different questions.
