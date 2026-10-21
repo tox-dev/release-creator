@@ -6,7 +6,7 @@ release-creator
 GitHub Release notes, exports selectable project locks, and refreshes pre-commit dependency pins. Install a published version with
 ``uvx --from release-creator release-creator``.
 
-The three commands run at different points in a release:
+Run each command at the stage it serves:
 
 .. list-table:: Choose a command
    :header-rows: 1
@@ -25,7 +25,10 @@ The three commands run at different points in a release:
      - Prints the GitHub Release body from the tagged changelog
    * - :doc:`locks <how-to/export-lock>`
      - When project dependencies change or during the weekly lock refresh
-     - Writes one ``pylock.toml`` for runtime dependencies, groups, and extras
+     - Writes one ``pylock.toml`` for runtime, groups, extras, and build dependencies
+   * - :doc:`build-constraints <how-to/export-lock>`
+     - Before building a distribution
+     - Selects exact build pins and hashes for the current runner
    * - :doc:`hooks <how-to/update-hooks>`
      - During the weekly pre-commit update
      - Updates exact hook dependency pins without rewriting other YAML
