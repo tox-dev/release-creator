@@ -3,8 +3,8 @@
 #################
 
 ``release-creator`` links changelog fragments to squash pull requests, validates release tags, renders GitHub Release
-notes, exports selectable project locks, and refreshes pre-commit dependency pins. Install a published version with
-``uvx --from release-creator release-creator``.
+notes, previews draft news in documentation, exports selectable project locks, and refreshes pre-commit dependency pins.
+Install a published version with ``uvx --from release-creator release-creator``.
 
 Run each command at the stage it serves:
 
@@ -23,6 +23,9 @@ Run each command at the stage it serves:
     - - :doc:`notes <how-to/render-notes>`
       - After the changelog and tag exist
       - Prints the GitHub Release body from the tagged changelog
+    - - :doc:`changelog <how-to/preview-changelog>`
+      - Before each pull request documentation build
+      - Writes a copy of released history with pending fragments under Draft
     - - :doc:`locks <how-to/export-lock>`
       - When project dependencies change or during the weekly lock refresh
       - Writes one ``pylock.toml`` for runtime, groups, extras, and build dependencies
@@ -51,6 +54,7 @@ The :doc:`changelog <changelog>` includes an ``Unreleased`` section in PR builds
 
     how-to/link-fragments
     how-to/render-notes
+    how-to/preview-changelog
     how-to/select-release-tag
     how-to/export-lock
     how-to/update-hooks
