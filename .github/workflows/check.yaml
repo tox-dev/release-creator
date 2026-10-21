@@ -110,7 +110,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: tox-dev/github-workflows/check-hook-update-cooldown@e00d0861b72495aa77e183b17def18c40de0abc9
+      - uses: tox-dev/github-workflows/check-hook-update-cooldown@8db87d4730353b61630d66cbc592d6bed0c85d2b
         with:
           repository: ${{ github.repository }}
           pull-request: ${{ github.event.pull_request.number }}
