@@ -76,7 +76,7 @@ def test_markdown_template_keeps_numbered_and_named_pull_requests(
     ("underlines", "expected_category"),
     [
         pytest.param("", "Fixed\n-----", id="default"),
-        pytest.param('underlines = ["*", "=", "-"]', "Fixed\n=====", id="overline"),
+        pytest.param('underlines = ["*", "=", "-"]', "Fixed\n-----", id="overline"),
         pytest.param('underlines = ["-", "~"]', "Fixed\n~~~~~", id="dash"),
     ],
 )
@@ -131,3 +131,30 @@ def test_rst_template_renders_notes_with_stable_anchors(
         "([#1](https://github.com/tox-dev/example/pull/1))\n\n"
         "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
     )
+
+
+def test_rst_template_avoids_git_conflict_marker(tmp_path: Path) -> None:
+    (tmp_path / "changelog.d").mkdir()
+    (tmp_path / "changelog.d" / "1.change.rst").write_text("Change a setting.\n")
+    (tmp_path / "changelog.rst").write_text("Changelog\n=========\n\n.. towncrier release notes start\n")
+    (tmp_path / "pyproject.toml").write_text(
+        dedent("""\
+        [tool.towncrier]
+        name = "example"
+        directory = "changelog.d"
+        filename = "changelog.rst"
+        template = "release_creator.fragments:template.rst.jinja2"
+        title_format = false
+        underlines = ["*", "=", "-"]
+        type = [{ directory = "change", name = "Changes", showcontent = true }]
+        """)
+    )
+
+    subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Fixed Towncrier fixture.
+        [str(Path(sys.executable).with_name("towncrier")), "build", "--yes", "--version", "1.2.3"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+
+    assert "Changes\n-------" in (tmp_path / "changelog.rst").read_text()

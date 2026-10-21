@@ -18,7 +18,7 @@
 .. _{{ release }}-{{ name | lower | replace(" ", "-") }}:
 
 {{ name }}
-{{ underlines[0] * (name | length) }}
+{{ ("-" if underlines[0] == "=" else underlines[0]) * (name | length) }}
 
 {% for text, values in sections[section][category].items() %}
 {% set missing = values | reject("in", text) | reject("in", text | replace("/pull/", "/issues/") | replace(":pr:", ":issue:")) | list %}
