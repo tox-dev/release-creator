@@ -68,7 +68,9 @@ cannot infer that the group is optional from the library's runtime ``requires-py
 applies to both the project and build resolution; its cutoff must be compatible with the declared lower bounds. If a
 project raises one package's minimum above the global cutoff, pass ``--exclude-newer-package NAME=UTC_DATE`` for that
 package during the refresh. The global cutoff still applies to every other package. Repeat the option when several newly
-required minima need an exception; review each exception in the lock refresh pull request.
+required minima need an exception. Set the package cutoff after the latest file upload for the reviewed version: a
+cutoff within the upload window can keep one wheel and omit the others. Review each exception and run the lock's
+supported Python and platform selections in the lock refresh pull request.
 
 The command reads ``[project].requires-python``. For a tool-only ``pyproject.toml`` without ``[project]``, pass
 ``--tool-python '>=3.15'`` to describe its release-tool environment. It reserves the ``project-runtime`` group name for
