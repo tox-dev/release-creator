@@ -67,6 +67,7 @@ def test_pull_request_authors_deduplicates_numbers_and_skips_bots(monkeypatch: p
             capture_output=True,
             check=False,
             text=True,
+            encoding="utf-8",
         ),
         call(
             [
@@ -79,6 +80,7 @@ def test_pull_request_authors_deduplicates_numbers_and_skips_bots(monkeypatch: p
             capture_output=True,
             check=False,
             text=True,
+            encoding="utf-8",
         ),
     ]
 

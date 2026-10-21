@@ -91,9 +91,9 @@ def _changed_paths(directory: Path, base: str) -> list[Path]:
         check=False,
     )
     if result.returncode:
-        msg = result.stderr.decode().strip() or f"could not compare changelog fragments with origin/{base}"
+        msg = result.stderr.decode("utf-8").strip() or f"could not compare changelog fragments with origin/{base}"
         raise ValueError(msg)
-    return [Path(filename) for filename in result.stdout.decode().strip("\0").split("\0") if filename]
+    return [Path(filename) for filename in result.stdout.decode("utf-8").strip("\0").split("\0") if filename]
 
 
 __all__ = [

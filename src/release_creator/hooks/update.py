@@ -69,6 +69,7 @@ def _resolve(names: set[str], config: Path, exclude_newer: str, python_version: 
         ],
         input="".join(f"{name}\n" for name in sorted(names)),
         text=True,
+        encoding="utf-8",
         capture_output=True,
         check=False,
         cwd=config.parent,

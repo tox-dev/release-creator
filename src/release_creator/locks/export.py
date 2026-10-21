@@ -200,7 +200,7 @@ def _project_selections(
 
 def _run_uv(uv: str, directory: Path, *arguments: str, stdin: str | None = None) -> str:
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Fixed uv argv.
-        [uv, *arguments], cwd=directory, check=False, capture_output=True, text=True, input=stdin
+        [uv, *arguments], cwd=directory, check=False, capture_output=True, text=True, encoding="utf-8", input=stdin
     )
     if result.returncode:
         msg = result.stderr.strip() or f"uv {arguments[0]} failed"

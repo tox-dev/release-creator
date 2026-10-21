@@ -28,6 +28,7 @@ def commit_subjects_from_git(directory: Path, *, knope: bool = False) -> dict[st
             capture_output=True,
             check=False,
             text=True,
+            encoding="utf-8",
         )
         if result.returncode:
             msg = result.stderr.strip() or f"could not read Git history for {fragment}"

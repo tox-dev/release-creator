@@ -104,6 +104,7 @@ def pull_request_authors(
             capture_output=True,
             check=False,
             text=True,
+            encoding="utf-8",
         )
         if result.returncode:
             msg = result.stderr.strip() or f"could not read author for pull request #{number}"
