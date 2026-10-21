@@ -24,7 +24,8 @@ classifiers = [
   "Typing :: Typed",
 ]
 dynamic = [ "readme", "version" ]
-dependencies = [ "mdformat>=1,<2", "mdformat-gfm>=1,<2", "packaging>=26", "pyyaml>=6", "tomli-w>=1.2" ]
+dependencies = [ "mdformat>=1,<2", "mdformat-gfm>=1,<2", "packaging>=26", "tomli-w>=1.2" ]
+optional-dependencies.yaml = [ "pyyaml>=6" ]
 urls.Changelog = "https://release-creator.readthedocs.io/en/latest/changelog.html"
 urls.Documentation = "https://release-creator.readthedocs.io/"
 urls.Homepage = "https://release-creator.readthedocs.io/"
@@ -40,6 +41,7 @@ test = [
   "pytest>=9",
   "pytest-cov>=7",
   "pytest-mock>=3.17",
+  "pyyaml>=6",
   { include-group = "release" },
 ]
 type = [ "ty>=0.0.84", { include-group = "test" }, { include-group = "docs" } ]

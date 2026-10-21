@@ -10,9 +10,12 @@ lazy from packaging.utils import canonicalize_name
 lazy from yaml import MappingNode, ScalarNode, SequenceNode, compose
 lazy from yaml.error import Mark, YAMLError
 
+from release_creator.optional import require_yaml
+
 
 def update_pins(config: Path, exclude_newer: str, python_version: str) -> None:
     """Refresh exact hook dependency pins that have eligible updates."""
+    require_yaml()
     source = config.read_text(encoding="utf-8")
     pinned = _pinned_dependencies(source)
     if pinned:

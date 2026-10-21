@@ -7,6 +7,7 @@ lazy import yaml
 
 from release_creator.fragments.knope import changeset_parts
 from release_creator.fragments.names import pending_changesets
+from release_creator.optional import require_yaml
 
 
 def render_knope_preview(changelog: Path, config: Path, fragments: Path) -> str:
@@ -19,6 +20,7 @@ def render_knope_preview(changelog: Path, config: Path, fragments: Path) -> str:
         ValueError: The changelog or a changeset cannot be rendered.
 
     """
+    require_yaml()
     history = changelog.read_text(encoding="utf-8")
     changesets = pending_changesets(fragments)
     if not changesets:

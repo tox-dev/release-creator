@@ -60,7 +60,7 @@ For ``.changeset/*.md`` files, use the category names from ``knope.toml``:
 
 .. code-block:: bash
 
-    uvx --from release-creator release-creator changelog \
+    uvx --from 'release-creator[yaml]' release-creator changelog \
       --format knope --changelog CHANGELOG.md --config knope.toml \
       --fragments .changeset --output site/data/changelog.md
 
