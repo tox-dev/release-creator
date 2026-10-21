@@ -156,7 +156,7 @@ def render_rst(
 def _finish(notes: str, context: ReleaseContext, generated_notes: str | None) -> str:
     if generated_notes is not None:
         _verify_authors(notes, generated_notes, context)
-        if contributors := _new_contributors(generated_notes, context.tag):
+        if contributors := _new_contributors(generated_notes, context):
             notes = f"{notes}\n\n{contributors}" if notes else contributors
     if context.artifact_url is not None:
         link = f"[{context.artifact_label}]({context.artifact_url})"
@@ -221,7 +221,7 @@ def _release_entries(notes: str, repository: str) -> dict[str, list[set[str]]]:
     return entries
 
 
-def _new_contributors(generated_notes: str, tag: str) -> str:
+def _new_contributors(generated_notes: str, context: ReleaseContext) -> str:
     if (
         section := re.search(
             r"""
@@ -235,7 +235,7 @@ def _new_contributors(generated_notes: str, tag: str) -> str:
     ) is None:
         return ""
     entries = [
-        f"- @{match['handle']} made their first contribution in #{match['number']}"
+        f"- @{match['handle']} made their first contribution in {_contributor_reference(match, context.repository)}"
         for line in section["entries"].splitlines()
         if (
             match := re.fullmatch(
@@ -255,8 +255,13 @@ def _new_contributors(generated_notes: str, tag: str) -> str:
     ]
     if not entries:
         return ""
-    anchor = f"release-{tag.replace('.', '-').replace('/', '-')}-new-contributors"
+    anchor = f"release-{context.tag.replace('.', '-').replace('/', '-')}-new-contributors"
     return f'<a name="{anchor}"></a>\n\n### New Contributors\n\n' + "\n".join(entries)
+
+
+def _contributor_reference(match: re.Match[str], repository: str) -> str:
+    prefix = match["reference"] if match["reference"] != "#" else f"https://github.com/{repository}/pull/"
+    return f"[#{match['number']}]({prefix}{match['number']})"
 
 
 def _extract_rst_body(changelog: str, context: ReleaseContext, issue_role: str) -> str:

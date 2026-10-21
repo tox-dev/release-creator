@@ -373,15 +373,25 @@ def test_render_markdown_does_not_credit_bot_authors() -> None:
 
 
 @pytest.mark.parametrize(
-    ("reference", "heading"),
+    ("reference", "heading", "pull_url"),
     [
-        pytest.param("#42", "##", id="h2-short-reference"),
-        pytest.param("#42", "###", id="h3-short-reference"),
-        pytest.param("https://github.com/tox-dev/example/pull/42", "##", id="h2-pull-url"),
-        pytest.param("https://github.com/tox-dev/example/pull/42", "###", id="h3-pull-url"),
+        pytest.param("#42", "##", "https://github.com/tox-dev/example/pull/42", id="h2-short-reference"),
+        pytest.param("#42", "###", "https://github.com/tox-dev/example/pull/42", id="h3-short-reference"),
+        pytest.param(
+            "https://github.com/upstream/example/pull/42",
+            "##",
+            "https://github.com/upstream/example/pull/42",
+            id="h2-cross-repository-pull-url",
+        ),
+        pytest.param(
+            "https://github.com/upstream/example/pull/42",
+            "###",
+            "https://github.com/upstream/example/pull/42",
+            id="h3-cross-repository-pull-url",
+        ),
     ],
 )
-def test_render_markdown_keeps_human_new_contributors(reference: str, heading: str) -> None:
+def test_render_markdown_keeps_human_new_contributors(reference: str, heading: str, pull_url: str) -> None:
     changelog = "## 1.2.3 (today)\n\n### Added\n\n- New option by [@alice](https://github.com/alice).\n"
     generated = dedent(f"""\
         <!-- Release notes generated using configuration in .github/release.yml at main -->
@@ -401,8 +411,8 @@ def test_render_markdown_keeps_human_new_contributors(reference: str, heading: s
     assert result == (
         "### Features\n\n- New option by @alice.\n\n"
         '<a name="release-1-2-3-new-contributors"></a>\n\n'
-        "### New Contributors\n\n- @alice made their first contribution in #42\n"
-        "- @bob made their first contribution in #44\n\n"
+        f"### New Contributors\n\n- @alice made their first contribution in [#42]({pull_url})\n"
+        "- @bob made their first contribution in [#44](https://github.com/tox-dev/example/pull/44)\n\n"
         "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
     )
 
@@ -426,7 +436,8 @@ def test_render_markdown_keeps_first_contributor_without_news_entry() -> None:
 
     assert result == (
         '<a name="release-1-2-3-new-contributors"></a>\n\n'
-        "### New Contributors\n\n- @alice made their first contribution in #42\n\n"
+        "### New Contributors\n\n"
+        "- @alice made their first contribution in [#42](https://github.com/tox-dev/example/pull/42)\n\n"
         "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
     )
 

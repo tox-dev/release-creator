@@ -113,7 +113,11 @@ def test_notes_cli_reads_generated_notes(
 
     main()
 
-    assert "### New Contributors\n\n- @alice made their first contribution in #42" in capsys.readouterr().out
+    assert (
+        "### New Contributors\n\n"
+        "- @alice made their first contribution in [#42](https://github.com/tox-dev/example/pull/42)"
+        in capsys.readouterr().out
+    )
 
 
 def test_notes_cli_reports_missing_file(
