@@ -143,6 +143,43 @@ def test_export_lock_adds_marker_scoped_build_requirements(
     ]
 
 
+def test_export_lock_merges_default_index_build_overlap(
+    tmp_path: Path, mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = tmp_path / "pyproject.toml"
+    project.write_text(
+        '[build-system]\nrequires = ["packaging"]\nbuild-backend = "hatchling.build"\n'
+        '[project]\nname = "demo"\nversion = "1.0"\nrequires-python = ">=3.15"\n'
+        'dependencies = ["packaging"]\n',
+        encoding="utf-8",
+    )
+    mocker.patch("shutil.which", return_value="/usr/bin/uv")
+    mocker.patch(
+        "subprocess.run",
+        side_effect=[
+            subprocess.CompletedProcess([], 0, "", ""),
+            subprocess.CompletedProcess(
+                [], 0, '[[packages]]\nname = "packaging"\nversion = "26.3"\nindex = "https://pypi.org/simple"\n', ""
+            ),
+            subprocess.CompletedProcess([], 0, '[[packages]]\nname = "packaging"\nversion = "26.3"\n', ""),
+        ],
+    )
+
+    monkeypatch.setattr(
+        sys, "argv", ["release-creator", "locks", "--project", str(project), "--output", str(tmp_path / "pylock.toml")]
+    )
+    main()
+
+    assert tomllib.loads((tmp_path / "pylock.toml").read_text())["packages"] == [
+        {
+            "name": "packaging",
+            "version": "26.3",
+            "index": "https://pypi.org/simple",
+            "marker": '"build" in dependency_groups or "project-runtime" in dependency_groups',
+        }
+    ]
+
+
 def test_export_lock_removes_generated_uv_lock(tmp_path: Path) -> None:
     project = tmp_path / "pyproject.toml"
     project.write_text("[project]\nname = 'demo'\nversion = '1.0'\nrequires-python = '>=3.15'\n")

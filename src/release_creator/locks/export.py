@@ -98,8 +98,16 @@ def _add_selection(
 ) -> None:
     for package in selected:
         environment = package.pop("marker", None)
-        key = json.dumps(package, sort_keys=True, default=str)
-        packages[key] = package
+        key = json.dumps(
+            {
+                field: value
+                for field, value in package.items()
+                if field != "index" or value != "https://pypi.org/simple"
+            },
+            sort_keys=True,
+            default=str,
+        )
+        packages.setdefault(key, package)
         selection = f"{json.dumps(name)} in {kind}"
         markers[key].add(f"({selection} and ({environment}))" if environment else selection)
 
