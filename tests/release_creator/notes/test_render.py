@@ -373,22 +373,26 @@ def test_render_markdown_does_not_credit_bot_authors() -> None:
 
 
 @pytest.mark.parametrize(
-    "reference",
+    ("reference", "heading"),
     [
-        pytest.param("#42", id="short-reference"),
-        pytest.param("https://github.com/tox-dev/example/pull/42", id="pull-url"),
+        pytest.param("#42", "##", id="h2-short-reference"),
+        pytest.param("#42", "###", id="h3-short-reference"),
+        pytest.param("https://github.com/tox-dev/example/pull/42", "##", id="h2-pull-url"),
+        pytest.param("https://github.com/tox-dev/example/pull/42", "###", id="h3-pull-url"),
     ],
 )
-def test_render_markdown_keeps_human_new_contributors(reference: str) -> None:
+def test_render_markdown_keeps_human_new_contributors(reference: str, heading: str) -> None:
     changelog = "## 1.2.3 (today)\n\n### Added\n\n- New option by [@alice](https://github.com/alice).\n"
     generated = dedent(f"""\
         <!-- Release notes generated using configuration in .github/release.yml at main -->
         ## What's Changed
         * Generated change
-        ## New Contributors
+        {heading} New Contributors
         * @alice made their first contribution in {reference}
         * @dependabot[bot] made their first contribution in #43
         * @bob made their first contribution in #44
+        ## Other changes
+        * @charlie made their first contribution in #45
         **Full Changelog**: unrelated
         """)
 

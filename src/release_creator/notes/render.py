@@ -225,9 +225,9 @@ def _new_contributors(generated_notes: str, tag: str) -> str:
     if (
         section := re.search(
             r"""
-            ^\#\#\ New\ Contributors\s*\n  # Generated contributor heading
-            (?P<entries>.*?)            # Lines until the next heading
-            (?=^\#\#\ |\Z)              # Next section or end of body
+            ^\#{2,3}\ New\ Contributors\s*\n  # GitHub uses H2 or H3 for this section
+            (?P<entries>.*?)               # Contributor bullets
+            (?=^\#{1,6}\ |\Z)              # Next heading or end of body
             """,
             generated_notes,
             re.MULTILINE | re.DOTALL | re.VERBOSE,

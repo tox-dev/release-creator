@@ -86,13 +86,14 @@ def test_notes_cli_selects_package(
     assert "### Bug fixes\n\n- Correct a bug." in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("heading", [pytest.param("##", id="h2"), pytest.param("###", id="h3")])
 def test_notes_cli_reads_generated_notes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    heading: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text("## 1.2.3 (today)\n\n### Added\n\n- New option by [@alice](https://github.com/alice).\n")
     generated = tmp_path / "generated.md"
-    generated.write_text("## New Contributors\n* @alice made their first contribution in #42\n")
+    generated.write_text(f"{heading} New Contributors\n* @alice made their first contribution in #42\n")
     monkeypatch.setattr(
         sys,
         "argv",
