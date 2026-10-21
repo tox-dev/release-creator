@@ -3,17 +3,20 @@
 lazy import hashlib
 lazy import http
 lazy import shutil
+lazy import stat
 lazy import tempfile
 lazy from pathlib import Path
-lazy from typing import IO, Literal
+lazy from typing import IO, Final, Literal
 lazy from urllib.error import HTTPError
 lazy from urllib.parse import urlencode
 lazy from urllib.request import Request, urlopen
 lazy from zipfile import BadZipFile, ZipFile
 
+_ZIP_UNIX_SYSTEM: Final = 3
+
 
 def reconcile_marketplace(plugin_id: str, version: str, archive: Path, mode: Literal["stage", "verify"]) -> bool:
-    """Return whether an absent version needs publishing; verify an existing version's member bytes.
+    """Return whether an absent version needs publishing; verify an existing version's ZIP members.
 
     Returns:
         Whether a version absent from Marketplace needs publishing.
@@ -49,14 +52,14 @@ def reconcile_marketplace(plugin_id: str, version: str, archive: Path, mode: Lit
     return False
 
 
-def _download_members(request: Request) -> dict[str, str]:
+def _download_members(request: Request) -> dict[str, tuple[str, str, int]]:
     with urlopen(request, timeout=30) as response, tempfile.TemporaryFile() as downloaded:  # ruff: ignore[suspicious-url-open-usage]  # The origin is fixed to HTTPS Marketplace.
         shutil.copyfileobj(response, downloaded, 1 << 20)
         downloaded.seek(0)
         return _member_digests(downloaded)
 
 
-def _member_digests(source: Path | IO[bytes]) -> dict[str, str]:
+def _member_digests(source: Path | IO[bytes]) -> dict[str, tuple[str, str, int]]:
     try:
         members = _read_members(source)
     except BadZipFile as error:
@@ -68,13 +71,22 @@ def _member_digests(source: Path | IO[bytes]) -> dict[str, str]:
     return members
 
 
-def _read_members(source: Path | IO[bytes]) -> dict[str, str]:
+def _read_members(source: Path | IO[bytes]) -> dict[str, tuple[str, str, int]]:
     with ZipFile(source) as archive:
-        members: dict[str, str] = {}
+        members: dict[str, tuple[str, str, int]] = {}
         for member in archive.infolist():
             if member.filename in members:
                 msg = f"duplicate plugin ZIP member: {member.filename}"
                 raise ValueError(msg)
+            mode = member.external_attr >> 16
+            if member.create_system == _ZIP_UNIX_SYSTEM:
+                member_type = stat.S_IFMT(mode)
+                if member_type not in {0, stat.S_IFDIR if member.is_dir() else stat.S_IFREG}:
+                    msg = f"unsupported plugin ZIP member type: {member.filename}"
+                    raise ValueError(msg)
+                permissions = stat.S_IMODE(mode)
+            else:
+                permissions = member.external_attr
             if member.is_dir():
                 if member.file_size:
                     msg = f"directory member has content: {member.filename}"
@@ -86,7 +98,8 @@ def _read_members(source: Path | IO[bytes]) -> dict[str, str]:
                     while chunk := stream.read(1 << 20):
                         hasher.update(chunk)
                     digest = hasher.hexdigest()
-            members[member.filename] = digest
+            kind = "directory" if member.is_dir() else "file"
+            members[member.filename] = digest, f"{member.create_system}:{kind}", permissions
     return members
 
 

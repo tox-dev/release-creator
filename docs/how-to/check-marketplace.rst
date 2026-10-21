@@ -4,7 +4,8 @@
 
 A JetBrains Marketplace upload can succeed before a later GitHub Release step fails. On a retry, check the existing
 plugin version against the signed ZIP from the tagged build before calling ``publishPlugin`` again. Marketplace can
-repackage the outer ZIP, so compare each member path and its uncompressed SHA256 digest instead of the outer file hash.
+repackage the outer ZIP, so compare each member path, uncompressed SHA256 digest, type, and permission bits instead of
+the outer file hash. Symlinks and special ZIP members fail the check.
 
 Run the check after building and validating the signed ZIP, in a step without the Marketplace upload token:
 
@@ -17,10 +18,11 @@ Run the check after building and validating the signed ZIP, in a step without th
       --github-output "$GITHUB_OUTPUT"
 
 The step prints and writes ``publish=true`` when the version-specific download returns 404. Publish only in that case.
-If the download exists, ``publish=false`` means every ZIP member matched. A changed, extra, missing, or duplicate member
-fails the check. Non-404 HTTP failures and invalid ZIPs also fail. The command uses JetBrains' `version-specific
-download endpoint <https://plugins.jetbrains.com/docs/marketplace/plugin-update-download.html>`_ and never uploads or
-reads a publishing credential.
+If the download exists, ``publish=false`` means every ZIP member matched. A changed, extra, missing, duplicate, or
+retyped member fails the check, as does a permission change. Non-404 HTTP failures and invalid ZIPs also fail. The
+command uses JetBrains' `version-specific download endpoint
+<https://plugins.jetbrains.com/docs/marketplace/plugin-update-download.html>`_ and never uploads or reads a publishing
+credential.
 
 In GitHub Actions, give the check step an ID and gate the upload step on its output:
 

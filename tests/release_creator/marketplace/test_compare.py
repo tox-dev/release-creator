@@ -2,6 +2,7 @@
 
 import http
 import io
+import stat
 import zipfile
 from email.message import Message
 from typing import TYPE_CHECKING
@@ -24,17 +25,26 @@ def archive(tmp_path: Path) -> Path:
     return path
 
 
-def _zip(path: Path, members: Mapping[str, bytes]) -> None:
-    with zipfile.ZipFile(path, "w") as output:
+def _zip(
+    path: Path | io.BytesIO,
+    members: Mapping[str, bytes],
+    modes: Mapping[str, int] | None = None,
+    compression: int = zipfile.ZIP_STORED,
+) -> None:
+    with zipfile.ZipFile(path, "w", compression=compression) as output:
         for name, content in members.items():
-            output.writestr(name, content)
+            if modes is not None and name in modes:
+                member = zipfile.ZipInfo(name)
+                member.create_system = 3
+                member.external_attr = modes[name] << 16
+                output.writestr(member, content)
+            else:
+                output.writestr(name, content)
 
 
-def _marketplace(mocker: MockerFixture, members: Mapping[str, bytes]) -> None:
+def _marketplace(mocker: MockerFixture, members: Mapping[str, bytes], modes: Mapping[str, int] | None = None) -> None:
     content = io.BytesIO()
-    with zipfile.ZipFile(content, "w", compression=zipfile.ZIP_DEFLATED) as output:
-        for name, body in members.items():
-            output.writestr(name, body)
+    _zip(content, members, modes, zipfile.ZIP_DEFLATED)
     mocker.patch("release_creator.marketplace.compare.urlopen", return_value=io.BytesIO(content.getvalue()))
 
 
@@ -147,3 +157,55 @@ def test_marketplace_rejects_symlink(tmp_path: Path, archive: Path) -> None:
 
     with pytest.raises(ValueError, match="not a regular file"):
         reconcile_marketplace("com.example.plugin", "2.4.6", linked, "stage")
+
+
+@pytest.mark.parametrize("source", ["local", "remote"])
+def test_marketplace_rejects_symlink_member(archive: Path, mocker: MockerFixture, source: str) -> None:
+    members = {"plugin/": b"", "plugin/lib/main.jar": b"signed", "plugin/lib/options.jar": b"search"}
+    modes = {"plugin/lib/main.jar": stat.S_IFLNK | 0o777}
+    if source == "local":
+        _zip(archive, members, modes)
+    else:
+        _marketplace(mocker, members, modes)
+
+    with pytest.raises(ValueError, match="unsupported plugin ZIP member type"):
+        reconcile_marketplace("com.example.plugin", "2.4.6", archive, "stage")
+
+
+def test_marketplace_rejects_permission_change(archive: Path, mocker: MockerFixture) -> None:
+    _marketplace(
+        mocker,
+        {"plugin/": b"", "plugin/lib/main.jar": b"signed", "plugin/lib/options.jar": b"search"},
+        {"plugin/lib/main.jar": stat.S_IFREG | 0o755},
+    )
+
+    with pytest.raises(ValueError, match="archive differs"):
+        reconcile_marketplace("com.example.plugin", "2.4.6", archive, "stage")
+
+
+def test_marketplace_rejects_directory_type_on_file(archive: Path, mocker: MockerFixture) -> None:
+    _marketplace(
+        mocker,
+        {"plugin/": b"", "plugin/lib/main.jar": b"signed", "plugin/lib/options.jar": b"search"},
+        {"plugin/lib/main.jar": stat.S_IFDIR | 0o644},
+    )
+
+    with pytest.raises(ValueError, match="unsupported plugin ZIP member type"):
+        reconcile_marketplace("com.example.plugin", "2.4.6", archive, "stage")
+
+
+def test_marketplace_rejects_changed_zip_origin(archive: Path, mocker: MockerFixture) -> None:
+    content = io.BytesIO()
+    with zipfile.ZipFile(content, "w") as output:
+        for name, body in {
+            "plugin/": b"",
+            "plugin/lib/main.jar": b"signed",
+            "plugin/lib/options.jar": b"search",
+        }.items():
+            member = zipfile.ZipInfo(name)
+            member.create_system = 0
+            output.writestr(member, body)
+    mocker.patch("release_creator.marketplace.compare.urlopen", return_value=io.BytesIO(content.getvalue()))
+
+    with pytest.raises(ValueError, match="archive differs"):
+        reconcile_marketplace("com.example.plugin", "2.4.6", archive, "stage")
