@@ -29,6 +29,9 @@ Run each command at the stage it serves:
     - - :doc:`artifacts <how-to/reconcile-artifacts>`
       - Before and after a PyPI upload
       - Stages only missing files and verifies the published file set
+    - - :doc:`marketplace <how-to/check-marketplace>`
+      - Before retrying a JetBrains Marketplace plugin upload
+      - Compares signed ZIP members with the published version
     - - :doc:`locks <how-to/export-lock>`
       - When project dependencies change or during the weekly lock refresh
       - Writes one ``pylock.toml`` for runtime, groups, extras, and build dependencies
@@ -59,6 +62,7 @@ The :doc:`changelog <changelog>` includes an ``Unreleased`` section in PR builds
     how-to/render-notes
     how-to/preview-changelog
     how-to/reconcile-artifacts
+    how-to/check-marketplace
     how-to/select-release-tag
     how-to/export-lock
     how-to/update-hooks
