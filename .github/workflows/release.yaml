@@ -42,7 +42,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: echo "sha=$(git rev-parse "${TAG}^{commit}")" >>"$GITHUB_OUTPUT"
       - id: notes
-        uses: tox-dev/github-workflows/render-release-notes@8dcf033f9c58bfa39916fc57b2723383640970c0
+        uses: tox-dev/github-workflows/render-release-notes@e00d0861b72495aa77e183b17def18c40de0abc9
         with:
           tag: ${{ github.ref_name }}
           changelog: docs/changelog.md
@@ -96,7 +96,7 @@ jobs:
           uv pip sync --preview-features pylock --python "$RUNNER_TEMP/release-tools/bin/python" --group build --group project-runtime pylock.toml
           uv pip install --python "$RUNNER_TEMP/release-tools/bin/python" --no-deps --no-build-isolation .
           echo "$RUNNER_TEMP/release-tools/bin" >>"$GITHUB_PATH"
-      - uses: tox-dev/github-workflows/render-release-notes@8dcf033f9c58bfa39916fc57b2723383640970c0
+      - uses: tox-dev/github-workflows/render-release-notes@e00d0861b72495aa77e183b17def18c40de0abc9
         with:
           tag: ${{ github.ref_name }}
           changelog: docs/changelog.md
@@ -131,7 +131,7 @@ jobs:
           name: python-package-distributions
           path: dist
       - id: stage
-        uses: tox-dev/github-workflows/reconcile-pypi-artifacts@8dcf033f9c58bfa39916fc57b2723383640970c0
+        uses: tox-dev/github-workflows/reconcile-pypi-artifacts@e00d0861b72495aa77e183b17def18c40de0abc9
         with:
           project: release-creator
           version: ${{ github.ref_name }}
@@ -164,7 +164,7 @@ jobs:
           name: missing-python-manifest
           path: ${{ runner.temp }}/manifest
       - id: select
-        uses: tox-dev/github-workflows/select-pypi-artifacts@8dcf033f9c58bfa39916fc57b2723383640970c0
+        uses: tox-dev/github-workflows/select-pypi-artifacts@e00d0861b72495aa77e183b17def18c40de0abc9
         with:
           dist: dist
           manifest: ${{ runner.temp }}/manifest/pypi-missing-names.txt
@@ -195,7 +195,7 @@ jobs:
         with:
           name: python-package-distributions
           path: dist
-      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@8dcf033f9c58bfa39916fc57b2723383640970c0
+      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@e00d0861b72495aa77e183b17def18c40de0abc9
         with:
           project: release-creator
           version: ${{ github.ref_name }}
@@ -213,7 +213,7 @@ jobs:
         with:
           name: final-github-release-notes
           path: ${{ runner.temp }}
-      - uses: tox-dev/github-workflows/publish-github-release@8dcf033f9c58bfa39916fc57b2723383640970c0
+      - uses: tox-dev/github-workflows/publish-github-release@e00d0861b72495aa77e183b17def18c40de0abc9
         env:
           GH_TOKEN: ${{ github.token }}
         with:
