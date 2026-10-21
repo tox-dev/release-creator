@@ -365,8 +365,12 @@ def _append_rst_entry(entries: list[str] | None, raw: str, *, after_block: bool,
         if entries is None or not entries:
             msg = f"release item outside a category: {line}"
             raise ValueError(msg)
-        entries[-1] += f"\n\n  {line.removeprefix('- ')}" if line.startswith("- by ") else f"\n  {line}"
-        return False, not line.startswith("- by ")
+        if line.startswith("- by "):
+            credit = line.removeprefix("- ")
+            entries[-1] += f"\n\n  {credit}" if nested or after_block else f" {credit}"
+            return False, False
+        entries[-1] += f"\n  {line}"
+        return False, True
     if line and _RE_RST_HEADING_UNDERLINE.fullmatch(line) is None and not line.startswith(".. _"):
         if entries is None or not entries or line.startswith(".. "):
             msg = f"unexpected release text: {line}"
