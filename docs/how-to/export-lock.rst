@@ -33,6 +33,23 @@ stops the build. ``uv build`` verifies the selected artifacts against the lock's
 markers for the Python and platform running it, so a universal lock can hold different backend versions for different
 Python releases.
 
+When a separate keyless job generates constraints for builders on other operating systems, name the target explicitly.
+Repeat ``--python-version`` for every interpreter that will share one constraint file:
+
+.. code-block:: bash
+
+    release-creator build-constraints \
+      --lock pylock.toml --platform linux \
+      --python-version 3.11.0 --python-version 3.12.0 --python-version 3.13.0 \
+      --python-version 3.14.0 --python-version 3.15.0 \
+      --output linux.txt
+
+The override changes the coupled Python and operating-system marker fields together. It rejects a lock selection that
+uses implementation or host-specific machine, release, or version markers because those values cannot be inferred from
+the flags. It also rejects different package versions or hashes across the named Python releases. Generate the macOS and
+Windows files with the same version list and their respective ``--platform`` values. Run the command on each target
+runner if the lock uses unsupported markers.
+
 Some backends request additional dependencies during a build. If the backend's hook has a known conditional requirement,
 add it during lock generation. For example, meson-python can request ``patchelf`` on Linux:
 

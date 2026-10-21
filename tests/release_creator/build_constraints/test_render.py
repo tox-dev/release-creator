@@ -13,12 +13,18 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def _lock(tmp_path: Path, packages: list[dict[str, object]], *, groups: list[str] | None = None) -> Path:
+def _lock(
+    tmp_path: Path,
+    packages: list[dict[str, object]],
+    *,
+    groups: list[str] | None = None,
+    requires_python: str = ">=3.15",
+) -> Path:
     lock = tmp_path / "pylock.toml"
     lock.write_text(
         tomli_w.dumps({
             "lock-version": "1.0",
-            "requires-python": ">=3.15",
+            "requires-python": requires_python,
             "dependency-groups": groups if groups is not None else ["build"],
             "packages": packages,
         }),
@@ -60,6 +66,127 @@ def test_build_constraints_selects_matching_markers_and_all_hashes(
     main()
 
     assert output.read_text() == f"hatchling==1.32.4 --hash=sha256:{'a' * 64} --hash=sha256:{'b' * 64}\n"
+
+
+@pytest.mark.parametrize(
+    ("python_version", "platform", "expected"),
+    [
+        pytest.param("3.15.0", "linux", ("hatchling", "patchelf"), id="linux"),
+        pytest.param("3.15.0", "macos", ("hatchling", "mac-backend"), id="macos"),
+        pytest.param("3.15.0", "windows", ("hatchling", "win-backend"), id="windows"),
+        pytest.param("3.9", "windows", ("old-hatchling", "win-backend"), id="older-python"),
+    ],
+)
+def test_build_constraints_selects_target_markers(
+    python_version: str, platform: str, expected: tuple[str, ...], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lock = _lock(
+        tmp_path,
+        [
+            _package("hatchling", "1", "a" * 64, '"build" in dependency_groups and python_full_version >= "3.10"'),
+            _package("old-hatchling", "1", "b" * 64, '"build" in dependency_groups and python_version < "3.10"'),
+            _package("patchelf", "1", "c" * 64, '"build" in dependency_groups and sys_platform == "linux"'),
+            _package("mac-backend", "1", "d" * 64, '"build" in dependency_groups and platform_system == "Darwin"'),
+            _package("win-backend", "1", "e" * 64, '"build" in dependency_groups and os_name == "nt"'),
+            _package("other", "1", "f" * 64, '"pkg-meta" in dependency_groups and platform_machine == "x86_64"'),
+        ],
+        requires_python=">=3.9",
+    )
+    output = tmp_path / "constraints.txt"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "release-creator",
+            "build-constraints",
+            "--lock",
+            str(lock),
+            "--python-version",
+            python_version,
+            "--platform",
+            platform,
+            "--output",
+            str(output),
+        ],
+    )
+
+    main()
+
+    assert [line.split("==", 1)[0] for line in output.read_text().splitlines()] == sorted(expected)
+
+
+@pytest.mark.parametrize(
+    "python_version",
+    [
+        pytest.param("3", id="missing-minor"),
+        pytest.param("3.15rc1", id="prerelease"),
+        pytest.param("3.15.0.post1", id="postrelease"),
+        pytest.param("3.15.0.dev1", id="devrelease"),
+        pytest.param("3.15.0+local", id="local"),
+        pytest.param("1!3.15.0", id="epoch"),
+        pytest.param("bad", id="invalid"),
+    ],
+)
+def test_build_constraints_rejects_invalid_target_python(python_version: str, tmp_path: Path) -> None:
+    lock = _lock(tmp_path, [_package("hatchling", "1", "a" * 64)])
+
+    with pytest.raises(ValueError, match="invalid target Python version"):
+        write_build_constraints(lock, tmp_path / "constraints.txt", python_versions=(python_version,))
+
+
+def test_build_constraints_rejects_unknown_cross_platform_marker(tmp_path: Path) -> None:
+    lock = _lock(tmp_path, [_package("hatchling", "1", "a" * 64, 'platform_machine == "x86_64"')])
+
+    with pytest.raises(ValueError, match="target marker environment cannot evaluate"):
+        write_build_constraints(lock, tmp_path / "constraints.txt", platform="windows")
+
+
+def test_build_constraints_accepts_equal_target_versions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    lock = _lock(
+        tmp_path,
+        [_package("hatchling", "1", "a" * 64, '"build" in dependency_groups')],
+        requires_python=">=3.11",
+    )
+    output = tmp_path / "constraints.txt"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "release-creator",
+            "build-constraints",
+            "--lock",
+            str(lock),
+            "--python-version",
+            "3.11.0",
+            "--python-version",
+            "3.15.0",
+            "--platform",
+            "windows",
+            "--output",
+            str(output),
+        ],
+    )
+
+    main()
+
+    assert output.read_text() == f"hatchling==1 --hash=sha256:{'a' * 64}\n"
+
+
+def test_build_constraints_rejects_different_target_versions(tmp_path: Path) -> None:
+    lock = _lock(
+        tmp_path,
+        [
+            _package("hatchling", "1", "a" * 64, '"build" in dependency_groups and python_version < "3.13"'),
+            _package("hatchling", "2", "b" * 64, '"build" in dependency_groups and python_version >= "3.13"'),
+        ],
+        requires_python=">=3.11",
+    )
+    output = tmp_path / "constraints.txt"
+
+    with pytest.raises(ValueError, match="build selection differs across target Python versions"):
+        write_build_constraints(lock, output, python_versions=("3.11.0", "3.15.0"))
+
+    assert not output.exists()
 
 
 def test_build_constraints_includes_sdist_and_wheel_hashes(tmp_path: Path) -> None:

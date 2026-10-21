@@ -11,12 +11,19 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
     constraints = commands.add_parser("build-constraints", help="select hashed build pins from pylock.toml")
     constraints.add_argument("--lock", type=Path, default=Path("pylock.toml"), help="PEP 751 input")
     constraints.add_argument("--group", default="build", help="build dependency group in the lock")
+    constraints.add_argument(
+        "--python-version",
+        action="append",
+        default=[],
+        help="target Python version; repeat to require equal selections",
+    )
+    constraints.add_argument("--platform", choices=("linux", "macos", "windows"), help="target build platform")
     constraints.add_argument("--output", type=Path, required=True, help="hashed uv build constraints output")
     constraints.set_defaults(handler=_write)
 
 
 def _write(args: argparse.Namespace) -> None:
-    write_build_constraints(args.lock, args.output, args.group)
+    write_build_constraints(args.lock, args.output, args.group, tuple(args.python_version), args.platform)
 
 
 __all__ = [
