@@ -59,6 +59,37 @@ def test_tags_next_with_prefix(
 
 
 @pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(("pyproject-fmt", "2.30.3", "pyproject-fmt/2.30.4"), id="pyproject-fmt"),
+        pytest.param(("tox-toml-fmt", "1.11.1", "tox-toml-fmt/1.11.2"), id="tox-toml-fmt"),
+        pytest.param(("toml-fmt-common", "1.3.5", "toml-fmt-common/1.3.6"), id="common"),
+    ],
+)
+def test_tags_next_scopes_package(
+    case: tuple[str, str, str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    package, latest, expected = case
+    directory = tmp_path / "changelog.d" / package
+    directory.mkdir(parents=True)
+    (directory / "+fix.bugfix.md").write_text("Fix a bug.\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["release-creator", "tags", "--next", "auto", "--package", package])
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        StringIO(f"{package}/{latest}\nother-package/99.99.99\n1.0.0\n"),
+    )
+
+    main()
+
+    assert capsys.readouterr().out == f"{expected}\n"
+
+
+@pytest.mark.parametrize(
     "filename",
     [
         pytest.param("topic.feature.md", id="missing-plus"),
@@ -102,6 +133,55 @@ def test_tags_previous(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFi
     monkeypatch.setattr(sys, "stdin", StringIO("1.0.0\n1.2.2\n1.2.3\n"))
     main()
     assert capsys.readouterr().out == "1.2.2\n"
+
+
+@pytest.mark.parametrize("tag", [pytest.param("2.30.4", id="bare"), pytest.param("pyproject-fmt/2.30.4", id="full")])
+def test_tags_previous_scopes_package(
+    tag: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["release-creator", "tags", tag, "--previous", "--package", "pyproject-fmt"])
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        StringIO("pyproject-fmt/2.30.2\npyproject-fmt/2.30.3\ntox-toml-fmt/99.0.0\n2.30.3\n"),
+    )
+
+    main()
+
+    assert capsys.readouterr().out == "pyproject-fmt/2.30.3\n"
+
+
+def test_tags_require_newer_scopes_package(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["release-creator", "tags", "tox-toml-fmt/1.11.2", "--require-newer", "--package", "tox-toml-fmt"],
+    )
+    monkeypatch.setattr(sys, "stdin", StringIO("tox-toml-fmt/1.11.1\npyproject-fmt/99.0.0\n"))
+
+    main()
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        pytest.param(["tags", "1.0.0", "--package", "../other"], "invalid package name", id="package"),
+        pytest.param(
+            ["tags", "other/1.0.0", "--package", "pyproject-fmt"],
+            "does not belong to package",
+            id="target-namespace",
+        ),
+    ],
+)
+def test_tags_rejects_invalid_package(
+    arguments: list[str], message: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["release-creator", *arguments])
+
+    with pytest.raises(SystemExit, match="2"):
+        main()
+
+    assert message in capsys.readouterr().err
 
 
 def test_tags_previous_missing(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:

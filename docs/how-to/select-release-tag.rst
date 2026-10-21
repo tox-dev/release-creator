@@ -26,6 +26,16 @@ count when selecting the next version; the option controls the new tag's spellin
 
    git tag --list | uvx --from release-creator release-creator tags --next auto --prefix v
 
+In a repository that tags several packages, pass ``--package`` and the complete tag list. The command selects only
+that package's tags, reads fragments from ``changelog.d/<package>`` by default, and prints the full package tag:
+
+.. code-block:: bash
+
+   git tag --list | release-creator tags --next auto --package pyproject-fmt
+
+With ``pyproject-fmt/2.30.3`` already tagged and a pending bug fix, this prints
+``pyproject-fmt/2.30.4``. Other packages' tags do not affect the version.
+
 For tox-dev libraries, both adding and dropping a supported Python version use a ``feature`` fragment, such as
 ``+drop-python-3-9.feature.md``. The note appears under Added and automatic version selection makes a minor release.
 New releases will not install on a dropped Python version. Users who need that version can install an older release.
@@ -60,6 +70,10 @@ For the same tag list, run:
 
 The output is ``1.2.2``. Pass it to ``notes --previous 1.2.2`` to link the changes since that release. For a first
 numeric release, ``--previous`` prints nothing; ``notes`` then links to the commits at the new tag.
+
+For package tags, add ``--package pyproject-fmt`` and pass either ``2.30.4`` or ``pyproject-fmt/2.30.4`` as the target.
+The output keeps the package prefix, for example ``pyproject-fmt/2.30.3``, ready for ``notes --previous``. The same
+scope applies to ``--require-newer``.
 
 Rules and failure cases
 =======================
