@@ -524,6 +524,165 @@ def test_render_rst_maps_categories_and_credits() -> None:
     )
 
 
+def test_render_rst_keeps_top_level_warning_outside_bullet() -> None:
+    changelog = dedent("""\
+        v20.0.0b1 (2020-01-28)
+        =======================
+
+        Removed
+        -------
+
+        - A shim remains for Python 2.
+
+        .. warning::
+
+            Version ``20.0.0b1`` starts a new release history. The old history is in the `legacy docs
+            <https://virtualenv.pypa.io/en/legacy/changes.html>`_.
+        """)
+
+    result = render_rst(changelog, ReleaseContext(tag="20.0.0b1", repository="pypa/virtualenv"))
+
+    assert result == (
+        '<a name="release-20-0-0b1-removed"></a>\n\n### Removals\n\n'
+        "- A shim remains for Python 2.\n\n"
+        "> **Warning:** Version `20.0.0b1` starts a new release history. The old history is in the "
+        "[legacy docs](https://virtualenv.pypa.io/en/legacy/changes.html).\n\n"
+        "**Full Changelog**: https://github.com/pypa/virtualenv/commits/20.0.0b1\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("language", "source", "expected"),
+    [
+        pytest.param(
+            "dockerfile",
+            "ENV VIRTUALENV_READ_ONLY_APP_DATA=1\n      RUN virtualenv /tmp/venv",
+            "ENV VIRTUALENV_READ_ONLY_APP_DATA=1\n  RUN virtualenv /tmp/venv",
+            id="dockerfile",
+        ),
+        pytest.param(
+            "console",
+            "created virtual environment in 350ms\n        creator CPython3Posix(dest=/x)",
+            "created virtual environment in 350ms\n    creator CPython3Posix(dest=/x)",
+            id="console",
+        ),
+    ],
+)
+def test_render_rst_keeps_nested_code_block(language: str, source: str, expected: str) -> None:
+    changelog = (
+        "20.2.0 (2020-08-25)\n===================\n\nAdded\n-----\n\n"
+        "- Display the virtual environment, for example:\n\n"
+        f"  .. code-block:: {language}\n\n      {source}\n\n"
+        "  Patch by :user:`alice`. (:pr:`2009`)\n"
+    )
+
+    result = render_rst(changelog, ReleaseContext(tag="20.2.0", repository="pypa/virtualenv"))
+
+    assert result == (
+        '<a name="release-20-2-0-added"></a>\n\n### Features\n\n'
+        "- Display the virtual environment, for example:\n\n"
+        f"  ```{language}\n  {expected}\n  ```\n\n"
+        "  Patch by @alice. ([#2009](https://github.com/pypa/virtualenv/pull/2009))\n\n"
+        "**Full Changelog**: https://github.com/pypa/virtualenv/commits/20.2.0\n"
+    )
+
+
+def test_render_rst_keeps_nested_bullets() -> None:
+    changelog = dedent("""\
+        v20.24.4 (2023-08-30)
+        =====================
+
+        Packaging
+        ---------
+
+        - Upgrade embedded wheels:
+
+          - setuptools to ``68.1.2`` from ``68.1.0`` on ``3.8+``
+          - wheel to ``0.41.2`` from ``0.41.1`` on ``3.7+`` (:pr:`2628`)
+        """)
+
+    result = render_rst(changelog, ReleaseContext(tag="20.24.4", repository="pypa/virtualenv"))
+
+    assert result == (
+        '<a name="release-20-24-4-packaging"></a>\n\n### Packaging\n\n'
+        "- Upgrade embedded wheels:\n"
+        "  - setuptools to `68.1.2` from `68.1.0` on `3.8+`\n"
+        "  - wheel to `0.41.2` from `0.41.1` on `3.7+` ([#2628](https://github.com/pypa/virtualenv/pull/2628))\n\n"
+        "**Full Changelog**: https://github.com/pypa/virtualenv/commits/20.24.4\n"
+    )
+
+
+def test_render_rst_keeps_paragraph_after_nested_bullets() -> None:
+    changelog = dedent("""\
+        v20.0.24 (2020-07-15)
+        =====================
+
+        Added
+        -----
+
+        - Ensure seeded packages remain current:
+
+          - add a CLI flag
+          - upgrade embedded wheels after 28 days
+
+          More details under :ref:`wheels` - by :user:`alice`. (:issue:`1821`)
+        """)
+
+    result = render_rst(changelog, ReleaseContext(tag="20.0.24", repository="pypa/virtualenv"))
+
+    assert result == (
+        '<a name="release-20-0-24-added"></a>\n\n### Features\n\n'
+        "- Ensure seeded packages remain current:\n\n"
+        "  - add a CLI flag\n"
+        "  - upgrade embedded wheels after 28 days\n\n"
+        "  More details under `wheels` by @alice. ([#1821](https://github.com/pypa/virtualenv/issues/1821))\n\n"
+        "**Full Changelog**: https://github.com/pypa/virtualenv/commits/20.0.24\n"
+    )
+
+
+def test_render_rst_keeps_group_credit_after_nested_bullets() -> None:
+    changelog = dedent("""\
+        v20.27.0 (2024-10-17)
+        =====================
+
+        Packaging
+        ---------
+
+        - Upgrade embedded wheels:
+
+          - setuptools to ``75.2.0``
+          - Removed pip of ``24.0``
+          - by :user:`alice`. (:pr:`2783`)
+        """)
+
+    result = render_rst(changelog, ReleaseContext(tag="20.27.0", repository="pypa/virtualenv"))
+
+    assert result == (
+        '<a name="release-20-27-0-packaging"></a>\n\n### Packaging\n\n'
+        "- Upgrade embedded wheels:\n\n"
+        "  - setuptools to `75.2.0`\n"
+        "  - Removed pip of `24.0`\n\n"
+        "  by @alice. ([#2783](https://github.com/pypa/virtualenv/pull/2783))\n\n"
+        "**Full Changelog**: https://github.com/pypa/virtualenv/commits/20.27.0\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "message"),
+    [
+        pytest.param(".. code-block:: console\n\n    output\n", "code block outside", id="top-level-code"),
+        pytest.param("- Entry.\n\n  .. code-block:: console\n", "empty RST directive", id="empty-code"),
+        pytest.param("  - Nested entry.\n", "release item outside", id="orphan-nested-item"),
+        pytest.param("- Entry.\n\n.. note::\n", "unexpected release text", id="unknown-directive"),
+    ],
+)
+def test_render_rst_rejects_malformed_blocks(source: str, message: str) -> None:
+    changelog = f"1.2.3 (today)\n=============\n\nAdded\n-----\n\n{source}"
+
+    with pytest.raises(ValueError, match=message):
+        render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+
 def test_render_rst_joins_wrapped_author_credit() -> None:
     changelog = dedent("""\
         1.2.3 (2026-10-18)

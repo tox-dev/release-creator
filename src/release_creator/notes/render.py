@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from textwrap import dedent
 from typing import Final
 
 lazy import mdformat
@@ -294,29 +295,12 @@ def _extract_rst_body(changelog: str, context: ReleaseContext, issue_role: str) 
         (index for index in range(headings[0] + 1, len(lines)) if _RE_RST_VERSION.fullmatch(lines[index].strip())),
         len(lines),
     )
-    sections: dict[str, list[str]] = {}
-    category: str | None = None
-    index = headings[0] + 1
-    while index < end:
-        line = lines[index].strip()
-        if line and index + 1 < end and _RE_RST_HEADING_UNDERLINE.fullmatch(lines[index + 1].strip()):
-            category = _require_category(line)
-            sections.setdefault(category, [])
-            index += 2
-            continue
-        if lines[index].startswith("- "):
-            if category is None:
-                msg = f"release item outside a category: {line}"
-                raise ValueError(msg)
-            sections[category].append(line)
-        elif line and _RE_RST_HEADING_UNDERLINE.fullmatch(line) is None and not line.startswith(".. _"):
-            if category is None or not sections[category]:
-                msg = f"unexpected release text: {line}"
-                raise ValueError(msg)
-            sections[category][-1] += f" {line}"
-        index += 1
     body: list[str] = []
-    for name, entries in sections.items():
+    for block in _parse_rst_blocks(lines, headings[0] + 1, end, context.repository, issue_role):
+        if isinstance(block, str):
+            body.extend((block, ""))
+            continue
+        name, entries = block
         if entries:
             anchor = f"release-{context.tag.replace('.', '-')}-{name.lower().replace(' ', '-')}"
             body.extend((
@@ -328,6 +312,81 @@ def _extract_rst_body(changelog: str, context: ReleaseContext, issue_role: str) 
                 "",
             ))
     return "\n".join(body).strip()
+
+
+def _parse_rst_blocks(
+    lines: list[str], start: int, end: int, repository: str, issue_role: str
+) -> list[tuple[str, list[str]] | str]:
+    blocks: list[tuple[str, list[str]] | str] = []
+    entries: list[str] | None = None
+    after_block = False
+    nested = False
+    index = start
+    while index < end:
+        line = lines[index].strip()
+        if line and index + 1 < end and _RE_RST_HEADING_UNDERLINE.fullmatch(lines[index + 1].strip()):
+            entries = []
+            blocks.append((_require_category(line), entries))
+            after_block = False
+            nested = False
+            index += 2
+            continue
+        if line.startswith(".. code-block:: "):
+            if entries is None or not entries or lines[index].startswith(".."):
+                msg = f"code block outside a release item: {line}"
+                raise ValueError(msg)
+            content, index = _rst_directive_content(lines, index, end)
+            language = line.removeprefix(".. code-block:: ")
+            entries[-1] += (
+                f"\n\n  ```{language}\n" + "\n".join(f"  {part}" for part in content.splitlines()) + "\n  ```"
+            )
+            after_block = True
+            nested = False
+            continue
+        if line == ".. warning::" and lines[index].startswith(".."):
+            content, index = _rst_directive_content(lines, index, end)
+            blocks.append(f"> **Warning:** {_convert_rst(' '.join(content.splitlines()), repository, issue_role)}")
+            entries = None
+            continue
+        after_block, nested = _append_rst_entry(entries, lines[index], after_block=after_block, nested=nested)
+        index += 1
+    return blocks
+
+
+def _append_rst_entry(entries: list[str] | None, raw: str, *, after_block: bool, nested: bool) -> tuple[bool, bool]:
+    line = raw.strip()
+    if raw.startswith("- "):
+        if entries is None:
+            msg = f"release item outside a category: {line}"
+            raise ValueError(msg)
+        entries.append(line)
+        return False, False
+    if line.startswith("- "):
+        if entries is None or not entries:
+            msg = f"release item outside a category: {line}"
+            raise ValueError(msg)
+        entries[-1] += f"\n\n  {line.removeprefix('- ')}" if line.startswith("- by ") else f"\n  {line}"
+        return False, not line.startswith("- by ")
+    if line and _RE_RST_HEADING_UNDERLINE.fullmatch(line) is None and not line.startswith(".. _"):
+        if entries is None or not entries or line.startswith(".. "):
+            msg = f"unexpected release text: {line}"
+            raise ValueError(msg)
+        entries[-1] += f"\n\n  {line}" if after_block else f" {line}"
+        return False, False if after_block else nested
+    return after_block or (nested and not line), nested
+
+
+def _rst_directive_content(lines: list[str], index: int, end: int) -> tuple[str, int]:
+    indent = len(lines[index]) - len(lines[index].lstrip())
+    start = index + 1
+    index = start
+    while index < end and (not lines[index].strip() or len(lines[index]) - len(lines[index].lstrip()) > indent):
+        index += 1
+    content = dedent("\n".join(lines[start:index])).strip("\n")
+    if not content.strip():
+        msg = f"empty RST directive: {lines[start - 1].strip()}"
+        raise ValueError(msg)
+    return content, index
 
 
 def _require_category(name: str) -> str:
@@ -418,7 +477,7 @@ def _convert_rst(line: str, repository: str, issue_role: str) -> str:
     )
     line = re.sub(
         r"""
-        ``(?P<code>[^`]+)``   # RST inline code
+        (?<!`)``(?P<code>[^`]+)``(?!`)   # RST inline code outside Markdown fences
         """,
         r"`\g<code>`",
         line,

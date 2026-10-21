@@ -131,3 +131,6 @@ points to pull requests can run:
 
 ``--issue-role pull`` changes ``:issue:`42``` links to pull requests. Without it, they target issues. ``:pr:`` and
 ``:pull:`` always target pull requests; ``:user:`` becomes an ``@handle`` mention.
+
+Nested lists stay nested. ``.. code-block::`` directives become fenced Markdown blocks inside their release items.
+Top-level ``.. warning::`` directives become separate warning blocks after the preceding item.
