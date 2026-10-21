@@ -173,14 +173,17 @@ def _verify_authors(notes: str, generated_notes: str, context: ReleaseContext) -
     generated_authors, generated_bots = _generated_pr_authors(generated_notes, context.repository)
     for number, entries in _release_entries(notes, context.repository).items():
         if number not in generated_authors:
-            if any(not handles for handles in entries):
+            if any(not handles for handles, _ in entries):
                 msg = f"generated notes have no author for pull request #{number}"
                 raise ValueError(msg)
             continue
-        if (bot := generated_bots.get(number)) is not None and any(bot in handles for handles in entries):
+        if (bot := generated_bots.get(number)) is not None and any(bot in handles for handles, _ in entries):
             msg = f"changelog credit for pull request #{number} must not name bot @{bot}"
             raise ValueError(msg)
-        if (author := generated_authors[number]) is not None and any(author not in handles for handles in entries):
+        if bot is None and generated_authors[number] is None and any(not attributed for _, attributed in entries):
+            msg = f"changelog has no credit for pull request #{number} with an unavailable author"
+            raise ValueError(msg)
+        if (author := generated_authors[number]) is not None and any(author not in handles for handles, _ in entries):
             msg = f"changelog credit for pull request #{number} does not include @{author}"
             raise ValueError(msg)
 
@@ -188,22 +191,31 @@ def _verify_authors(notes: str, generated_notes: str, context: ReleaseContext) -
 def _generated_pr_authors(generated_notes: str, repository: str) -> tuple[dict[str, str | None], dict[str, str]]:
     authors: dict[str, str | None] = {}
     bots: dict[str, str] = {}
+    in_new_contributors = False
     for line in generated_notes.splitlines():
-        if (match := _RE_GENERATED_PR_AUTHOR.search(line)) is None or match["repository"] != repository:
+        if line.startswith(("## ", "### ")):
+            in_new_contributors = line.removeprefix("### ").removeprefix("## ") == "New Contributors"
+        if in_new_contributors:
             continue
-        number = match["number"]
-        author = None if match["bot"] is not None else match["handle"]
-        if match["bot"] is not None:
-            bots[number] = match["handle"]
-        if number in authors and authors[number] != author:
-            msg = f"conflicting generated authors for pull request #{number}"
-            raise ValueError(msg)
-        authors[number] = author
+        match = _RE_GENERATED_PR_AUTHOR.search(line)
+        if match is not None and match["repository"] != repository:
+            match = None
+        for link in _RE_RELEASE_PULL.finditer(line):
+            if link["repository"] != repository:
+                continue
+            number = link["number"]
+            author = None if match is None or match["bot"] is not None else match["handle"]
+            if match is not None and match["bot"] is not None:
+                bots[number] = match["handle"]
+            if number in authors and authors[number] != author:
+                msg = f"conflicting generated authors for pull request #{number}"
+                raise ValueError(msg)
+            authors[number] = author
     return authors, bots
 
 
-def _release_entries(notes: str, repository: str) -> dict[str, list[set[str]]]:
-    entries: dict[str, list[set[str]]] = {}
+def _release_entries(notes: str, repository: str) -> dict[str, list[tuple[set[str], bool]]]:
+    entries: dict[str, list[tuple[set[str], bool]]] = {}
     for line in notes.splitlines():
         pull_requests = [
             match["number"] for match in _RE_RELEASE_PULL.finditer(line) if match["repository"] == repository
@@ -217,7 +229,10 @@ def _release_entries(notes: str, repository: str) -> dict[str, list[set[str]]]:
             else set()
         )
         for number in pull_requests:
-            entries.setdefault(number, []).append(handles)
+            entries.setdefault(number, []).append((
+                handles,
+                credit_text is not None and bool(credit_text["credits"].strip(" .,;")),
+            ))
     return entries
 
 

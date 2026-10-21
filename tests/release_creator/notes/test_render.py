@@ -310,6 +310,53 @@ def test_render_markdown_uses_source_credit_when_generated_notes_omit_pull_reque
     assert "- Add Python support ([#42](https://github.com/tox-dev/example/pull/42)) by @alice." in result
 
 
+def test_render_rst_keeps_named_credit_when_generated_author_is_unavailable() -> None:
+    changelog = dedent("""\
+        3.5.0 (2022-02-15)
+        ==================
+
+        Added
+        -----
+
+        - Allow a lock to be used as a context decorator. :pr:`128` - by Hirsch Alter.
+        """)
+    generated = dedent("""\
+        ## What's Changed
+        * Enable use as a context decorator in https://github.com/tox-dev/filelock/pull/128
+        * Fix file object treatment in docs by @JustAnotherArchivist in https://github.com/tox-dev/filelock/pull/130
+
+        ## New Contributors
+        * @JustAnotherArchivist made their first contribution in https://github.com/tox-dev/filelock/pull/130
+        """)
+
+    result = render_rst(
+        changelog,
+        ReleaseContext(tag="3.5.0", repository="tox-dev/filelock", previous="3.4.2"),
+        "pull",
+        generated,
+    )
+
+    assert result == (
+        '<a name="release-3-5-0-added"></a>\n\n'
+        "### Features\n\n"
+        "- Allow a lock to be used as a context decorator. [#128](https://github.com/tox-dev/filelock/pull/128) "
+        "by Hirsch Alter.\n\n"
+        '<a name="release-3-5-0-new-contributors"></a>\n\n'
+        "### New Contributors\n\n"
+        "- @JustAnotherArchivist made their first contribution in "
+        "[#130](https://github.com/tox-dev/filelock/pull/130)\n\n"
+        "**Full Changelog**: https://github.com/tox-dev/filelock/compare/3.4.2...3.5.0\n"
+    )
+
+
+def test_render_rst_rejects_uncredited_entry_with_unavailable_generated_author() -> None:
+    changelog = "3.5.0 (2022-02-15)\n==================\n\nAdded\n-----\n\n- Add context decorator. :pr:`128`.\n"
+    generated = "* Enable context decorator in https://github.com/tox-dev/filelock/pull/128\n"
+
+    with pytest.raises(ValueError, match="no credit for pull request #128 with an unavailable author"):
+        render_rst(changelog, ReleaseContext(tag="3.5.0", repository="tox-dev/filelock"), "pull", generated)
+
+
 @pytest.mark.parametrize(
     ("changelog", "generated", "message"),
     [
