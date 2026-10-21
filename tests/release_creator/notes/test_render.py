@@ -778,6 +778,38 @@ def test_render_rst_keeps_role_display(source: str, expected: str) -> None:
 
 
 @pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            "Type ``:ivar:``, ``:cvar:`` and ``:var:`` fields",
+            "Type `:ivar:`, `:cvar:` and `:var:` fields",
+            id="rst-inline-literals",
+        ),
+        pytest.param(
+            "Use `:rtype:` and `:return:` fields",
+            "Use `:rtype:` and `:return:` fields",
+            id="single-backtick-literals",
+        ),
+        pytest.param(
+            "Merge into ``:returns:`` beside :class:`the field <package.Field>`",
+            "Merge into `:returns:` beside `the field`",
+            id="literal-and-role",
+        ),
+    ],
+)
+def test_render_rst_preserves_field_literals(source: str, expected: str) -> None:
+    changelog = f"1.2.3 (today)\n==============\n\nFixed\n-----\n\n- {source}.\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert result == (
+        '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
+        f"- {expected}.\n\n"
+        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+    )
+
+
+@pytest.mark.parametrize(
     ("role", "expected"),
     [
         pytest.param(":PEP:`751`", "[PEP 751](https://peps.python.org/pep-0751/)", id="pep"),

@@ -404,14 +404,7 @@ def _convert_rst(line: str, repository: str, issue_role: str) -> str:
     )
     line = re.sub(
         r"""
-        ``(?P<code>[^`]+)``   # RST inline code
-        """,
-        r"`\g<code>`",
-        line,
-        flags=re.VERBOSE,
-    )
-    line = re.sub(
-        r"""
+        (?<!`)               # Keep role-like text inside inline literals
         :(?:[a-z]+:)?[a-z]+:`  # RST role with optional domain
         (?:
             (?P<display>[^<>`]+)\s+<(?P<target>[^<>`]+)>  # Explicit display and target
@@ -420,6 +413,14 @@ def _convert_rst(line: str, repository: str, issue_role: str) -> str:
         )`
         """,
         lambda match: f"`{match['display'] or match['name'].split('.')[-1]}`",
+        line,
+        flags=re.VERBOSE,
+    )
+    line = re.sub(
+        r"""
+        ``(?P<code>[^`]+)``   # RST inline code
+        """,
+        r"`\g<code>`",
         line,
         flags=re.VERBOSE,
     )
