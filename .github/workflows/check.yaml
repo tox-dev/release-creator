@@ -103,21 +103,35 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+  hook-update-cooldown:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: tox-dev/github-workflows/check-hook-update-cooldown@8dcf033f9c58bfa39916fc57b2723383640970c0
+        with:
+          repository: ${{ github.repository }}
+          pull-request: ${{ github.event.pull_request.number }}
+          head-sha: ${{ github.event.pull_request.head.sha }}
   gate:
     name: Required checks pass
     if: always()
-    needs: [test, check, changelog, release-dry-run]
+    needs: [test, check, changelog, release-dry-run, hook-update-cooldown]
     runs-on: ubuntu-26.04
     steps:
       - name: Require successful jobs
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           jq -e '
             all(
               to_entries[];
               .value.result == "success" or
               (.key == "changelog" and .value.result == "skipped") or
-              (.key == "release-dry-run" and .value.result == "skipped")
+              (.key == "release-dry-run" and .value.result == "skipped") or
+              (.key == "hook-update-cooldown" and .value.result == "skipped" and env.EVENT_NAME != "pull_request")
             )
           ' <<< "$NEEDS_JSON"
