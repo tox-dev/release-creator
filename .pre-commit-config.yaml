@@ -45,13 +45,11 @@ repos:
     rev: "21ca5323a9c87ee37a434e0ca908efc0a89daa07" # frozen: v0.21.0
     hooks:
       - id: yamlfmt
-  - repo: local
+  - repo: https://github.com/hukkin/mdformat
+    rev: 82912cdaea4fb830f751504486a7879c70526547 # frozen: 1.0.0
     hooks:
       - id: mdformat
-        name: mdformat
-        entry: mdformat --wrap 120
-        language: python
-        types: [markdown]
+        args: ["--wrap", "120"]
         additional_dependencies: [mdformat-gfm==1.0.0]
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
     rev: c92afdf2c6ca336aaa8f39e2bd8d48f62dbd8e1f # frozen: v1.31.1
