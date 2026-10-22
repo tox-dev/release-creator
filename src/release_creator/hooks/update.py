@@ -136,7 +136,7 @@ def _resolved_line(line: str) -> Requirement:
 
 def _group_edits(source: str, group: _Group, resolved: list[Requirement]) -> list[_Edit]:
     key, sequence, direct, managed = group
-    if not direct and len(managed) == len(sequence.value):
+    if managed and not direct and len(managed) == len(sequence.value):
         end = source.find("\n", _end(sequence))
         return [(_start(key), end + 1 if end >= 0 else len(source), f"{key.value}: []\n")]
     roots = {canonicalize_name(requirement.name) for _, requirement in direct}
