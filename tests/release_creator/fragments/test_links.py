@@ -2,15 +2,37 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import pytest
 
 from release_creator.fragments.links import add_pull_request_links
-from release_creator.fragments.pull_requests import PullRequestAuthor
+from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+def _link(
+    directory: Path,
+    repository: str,
+    subjects: dict[str, str],
+    authors: dict[str, PullRequestAuthor] | None = None,
+    *,
+    mode: Literal["towncrier", "knope", "numbered-prs"] = "towncrier",
+) -> None:
+    pull_requests: dict[str, PullRequest] = {}
+    for name, subject in subjects.items():
+        if "#" not in subject:
+            continue
+        number = subject.rpartition("#")[2].removesuffix(")")
+        if authors is not None and number not in authors:
+            continue
+        pull_requests[name] = PullRequest(
+            number=number,
+            author=authors[number] if authors is not None else PullRequestAuthor(handle="alice", is_bot=False),
+        )
+    add_pull_request_links(directory, repository, pull_requests, mode=mode)
 
 
 @pytest.mark.parametrize(
@@ -60,20 +82,6 @@ if TYPE_CHECKING:
             {"42": PullRequestAuthor(handle="alice", is_bot=False)},
             "Add a feature (:pr:`42`) by `@alice <https://github.com/alice>`_.\n",
             id="rst-profile-credit",
-        ),
-        pytest.param(
-            "+first.feature.rst",
-            "Add a feature.\n",
-            None,
-            "Add a feature (:pr:`42`).\n",
-            id="rst-without-author-resolution",
-        ),
-        pytest.param(
-            "+first.feature.md",
-            "Add a feature.\n",
-            None,
-            "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)).\n",
-            id="without-author-resolution",
         ),
         pytest.param(
             "+first.feature.md",
@@ -140,7 +148,7 @@ def test_add_pull_request_links(
     fragment = tmp_path / filename
     fragment.write_text(content)
 
-    add_pull_request_links(tmp_path, "tox-dev/example", {filename: "Add release notes (#42)"}, authors)
+    _link(tmp_path, "tox-dev/example", {filename: "Add release notes (#42)"}, authors)
 
     assert fragment.read_text() == expected
 
@@ -149,7 +157,7 @@ def test_add_pull_request_links_preserves_shared_credits(tmp_path: Path) -> None
     fragment = tmp_path / "+first.feature.md"
     fragment.write_text("Add a feature by [@alice](https://github.com/alice) and [@bob](https://github.com/bob).\n")
 
-    add_pull_request_links(
+    _link(
         tmp_path,
         "tox-dev/example",
         {fragment.name: "Add release notes (#42)"},
@@ -193,7 +201,7 @@ def test_add_pull_request_links_knope(tmp_path: Path, heading: str, author: Pull
     fragment.write_text(f"---\ndefault: security\n---\n\n# {heading}\n\nMore context.\n")
     (tmp_path / "README.md").write_text("Knope guide.\n")
 
-    add_pull_request_links(
+    _link(
         tmp_path,
         "tox-dev/example",
         {fragment.name: "Patch trust roots (#42)"},
@@ -209,7 +217,7 @@ def test_add_pull_request_links_knope_is_repeatable(tmp_path: Path) -> None:
     fragment.write_text("---\ndefault: security\n---\n\n# Remove a distrusted root certificate\n")
 
     for _ in range(2):
-        add_pull_request_links(
+        _link(
             tmp_path,
             "tox-dev/example",
             {fragment.name: "Patch trust roots (#42)"},
@@ -235,7 +243,7 @@ def test_add_pull_request_links_knope_rejects_invalid_changeset(tmp_path: Path, 
     fragment.write_text(content)
 
     with pytest.raises(ValueError, match=message):
-        add_pull_request_links(tmp_path, "tox-dev/example", {fragment.name: "Patch trust roots (#42)"}, mode="knope")
+        _link(tmp_path, "tox-dev/example", {fragment.name: "Patch trust roots (#42)"}, mode="knope")
 
     assert fragment.read_text() == content
 
@@ -244,7 +252,7 @@ def test_add_pull_request_links_preserves_numbered_shared_credits(tmp_path: Path
     fragment = tmp_path / "42.feature.md"
     fragment.write_text("Add a feature by [@alice](https://github.com/alice).\n")
 
-    add_pull_request_links(
+    _link(
         tmp_path,
         "tox-dev/example",
         {fragment.name: "Add a feature (#42)"},
@@ -266,7 +274,7 @@ def test_add_pull_request_links_rejects_a_mismatched_author_without_partial_writ
     second.write_text("Fix a bug by [@bob](https://github.com/bob).\n")
 
     with pytest.raises(ValueError, match="pull request author @alice is missing"):
-        add_pull_request_links(
+        _link(
             tmp_path,
             "tox-dev/example",
             {first.name: "Add release notes (#42)", second.name: "Add release notes (#43)"},
@@ -299,7 +307,7 @@ def test_add_pull_request_links_rejects_a_mismatched_author_without_partial_writ
                 "Add news",
                 "Fix a bug.\n",
                 {"42": PullRequestAuthor(handle="alice", is_bot=False)},
-                "no squash pull request number",
+                "no pull request data",
             ),
             id="commit",
         ),
@@ -323,7 +331,9 @@ def test_add_pull_request_links_rejects_a_mismatched_author_without_partial_writ
             ),
             id="existing-rst-link",
         ),
-        pytest.param(("tox-dev/example", "Add news (#42)", "Fix a bug.\n", {}, "no author data"), id="missing-author"),
+        pytest.param(
+            ("tox-dev/example", "Add news (#42)", "Fix a bug.\n", {}, "no pull request data"), id="missing-author"
+        ),
     ],
 )
 def test_add_pull_request_links_rejects_invalid_input(
@@ -334,7 +344,7 @@ def test_add_pull_request_links_rejects_invalid_input(
     fragment.write_text(content)
 
     with pytest.raises(ValueError, match=message):
-        add_pull_request_links(tmp_path, repository, {fragment.name: subject}, authors)
+        _link(tmp_path, repository, {fragment.name: subject}, authors)
 
 
 def test_add_pull_request_links_rejects_bot_credits(tmp_path: Path) -> None:
@@ -342,7 +352,7 @@ def test_add_pull_request_links_rejects_bot_credits(tmp_path: Path) -> None:
     fragment.write_text("Fix a bug by [@dependabot](https://github.com/dependabot).\n")
 
     with pytest.raises(ValueError, match="bot author @dependabot must not be credited"):
-        add_pull_request_links(
+        _link(
             tmp_path,
             "tox-dev/example",
             {fragment.name: "Automate updates (#42)"},

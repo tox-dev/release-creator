@@ -15,4 +15,4 @@ jobs:
     secrets:
       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
     with:
-      python-version: "3.15"
+      lock-groups: lock-tools release-check release-notes release-prepare release-validate

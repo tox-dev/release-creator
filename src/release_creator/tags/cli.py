@@ -1,11 +1,11 @@
 """Keep tag selection options beside the command."""
 
-import re
 import sys
 lazy import argparse
 lazy from datetime import UTC, datetime
 lazy from pathlib import Path
 
+from release_creator.package_name import valid_package_name
 lazy from release_creator.fragments.names import pending_fragments
 lazy from release_creator.tags.select import next_tag, parse_tag, previous_tag, require_newer_tag
 
@@ -22,6 +22,7 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
     )
     choice.add_argument("--previous", action="store_true", help="print the preceding tag from standard input")
     choice.add_argument("--require-newer", action="store_true", help="require a tag newer than those on standard input")
+    tags.add_argument("--stable-only", action="store_true", help="ignore prerelease and postrelease predecessors")
     tags.add_argument("--prefix", choices=("v",), default="", help="prefix the calculated tag with v")
     tags.add_argument("--package", help="scope tags to package/ and print package-prefixed results")
     tags.add_argument(
@@ -31,18 +32,11 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
 
 
 def _select(args: argparse.Namespace) -> None:
-    if (
-        args.package is not None
-        and re.fullmatch(
-            r"""
-        (?P<package>[A-Za-z0-9][A-Za-z0-9_.-]*)  # One non-relative Git tag path component
-        """,
-            args.package,
-            re.VERBOSE,
-        )
-        is None
-    ):
+    if args.package is not None and not valid_package_name(args.package):
         msg = f"invalid package name: {args.package}"
+        raise ValueError(msg)
+    if args.stable_only and not args.previous:
+        msg = "--stable-only requires --previous"
         raise ValueError(msg)
     if args.next is not None:
         if args.tag is not None:
@@ -68,7 +62,7 @@ def _select(args: argparse.Namespace) -> None:
     tags = _scoped_tags(sys.stdin.read().splitlines(), args.package)
     if args.require_newer:
         require_newer_tag(tag, tags)
-    elif (previous := previous_tag(tag, tags)) is not None:
+    elif (previous := previous_tag(tag, tags, stable_only=args.stable_only)) is not None:
         sys.stdout.write(f"{args.package}/{previous}\n" if args.package else f"{previous}\n")
 
 

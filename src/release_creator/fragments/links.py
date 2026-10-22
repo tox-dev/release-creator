@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Final, Literal
+from typing import TYPE_CHECKING, Final, Literal
 lazy from pathlib import Path
 
 from release_creator.fragments.knope import changeset_parts
 from release_creator.fragments.names import fragment_number, pending_changesets, pending_fragments
-from release_creator.fragments.pull_requests import PullRequestAuthor, fragment_pull_request_number
 from release_creator.github import MARKDOWN_AUTHOR, validate_repository
+
+if TYPE_CHECKING:
+    from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor
 
 _RE_PULL_REQUEST_LINK: Final = re.compile(
     r"""
@@ -43,8 +45,7 @@ type _LinkMode = Literal["towncrier", "knope", "numbered-prs"]
 def add_pull_request_links(
     directory: Path,
     repository: str,
-    commit_subjects: dict[str, str],
-    authors: dict[str, PullRequestAuthor] | None = None,
+    pull_requests: dict[str, PullRequest],
     *,
     mode: _LinkMode = "towncrier",
 ) -> None:
@@ -53,7 +54,7 @@ def add_pull_request_links(
     updates: list[tuple[Path, str]] = [
         (
             fragment,
-            _link_fragment(fragment, repository, commit_subjects, authors, mode=mode),
+            _link_fragment(fragment, repository, pull_requests, mode=mode),
         )
         for fragment in (pending_changesets(directory) if mode == "knope" else pending_fragments(directory))
     ]
@@ -64,22 +65,21 @@ def add_pull_request_links(
 def _link_fragment(
     fragment: Path,
     repository: str,
-    commit_subjects: dict[str, str],
-    authors: dict[str, PullRequestAuthor] | None,
+    pull_requests: dict[str, PullRequest],
     *,
     mode: _LinkMode,
 ) -> str:
-    number = fragment_pull_request_number(
-        fragment.name, commit_subjects.get(fragment.name, ""), numbered_prs=mode == "numbered-prs"
-    )
+    if (pull_request := pull_requests.get(fragment.name)) is None:
+        msg = f"no pull request data for {fragment}"
+        raise ValueError(msg)
     content = fragment.read_text(encoding="utf-8")
-    author = None
-    if authors is not None:
-        if number not in authors:
-            msg = f"no author data for pull request #{number}"
-            raise ValueError(msg)
-        author = authors[number]
-    target = _LinkTarget(fragment=fragment, repository=repository, number=number, author=author, knope=mode == "knope")
+    target = _LinkTarget(
+        fragment=fragment,
+        repository=repository,
+        number=pull_request.number,
+        author=pull_request.author,
+        knope=mode == "knope",
+    )
     if mode == "knope":
         frontmatter, heading, remainder = changeset_parts(fragment, content)
         return f"{frontmatter}# {_link_text(heading, target)}{remainder}"
@@ -91,7 +91,7 @@ class _LinkTarget:
     fragment: Path
     repository: str
     number: str
-    author: PullRequestAuthor | None
+    author: PullRequestAuthor
     knope: bool
 
 
@@ -106,10 +106,10 @@ def _link_text(
         raise ValueError(msg)
     if (match := _RE_AUTHOR_MARKER.search(content)) is not None:
         handles = _credited_handles(content[match.end() :], fragment.suffix)
-        if target.author is not None and target.author.is_bot and target.author.handle in handles:
+        if target.author.is_bot and target.author.handle in handles:
             msg = f"bot author @{target.author.handle} must not be credited in {fragment}"
             raise ValueError(msg)
-        if target.author is not None and not target.author.is_bot and target.author.handle not in handles:
+        if not target.author.is_bot and target.author.handle not in handles:
             msg = f"pull request author @{target.author.handle} is missing from the explicit credit in {fragment}"
             raise ValueError(msg)
         if linked:
@@ -118,7 +118,7 @@ def _link_text(
             f"{content[: match.start()]} {_pull_request_link(target.repository, target.number, fragment.suffix)} "
             f"by {content[match.end() :]}"
         )
-    handle = target.author.handle if target.author is not None and not target.author.is_bot else None
+    handle = target.author.handle if not target.author.is_bot else None
     if linked:
         return (
             f"{content.removesuffix('.')} by {_author_credit(handle, fragment.suffix)}{'' if target.knope else '.'}"

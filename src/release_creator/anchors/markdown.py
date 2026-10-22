@@ -3,10 +3,14 @@
 import re
 from typing import Final, cast
 
+from packaging.version import InvalidVersion, Version
+
+from release_creator.anchors.names import release_anchor
+
 _RE_VERSION: Final = re.compile(
     r"""
     ^\#\#\s+                             # Markdown version heading
-    (?P<version>v?\d+(?:\.\d+){1,3}(?:(?:a|b|rc)\d*)?)  # Release version
+    (?P<version>\S+)                      # Candidate release version
     (?:\s+\([^)]+\))?                     # Optional release date
     $                                      # End of heading
     """,
@@ -47,11 +51,11 @@ def _collect_anchors(lines: list[str]) -> set[str]:
     anchors: set[str] = set()
     version: str | None = None
     for line in lines:
-        if (match := _RE_VERSION.fullmatch(line)) is not None:
-            version = cast("str", match["version"]).replace(".", "-")
-            anchors.add(f"release-{version}")
+        if (heading := _version_heading(line)) is not None:
+            version = heading
+            anchors.add(release_anchor(version))
         elif version is not None and (match := _RE_CATEGORY.fullmatch(line)) is not None:
-            anchors.add(f"release-{version}-{match['category'].lower().replace(' ', '-')}")
+            anchors.add(release_anchor(version, match["category"]))
     return anchors
 
 
@@ -74,11 +78,11 @@ def _insert_anchors(lines: list[str]) -> str:
     result: list[str] = []
     version = None
     for line in lines:
-        if (match := _RE_VERSION.fullmatch(line)) is not None:
-            version = cast("str", match["version"]).replace(".", "-")
-            anchor = f"release-{version}"
+        if (heading := _version_heading(line)) is not None:
+            version = heading
+            anchor = release_anchor(version)
         elif version is not None and (match := _RE_CATEGORY.fullmatch(line)) is not None:
-            anchor = f"release-{version}-{match['category'].lower().replace(' ', '-')}"
+            anchor = release_anchor(version, match["category"])
         else:
             result.append(line)
             continue
@@ -86,6 +90,17 @@ def _insert_anchors(lines: list[str]) -> str:
             result.append("")
         result.extend((f'<a name="{anchor}"></a>', "", line))
     return f"{'\n'.join(result).rstrip('\n')}\n"
+
+
+def _version_heading(line: str) -> str | None:
+    if (match := _RE_VERSION.fullmatch(line)) is None:
+        return None
+    version = cast("str", match["version"])
+    try:
+        Version(version)
+    except InvalidVersion:
+        return None
+    return version
 
 
 __all__ = [

@@ -31,8 +31,8 @@ and leaves bullets unwrapped. It keeps stable category anchors, omits empty cate
 source, and adds artifact and comparison links. Use `--artifact-label` for an ecosystem other than PyPI; omit
 `--artifact-url` when there is no external artifact.
 
-The command also accepts a `.rst` changelog with the same category names. For projects whose `:issue:` role points at
-PRs, pass `--issue-role pull`:
+The command also accepts a `.rst` changelog with the same category names. It links `:issue:` roles to issues and `:pr:`
+or `:pull:` roles to pull requests:
 
 ```bash
 uvx --from 'release-creator' release-creator notes \
@@ -40,7 +40,6 @@ uvx --from 'release-creator' release-creator notes \
   --tag 1.2.3 \
   --repository tox-dev/example \
   --previous 1.2.2 \
-  --issue-role pull \
   --artifact-url https://pypi.org/project/example/1.2.3/ > release-notes.md
 ```
 
@@ -51,9 +50,9 @@ first-time contributors remain listed even when their PR did not need a changelo
 other generated sections are discarded.
 
 Named Towncrier fragments need no issue or PR number. Before Towncrier builds the changelog, run
-`release-creator fragments --repository owner/repo --git`. The command reads each fragment's introducing squash commit,
-adds its PR link, and fails if the subject does not end in `(#number)`. For a checkout without Git history, pass a
-tab-separated subject map with `--commit-map commits.tsv` instead.
+`release-creator fragments --repository owner/repo`. The command reads the commits that introduced pending fragments,
+asks GitHub which merged pull request owns each commit, and adds its PR link and human author credit. The checkout needs
+the fragment history, and `gh` needs read access to the repository.
 
 The `tags` command calculates a version from pending fragments, validates numeric tags, and selects the preceding tag
 for GitHub comparisons:

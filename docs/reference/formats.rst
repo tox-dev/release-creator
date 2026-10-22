@@ -5,11 +5,10 @@
 Fragments
 =========
 
-The fragment linker accepts filenames such as ``+short-name.feature.md``. With ``--git`` it reads each fragment's
-introducing squash commit. With ``--commit-map`` it reads a UTF-8 TSV with one fragment filename and one subject per
-line. A subject ends with ``(#number)``. The default fragment directory is ``changelog.d``. ``--numbered-prs`` makes
-numeric Towncrier stems the source of PR numbers and author lookup; it leaves named fragments tied to their introducing
-squash subjects.
+The fragment linker accepts filenames such as ``+short-name.feature.md``. It reads each fragment's introducing commit
+from Git and asks GitHub for the merged pull request associated with that commit. The commit subject needs no PR marker.
+The default fragment directory is ``changelog.d``. ``--numbered-prs`` makes numeric Towncrier stems the source of PR
+numbers and author lookup; named fragments still use their introducing commits.
 
 With ``--format knope``, the default directory is ``.changeset``. A Knope fragment has a Markdown name such as
 ``trust-roots.md``, YAML front matter, and a level-one heading. The linker changes that heading and preserves the rest

@@ -2,7 +2,10 @@
 
 lazy from pathlib import Path
 
+from release_creator.anchors.names import draft_anchor
 from release_creator.categories import CHANGELOG_CATEGORIES
+from release_creator.fragments.names import fragment_category
+from release_creator.package_name import valid_package_name
 
 
 def render_preview(changelog: Path, package: str, fragments: Path) -> str:
@@ -14,12 +17,7 @@ def render_preview(changelog: Path, package: str, fragments: Path) -> str:
     :returns: The package's released history and current draft entries.
     :raises ValueError: The package or a fragment has an unsupported form.
     """
-    if (
-        not package
-        or not package[0].isascii()
-        or not package[0].isalnum()
-        or not all(character.isascii() and (character.isalnum() or character in "_.-") for character in package)
-    ):
+    if not valid_package_name(package):
         msg = f"invalid package: {package}"
         raise ValueError(msg)
     lines = changelog.read_text(encoding="utf-8").splitlines()
@@ -32,13 +30,7 @@ def render_preview(changelog: Path, package: str, fragments: Path) -> str:
     names = {kind: heading for kind, (heading, _) in CHANGELOG_CATEGORIES.items()}
     sections: dict[str, list[str]] = {}
     for fragment in sorted(fragments.glob("*.md")):
-        stem, separator, category = fragment.stem.rpartition(".")
-        if (
-            not separator
-            or not stem
-            or category not in names
-            or not (stem.isdecimal() or (stem.startswith("+") and stem[1:].replace("-", "").isalnum()))
-        ):
+        if (category := fragment_category(fragment, names)) is None:
             msg = f"invalid changelog fragment: {fragment}"
             raise ValueError(msg)
         content = fragment.read_text(encoding="utf-8").strip()
@@ -48,11 +40,11 @@ def render_preview(changelog: Path, package: str, fragments: Path) -> str:
         sections.setdefault(names[category], []).append(f"- {' '.join(line.strip() for line in content.splitlines())}")
     page = ["# Changelog", f"## {package}"]
     if sections:
-        draft = [f'<a name="draft-{package}"></a>', "", "### Draft", ""]
+        draft = [f'<a name="{draft_anchor(package)}"></a>', "", "### Draft", ""]
         for category in dict.fromkeys(names.values()):
             if (items := sections.get(category)) is not None:
                 draft.extend((
-                    f'<a name="draft-{package}-{category.lower().replace(" ", "-")}"></a>',
+                    f'<a name="{draft_anchor(package, category)}"></a>',
                     "",
                     f"#### {category}",
                     "",

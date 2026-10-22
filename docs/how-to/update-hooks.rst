@@ -2,21 +2,21 @@
  Update hook dependency pins
 #############################
 
-``prek update --freeze`` moves pre-commit hook revisions to commit SHAs. It does not update packages installed through
-``additional_dependencies``. Use ``release-creator hooks`` in the same weekly change to refresh exact package pins:
+``prek update --freeze`` moves pre-commit hook revisions to commit SHAs. Use ``release-creator hooks`` in the same
+weekly change to pin packages declared by Python hook repositories and packages in ``additional_dependencies``:
 
 .. code-block:: bash
 
     prek update --freeze --cooldown-days 7
-    release-creator hooks \
-      --config .pre-commit-config.yaml \
-      --exclude-newer "$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)" \
-      --python-version 3.15
+    release-creator hooks --exclude-newer '7 days' --python-version 3.15
     prek run --all-files
 
-The command resolves each hook's exact ``additional_dependencies`` and their transitive packages separately. It pins the
-full closure across platforms, including conditional dependencies such as Windows-only packages. Each added pin has an
-inline ``# release-creator managed`` marker so a later update can replace or remove it. Direct pins retain their
+The command checks out each external hook repository at its frozen commit and reads ``.pre-commit-hooks.yaml``. For
+selected Python hooks, it resolves the repository package with any exact ``additional_dependencies`` and adds the pinned
+closure to that hook's ``additional_dependencies``. It also resolves exact dependencies in local hooks. Conditional
+dependencies remain conditional, so a Windows-only package does not install on Linux. Non-Python hooks are unchanged.
+
+Generated pins have a ``# release-creator managed`` marker. The next update replaces them. Direct pins retain their
 spelling and comments; a flow-style list becomes a block list when the closure adds packages. A range such as
 ``mdformat-gfm>=1`` stays as written and is not a resolution root. Use the Python version that the hooks run with; the
 cutoff excludes newly published packages.

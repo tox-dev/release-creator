@@ -6,6 +6,7 @@ lazy import tomllib
 lazy from pathlib import Path
 
 from release_creator.fragments.knope import changeset_parts
+from release_creator.fragments.names import fragment_category
 
 
 def changed_fragments(config: Path, base: str) -> int:
@@ -16,10 +17,16 @@ def changed_fragments(config: Path, base: str) -> int:
     :returns: Number of changed fragments.
     :raises ValueError: The configuration or a changed fragment is invalid.
     """
+    if config.name == "pyproject.toml" and (towncrier_config := config.with_name("towncrier.toml")).is_file():
+        config = towncrier_config
     towncrier = tomllib.loads(config.read_text(encoding="utf-8"))["tool"]["towncrier"]
     directory = Path(towncrier["directory"])
     suffix = Path(towncrier["filename"]).suffix
-    categories = {item["directory"] for item in towncrier["type"]}
+    categories = (
+        set(towncrier["fragment"])
+        if "fragment" in towncrier
+        else {item.get("directory", item["name"].lower()) for item in towncrier["type"]}
+    )
     if not base or suffix not in {".md", ".rst"}:
         msg = "news validation needs a PR base and a Markdown or reStructuredText changelog"
         raise ValueError(msg)
@@ -27,14 +34,7 @@ def changed_fragments(config: Path, base: str) -> int:
     for path in _changed_paths(directory, base):
         if path.parent != directory or path.suffix != suffix:
             continue
-        match path.stem.rsplit(".", 2):
-            case [stem, category, number] if number.isdecimal():
-                pass
-            case [*stem_parts, category] if stem_parts:
-                stem = ".".join(stem_parts)
-            case _:
-                continue
-        if not ((stem.startswith("+") and len(stem) > 1) or stem.isdigit()) or category not in categories:
+        if fragment_category(path, categories) is None:
             msg = f"unsupported changelog fragment: {path}"
             raise ValueError(msg)
         if not path.read_text(encoding="utf-8").strip():

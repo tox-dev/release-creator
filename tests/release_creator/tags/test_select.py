@@ -14,9 +14,11 @@ lazy from release_creator.tags.select import next_tag, parse_tag, previous_tag, 
         pytest.param("auto", [], ["+one.feature.md"], "0.1.0", id="first-feature"),
         pytest.param("auto", ["1.2.3"], ["+one.breaking.md", "+two.feature.md"], "2.0.0", id="breaking"),
         pytest.param("auto", ["1.2.3"], ["+one.breaking.rst"], "2.0.0", id="breaking-rst"),
+        pytest.param("auto", ["1.2.3"], ["+one.breaking.2.md"], "2.0.0", id="breaking-counter"),
         pytest.param("auto", ["1.2.3", "junk"], ["+one.feature.md"], "1.3.0", id="feature"),
         pytest.param("auto", ["v1.2.3"], ["+one.feature.md"], "1.3.0", id="prefixed-history"),
         pytest.param("auto", ["1.2.3"], ["+one.feature.rst"], "1.3.0", id="feature-rst"),
+        pytest.param("auto", ["1.2.3"], ["+one.feature.2.md"], "1.3.0", id="feature-counter"),
         pytest.param("auto", ["1.2.3"], ["+one.bugfix.md"], "1.2.4", id="fix"),
         pytest.param("auto", ["1.2.3rc1"], ["+one.bugfix.md"], "1.2.4", id="fix-after-prerelease"),
         pytest.param("major", ["1.2.3"], ["+one.bugfix.md"], "2.0.0", id="major"),
@@ -89,6 +91,10 @@ def test_previous_tag_preserves_prefix() -> None:
 
 def test_previous_tag_orders_prereleases() -> None:
     assert previous_tag("1.2.3", ["1.2.2", "1.2.3rc1", "1.2.3b1"]) == "1.2.3rc1"
+
+
+def test_previous_tag_stable_only_skips_prereleases_and_postreleases() -> None:
+    assert previous_tag("1.2.3", ["1.2.2", "1.2.3rc1", "1.2.2.post1"], stable_only=True) == "1.2.2"
 
 
 def test_previous_tag_missing() -> None:

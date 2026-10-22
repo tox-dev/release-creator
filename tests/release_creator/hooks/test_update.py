@@ -3,11 +3,13 @@
 import subprocess  # ruff: ignore[suspicious-subprocess-import]  # CompletedProcess models the uv boundary.
 from typing import TYPE_CHECKING
 from zipfile import ZipFile
+lazy from unittest.mock import MagicMock
 
 import pytest
 from yaml import safe_load
 
 lazy from release_creator.hooks.update import update_pins
+lazy from release_creator.process import run_text
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -84,6 +86,229 @@ def test_resolves_real_universal_closure(tmp_path: Path, monkeypatch: pytest.Mon
         "closure-child==2.0.0",
         'closure-color==0.4.6; sys_platform == "win32"',
     ]
+
+
+@pytest.fixture
+def upstream_python_hook(tmp_path: Path) -> tuple[Path, str]:
+    upstream = tmp_path / "upstream"
+    upstream.mkdir()
+    (upstream / ".pre-commit-hooks.yaml").write_text(
+        "- id: lint\n  name: lint\n  entry: lint\n  language: python\n", encoding="utf-8"
+    )
+    (upstream / "pyproject.toml").write_text(
+        '[project]\nname = "fixture-lint"\nversion = "1.0"\ndependencies = ["click>=8"]\n', encoding="utf-8"
+    )
+    assert run_text(["git", "init", "-q", str(upstream)]).returncode == 0
+    assert run_text(["git", "-C", str(upstream), "add", "."]).returncode == 0
+    assert (
+        run_text(
+            [
+                "git",
+                "-C",
+                str(upstream),
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.org",
+                "commit",
+                "-qm",
+                "Init",
+            ],
+        ).returncode
+        == 0
+    )
+    return upstream, run_text(["git", "-C", str(upstream), "rev-parse", "HEAD"]).stdout.strip()
+
+
+@pytest.mark.parametrize("existing", [pytest.param(False, id="new-list"), pytest.param(True, id="existing-list")])
+@pytest.mark.parametrize(
+    "trailing_newline", [pytest.param(False, id="no-final-newline"), pytest.param(True, id="final-newline")]
+)
+def test_pins_python_hook_package_dependencies(
+    tmp_path: Path,
+    mocker: MockerFixture,
+    upstream_python_hook: tuple[Path, str],
+    existing: bool,
+    trailing_newline: bool,
+) -> None:
+    upstream, revision = upstream_python_hook
+    config = tmp_path / ".pre-commit-config.yaml"
+    dependencies = "        additional_dependencies: [colorama==0.4.6]\n" if existing else ""
+    source = f"repos:\n  - repo: {upstream.as_uri()}\n    rev: {revision}\n    hooks:\n      - id: lint\n{dependencies}"
+    config.write_text(
+        source if trailing_newline else source.rstrip("\n"),
+        encoding="utf-8",
+    )
+    mocker.patch("release_creator.hooks.update.shutil.which", side_effect=lambda name: name)
+    colorama = "colorama==0.4.6\n" if existing else ""
+    commands = _mock_hook_compiler(mocker, f"-e file:///checkout\nclick==8.1\n{colorama}")
+
+    update_pins(config, "7 days", "3.15")
+
+    parsed = safe_load(config.read_text(encoding="utf-8"))
+    assert parsed["repos"][0]["hooks"][0]["additional_dependencies"] == (
+        ["colorama==0.4.6", "click==8.1"] if existing else ["click==8.1"]
+    )
+    assert any(
+        call.args[0][0] == "uv" and ("colorama\n" in call.kwargs["stdin"]) == existing
+        for call in commands.call_args_list
+    )
+    assert "# release-creator managed" in config.read_text(encoding="utf-8")
+    first = config.read_text(encoding="utf-8")
+
+    update_pins(config, "7 days", "3.15")
+
+    assert config.read_text(encoding="utf-8") == first
+
+
+def test_drops_managed_dependencies_from_system_hook(
+    tmp_path: Path, mocker: MockerFixture, upstream_python_hook: tuple[Path, str]
+) -> None:
+    upstream, _ = upstream_python_hook
+    (upstream / ".pre-commit-hooks.yaml").write_text(
+        "- id: lint\n  name: lint\n  entry: lint\n  language: system\n", encoding="utf-8"
+    )
+    assert run_text(["git", "-C", str(upstream), "add", "."]).returncode == 0
+    assert (
+        run_text([
+            "git",
+            "-C",
+            str(upstream),
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.org",
+            "commit",
+            "-qm",
+            "System",
+        ]).returncode
+        == 0
+    )
+    revision = run_text(["git", "-C", str(upstream), "rev-parse", "HEAD"]).stdout.strip()
+    config = tmp_path / ".pre-commit-config.yaml"
+    source = (
+        f"repos:\n  - repo: {upstream.as_uri()}\n    rev: {revision}\n    hooks:\n      - id: lint\n"
+        '        additional_dependencies:\n          - "click==8" # release-creator managed\n'
+    )
+    config.write_text(source, encoding="utf-8")
+    command = mocker.patch("release_creator.hooks.update.run_text", wraps=run_text)
+
+    update_pins(config, "7 days", "3.15")
+
+    assert safe_load(config.read_text(encoding="utf-8"))["repos"][0]["hooks"][0]["additional_dependencies"] == []
+    assert all(call.args[0][0] != "uv" for call in command.call_args_list)
+
+
+@pytest.mark.parametrize(
+    ("revision", "error", "message"),
+    [
+        pytest.param(None, TypeError, "missing frozen revision", id="missing"),
+        pytest.param("v1.0.0", ValueError, "must use a frozen commit", id="moving-tag"),
+    ],
+)
+def test_rejects_unfrozen_hook_repository(
+    tmp_path: Path, revision: str | None, error: type[Exception], message: str
+) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    revision_line = f"    rev: {revision}\n" if revision is not None else ""
+    source = f"repos:\n  - repo: https://example.org/hooks.git\n{revision_line}    hooks:\n      - id: lint\n"
+    config.write_text(source, encoding="utf-8")
+
+    with pytest.raises(error) as caught:
+        update_pins(config, "7 days", "3.15")
+
+    assert message in str(caught.value)
+    assert config.read_text(encoding="utf-8") == source
+
+
+def test_python_hook_without_dependencies_does_not_add_a_list(
+    tmp_path: Path, mocker: MockerFixture, upstream_python_hook: tuple[Path, str]
+) -> None:
+    upstream, revision = upstream_python_hook
+    config = tmp_path / ".pre-commit-config.yaml"
+    source = f"repos:\n  - repo: {upstream.as_uri()}\n    rev: {revision}\n    hooks:\n      - id: lint\n"
+    config.write_text(source, encoding="utf-8")
+    commands = _mock_hook_compiler(mocker, "-e file:///checkout\n")
+
+    update_pins(config, "7 days", "3.15")
+
+    assert config.read_text(encoding="utf-8") == source
+    assert any(call.args[0][0] == "uv" for call in commands.call_args_list)
+
+
+@pytest.mark.parametrize(
+    "hook", [pytest.param("invalid", id="not-mapping"), pytest.param("{name: lint}", id="missing-id")]
+)
+def test_rejects_invalid_hook_entry(tmp_path: Path, upstream_python_hook: tuple[Path, str], hook: str) -> None:
+    upstream, revision = upstream_python_hook
+    config = tmp_path / ".pre-commit-config.yaml"
+    source = f"repos:\n  - repo: {upstream.as_uri()}\n    rev: {revision}\n    hooks:\n      - {hook}\n"
+    config.write_text(source, encoding="utf-8")
+
+    with pytest.raises(TypeError) as caught:
+        update_pins(config, "7 days", "3.15")
+
+    assert "selected hook must be a mapping with an id" in str(caught.value)
+    assert config.read_text(encoding="utf-8") == source
+
+
+@pytest.mark.parametrize(
+    "failure", [pytest.param("git-missing", id="git-missing"), pytest.param("clone-failed", id="clone-failed")]
+)
+def test_rejects_unavailable_hook_repository(tmp_path: Path, mocker: MockerFixture, failure: str) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    source = f"repos:\n  - repo: file:///missing\n    rev: {'a' * 40}\n    hooks:\n      - id: lint\n"
+    config.write_text(source, encoding="utf-8")
+    if failure == "git-missing":
+        mocker.patch(
+            "release_creator.hooks.update.shutil.which", side_effect=lambda name: None if name == "git" else name
+        )
+        expected = "git is required"
+    else:
+        mocker.patch(
+            "release_creator.hooks.update.run_text",
+            return_value=subprocess.CompletedProcess([], 1, "", "repository not found"),
+        )
+        expected = "cannot read hook repository"
+
+    with pytest.raises(FileNotFoundError if failure == "git-missing" else ValueError) as caught:
+        update_pins(config, "7 days", "3.15")
+
+    assert expected in str(caught.value)
+    assert config.read_text(encoding="utf-8") == source
+
+
+def test_rejects_flow_style_hook_when_package_dependencies_need_a_list(
+    tmp_path: Path, mocker: MockerFixture, upstream_python_hook: tuple[Path, str]
+) -> None:
+    upstream, revision = upstream_python_hook
+    config = tmp_path / ".pre-commit-config.yaml"
+    source = f"repos:\n  - repo: {upstream.as_uri()}\n    rev: {revision}\n    hooks: [{{id: lint}}]\n"
+    config.write_text(source, encoding="utf-8")
+    _mock_hook_compiler(mocker, "-e file:///checkout\nclick==8.1\n")
+
+    with pytest.raises(ValueError, match="flow-style hook"):
+        update_pins(config, "7 days", "3.15")
+
+    assert config.read_text(encoding="utf-8") == source
+
+
+def _mock_hook_compiler(mocker: MockerFixture, output: str) -> MagicMock:
+    original = run_text
+
+    def resolve(
+        command: list[str], *, stdin: str | None = None, cwd: Path | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        if command[0] == "uv":
+            assert stdin is not None
+            assert stdin.startswith("-e file://")
+            return subprocess.CompletedProcess(command, 0, output, "")
+        return original(command, cwd=cwd, stdin=stdin)
+
+    mocker.patch("release_creator.hooks.update.shutil.which", side_effect=lambda name: name)
+    patched = mocker.patch("release_creator.hooks.update.run_text", side_effect=resolve)
+    assert isinstance(patched, MagicMock)
+    return patched
 
 
 def _write_wheel(directory: Path, name: str, version: str, requirements: tuple[str, ...]) -> None:

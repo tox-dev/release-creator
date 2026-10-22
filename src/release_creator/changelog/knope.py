@@ -5,6 +5,7 @@ lazy from pathlib import Path
 
 lazy import yaml
 
+from release_creator.anchors.names import draft_anchor
 from release_creator.fragments.knope import changeset_parts
 from release_creator.fragments.names import pending_changesets
 
@@ -43,11 +44,11 @@ def render_knope_preview(changelog: Path, config: Path, fragments: Path) -> str:
             items.setdefault(categories[kind], []).append(
                 f"- {heading}{''.join(f'\n  {line}' if line else '\n' for line in body.splitlines())}"
             )
-    draft = ['<a name="draft"></a>', "", "## Draft", ""]
+    draft = [f'<a name="{draft_anchor()}"></a>', "", "## Draft", ""]
     for section in sections:
         if (entries := items.get(section["name"])) is not None:
             draft.extend((
-                f'<a name="draft-{section["name"].lower().replace(" ", "-")}"></a>',
+                f'<a name="{draft_anchor(category=section["name"])}"></a>',
                 "",
                 f"### {section['name']}",
                 "",

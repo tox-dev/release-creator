@@ -334,7 +334,6 @@ def test_render_rst_keeps_named_credit_when_generated_author_is_unavailable() ->
     result = render_rst(
         changelog,
         ReleaseContext(tag="3.5.0", repository="tox-dev/filelock", previous="3.4.2"),
-        "pull",
         generated,
     )
 
@@ -356,7 +355,7 @@ def test_render_rst_rejects_uncredited_entry_with_unavailable_generated_author()
     generated = "* Enable context decorator in https://github.com/tox-dev/filelock/pull/128\n"
 
     with pytest.raises(ValueError, match="no credit for pull request #128 with an unavailable author"):
-        render_rst(changelog, ReleaseContext(tag="3.5.0", repository="tox-dev/filelock"), "pull", generated)
+        render_rst(changelog, ReleaseContext(tag="3.5.0", repository="tox-dev/filelock"), generated)
 
 
 @pytest.mark.parametrize(
@@ -511,7 +510,7 @@ def test_render_rst_maps_categories_and_credits() -> None:
         Fixed
         -----
 
-        - Discard bad cache entries (:issue:`42`) - by :user:`alice` and :user:`bob`.
+        - Discard bad cache entries (:pr:`42`) - by :user:`alice` and :user:`bob`.
           Preserve ``None`` in the cache.
 
         .. _release-1-2-2:
@@ -525,7 +524,7 @@ def test_render_rst_maps_categories_and_credits() -> None:
         - Old change.
         """)
     context = ReleaseContext(tag="1.2.3", repository="tox-dev/example", previous="1.2.2")
-    result = render_rst(changelog, context, "pull")
+    result = render_rst(changelog, context)
     assert result == (
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
         "- Discard bad cache entries ([#42](https://github.com/tox-dev/example/pull/42)) by @alice and @bob. "
@@ -620,6 +619,29 @@ def test_render_rst_keeps_nested_bullets() -> None:
         "  - wheel to `0.41.2` from `0.41.1` on `3.7+` ([#2628](https://github.com/pypa/virtualenv/pull/2628))\n\n"
         "**Full Changelog**: https://github.com/pypa/virtualenv/commits/20.24.4\n"
     )
+
+
+def test_render_rst_keeps_nested_bullet_without_intro() -> None:
+    changelog = (
+        "4.24.2 (2025-03-07)\n=====================\n\nFixed\n-----\n\n"
+        "- - ``--parallel-no-spinner`` respects ``--parallel N`` (:issue:`3495`)\n"
+    )
+
+    result = render_rst(changelog, ReleaseContext(tag="4.24.2", repository="tox-dev/tox"))
+
+    assert "- - `--parallel-no-spinner` respects `--parallel N` " in result
+    assert "[#3495](https://github.com/tox-dev/tox/issues/3495)" in result
+
+
+def test_render_rst_joins_item_paragraphs() -> None:
+    changelog = (
+        "1.2.3 (today)\n==============\n\nFixed\n-----\n\n"
+        "- Preserve the existing file.\n\n  Explain why the file is kept. (:pr:`42`)\n"
+    )
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert "- Preserve the existing file. Explain why the file is kept. " in result
 
 
 def test_render_rst_keeps_paragraph_after_nested_bullets() -> None:
@@ -873,6 +895,14 @@ def test_render_rst_omits_empty_prerelease_section() -> None:
     assert result == "**Full Changelog**: https://github.com/tox-dev/example/commits/v2.0.0a2\n"
 
 
+def test_render_rst_accepts_version_without_adornment() -> None:
+    changelog = "1.2.3 (today)\n\nFixed\n-----\n\n- Correct a bug.\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert "### Bug fixes\n\n- Correct a bug." in result
+
+
 def test_render_rst_rejects_package_selection() -> None:
     with pytest.raises(ValueError, match="requires a Markdown changelog"):
         render_rst("", ReleaseContext(tag="1.2.3", repository="tox-dev/example", package="example"))
@@ -980,6 +1010,89 @@ def test_render_rst_preserves_field_literals(source: str, expected: str) -> None
     )
 
 
+def test_render_rst_keeps_roles_inside_inline_code() -> None:
+    changelog = (
+        "1.2.3 (today)\n==============\n\nFixed\n-----\n\n- Document ``:pr:`` and link :pr:`43` by :user:`alice`.\n"
+    )
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert "Document `:pr:` and link" in result
+    assert "[#43](https://github.com/tox-dev/example/pull/43) by @alice" in result
+
+
+def test_render_rst_rejects_file_inclusion() -> None:
+    changelog = "1.2.3 (today)\n==============\n\nAdded\n-----\n\n.. include:: /etc/passwd\n"
+
+    with pytest.raises(ValueError, match="unexpected release text"):
+        render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+
+@pytest.mark.parametrize(
+    ("role", "message"),
+    [
+        pytest.param(":PEP:`bad`", "invalid PEP number", id="pep"),
+        pytest.param(":pr:`wrong`", "invalid pr number", id="pull-request"),
+    ],
+)
+def test_render_rst_rejects_invalid_numeric_role(role: str, message: str) -> None:
+    changelog = f"1.2.3 (today)\n==============\n\nFixed\n-----\n\n- Link {role}.\n"
+
+    with pytest.raises(ValueError, match=message):
+        render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+
+def test_render_rst_keeps_duplicate_reference_labels() -> None:
+    changelog = (
+        "1.2.3 (today)\n==============\n\nAdded\n-----\n\n"
+        "- First `#42 <https://github.com/tox-dev/example/issues/42>`_.\n\n"
+        "Fixed\n-----\n\n- Second `#42 <https://github.com/tox-dev/example/issues/42>`_.\n"
+    )
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert result == (
+        '<a name="release-1-2-3-added"></a>\n\n### Features\n\n'
+        "- First [#42](https://github.com/tox-dev/example/issues/42).\n\n"
+        '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
+        "- Second [#42](https://github.com/tox-dev/example/issues/42).\n\n"
+        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+    )
+
+
+def test_render_rst_rejects_nested_warning() -> None:
+    changelog = (
+        "1.2.3 (today)\n==============\n\nAdded\n-----\n\n- Add a feature.\n\n  .. warning::\n\n     A caveat.\n"
+    )
+
+    with pytest.raises(TypeError, match="unexpected release text: warning"):
+        render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+
+def test_render_rst_keeps_bare_url() -> None:
+    changelog = "1.2.3 (today)\n==============\n\nAdded\n-----\n\n- See https://example.org/guide.\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert "- See https://example.org/guide." in result
+
+
+def test_render_rst_keeps_internal_reference_label() -> None:
+    changelog = "1.2.3 (today)\n==============\n\n.. _detail:\n\nAdded\n-----\n\n- See detail_.\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert "- See detail." in result
+
+
+def test_render_rst_keeps_inline_emphasis() -> None:
+    changelog = "1.2.3 (today)\n==============\n\nAdded\n-----\n\n- *Read* the **new** guide.\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert "- *Read* the **new** guide." in result
+
+
 @pytest.mark.parametrize(
     ("role", "expected"),
     [
@@ -1007,6 +1120,26 @@ def test_render_rst_keeps_issue_role_as_issue() -> None:
     changelog = "1.2.3 (today)\n==============\n\nFixed\n-----\n\n- Fix a bug (:issue:`5`).\n"
     result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
     assert "[#5](https://github.com/tox-dev/example/issues/5)" in result
+
+
+@pytest.mark.parametrize(
+    ("changelog", "format_name"),
+    [
+        pytest.param("## 1.2.3 (today)\n", "markdown", id="markdown"),
+        pytest.param("1.2.3 (today)\n==============\n", "rst", id="rst"),
+    ],
+)
+def test_render_empty_release_section_has_comparison_link(changelog: str, format_name: str) -> None:
+    context = ReleaseContext(
+        tag="1.2.3", repository="tox-dev/example", artifact_url="https://pypi.org/project/example/1.2.3/"
+    )
+
+    result = (render_markdown if format_name == "markdown" else render_rst)(changelog, context)
+
+    assert result == (
+        "[PyPI release](https://pypi.org/project/example/1.2.3/)\n\n"
+        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+    )
 
 
 def test_render_rst_omits_empty_category() -> None:
@@ -1064,24 +1197,22 @@ def test_render_rst_stops_at_linked_previous_version() -> None:
 
 
 @pytest.mark.parametrize(
-    ("changelog", "issue_role", "message"),
+    ("changelog", "message"),
     [
-        pytest.param("", "issue", "found 0", id="absent"),
-        pytest.param("1.2.3 (today)\n======\n1.2.3 (today)\n======\n", "issue", "found 2", id="duplicate"),
-        pytest.param("1.2.3 (today)\n======\n- Entry.\n", "issue", "outside a category", id="uncategorized"),
-        pytest.param("1.2.3 (today)\n======\nAn orphan paragraph.\n", "issue", "unexpected release text", id="orphan"),
+        pytest.param("", "found 0", id="absent"),
+        pytest.param("1.2.3 (today)\n======\n1.2.3 (today)\n======\n", "found 2", id="duplicate"),
+        pytest.param("1.2.3 (today)\n======\n- Entry.\n", "outside a category", id="uncategorized"),
+        pytest.param("1.2.3 (today)\n======\nAn orphan paragraph.\n", "unexpected release text", id="orphan"),
         pytest.param(
             "1.2.3 (today)\n======\nUnsupported\n-----------\n",
-            "issue",
             "unknown changelog category",
             id="unknown-category",
         ),
-        pytest.param("1.2.3 (today)\n======\n", "bad", "invalid issue role", id="issue-role"),
     ],
 )
-def test_render_rst_rejects_invalid_input(changelog: str, issue_role: str, message: str) -> None:
+def test_render_rst_rejects_invalid_input(changelog: str, message: str) -> None:
     with pytest.raises(ValueError, match=message):
-        render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), issue_role)
+        render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
 
 
 @pytest.mark.parametrize(

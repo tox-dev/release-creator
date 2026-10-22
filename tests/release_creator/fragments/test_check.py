@@ -41,11 +41,12 @@ def news_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         pytest.param("+topic.feature.md", "Add a feature.\n", 1, "", id="named"),
         pytest.param("42.feature.md", "Add a feature.\n", 1, "", id="numbered"),
         pytest.param("+topic.feature.1.md", "Add a feature.\n", 1, "", id="multiple-entries"),
+        pytest.param("42.feature.2.md", "Add a feature.\n", 1, "", id="numbered-counter"),
         pytest.param("+topic.doc.md", "Add a feature.\n", 0, "unsupported changelog fragment", id="category"),
         pytest.param("topic.feature.md", "Add a feature.\n", 0, "unsupported changelog fragment", id="name"),
         pytest.param("+topic.feature.md", " \n", 0, "empty changelog fragment", id="empty"),
         pytest.param("README.md", "Read me.\n", 0, "", id="outside-directory"),
-        pytest.param("+.md", "Uncategorized.\n", 0, "", id="incomplete-name"),
+        pytest.param("+.md", "Uncategorized.\n", 0, "unsupported changelog fragment", id="incomplete-name"),
         pytest.param("+topic.feature.rst", "Add a feature.\n", 0, "", id="wrong-extension"),
     ],
 )
@@ -82,6 +83,40 @@ def test_changed_fragments_requires_git(news_repository: Path, mocker: MockerFix
 
     with pytest.raises(FileNotFoundError, match="Git is required"):
         changed_fragments(news_repository / "pyproject.toml", "main")
+
+
+def test_changed_fragments_reads_towncrier_tables(news_repository: Path) -> None:
+    (news_repository / "towncrier.toml").write_text(
+        '[tool.towncrier]\ndirectory = "changelog.d"\nfilename = "CHANGELOG.md"\n'
+        '[tool.towncrier.fragment.change]\nname = "Changes"\n',
+        encoding="utf-8",
+    )
+    (news_repository / "changelog.d" / "+topic.change.2.md").write_text("Change behavior.\n", encoding="utf-8")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+
+    assert changed_fragments(news_repository / "pyproject.toml", "main") == 1
+
+
+def test_towncrier_check_rejects_unprefixed_fragment(news_repository: Path) -> None:
+    config = Path(__file__).resolve().parents[3] / "pyproject.toml"
+    shutil.copyfile(config, news_repository / "pyproject.toml")
+    (news_repository / "docs").mkdir()
+    (news_repository / "docs" / "changelog.md").write_text("# Changelog\n", encoding="utf-8")
+    (news_repository / "changelog.d" / "topic.feature.md").write_text("Add a feature.\n", encoding="utf-8")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+
+    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Installed CLI in a temporary repo.
+        [str(Path(sys.executable).with_name("towncrier")), "check", "--compare-with", "origin/main"],
+        cwd=news_repository,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "Issue name 'topic' does not match the configured pattern" in result.stderr
 
 
 def test_changed_fragments_rejects_missing_base(news_repository: Path) -> None:

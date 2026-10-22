@@ -66,7 +66,7 @@ def test_render_preview_omits_empty_draft(changelog: Path, tmp_path: Path) -> No
 
 def test_render_preview_supports_first_draft(changelog: Path, tmp_path: Path) -> None:
     changelog.write_text("# Changelog\n\n## pyproject-fmt\n", encoding="utf-8")
-    (tmp_path / "+first.feature.md").write_text("First release.\n", encoding="utf-8")
+    (tmp_path / "+first.feature.1.md").write_text("First release.\n", encoding="utf-8")
 
     result = render_preview(changelog, "pyproject-fmt", tmp_path)
 

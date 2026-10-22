@@ -10,7 +10,7 @@ lazy from pathlib import Path
 import pytest
 
 from release_creator.fragments.links import add_pull_request_links
-from release_creator.fragments.pull_requests import PullRequestAuthor
+from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor
 from release_creator.notes.render import ReleaseContext, render_markdown, render_rst
 
 
@@ -45,11 +45,9 @@ def test_markdown_template_keeps_numbered_and_named_pull_requests(
     add_pull_request_links(
         tmp_path / "changelog.d",
         "tox-dev/example",
-        {"+named.bugfix.md": "Fix a named bug (#124)", "123.bugfix.md": f"Fix a numbered bug (#{number})"},
         {
-            "123": PullRequestAuthor(handle="alice", is_bot=False),
-            "124": PullRequestAuthor(handle="alice", is_bot=False),
-            "125": PullRequestAuthor(handle="alice", is_bot=False),
+            "+named.bugfix.md": PullRequest(number="124", author=PullRequestAuthor(handle="alice", is_bot=False)),
+            "123.bugfix.md": PullRequest(number=number, author=PullRequestAuthor(handle="alice", is_bot=False)),
         },
     )
 
@@ -109,8 +107,7 @@ def test_rst_template_renders_notes_with_stable_anchors(
     add_pull_request_links(
         tmp_path / "changelog.d",
         "tox-dev/example",
-        {"1.bugfix.rst": "Fix the loader (#2)"},
-        {"2": PullRequestAuthor(handle="alice", is_bot=False)},
+        {"1.bugfix.rst": PullRequest(number="2", author=PullRequestAuthor(handle="alice", is_bot=False))},
     )
 
     subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Fixed command and temporary checkout.

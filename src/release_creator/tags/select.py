@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from packaging.version import InvalidVersion, Version
+
+from release_creator.fragments.names import fragment_category
 
 if TYPE_CHECKING:
     from datetime import date
@@ -33,13 +36,8 @@ def next_tag(bump: str, tags: list[str], fragments: list[str], release_date: dat
     current = max(versions, default=Version("0.0.0"))
     major, minor, patch = current.release
     if bump == "auto":
-        bump = (
-            "major"
-            if any(fragment.endswith((".breaking.md", ".breaking.rst")) for fragment in fragments)
-            else "minor"
-            if any(fragment.endswith((".feature.md", ".feature.rst")) for fragment in fragments)
-            else "patch"
-        )
+        categories = {fragment_category(Path(fragment)) for fragment in fragments}
+        bump = "major" if "breaking" in categories else "minor" if "feature" in categories else "patch"
     match bump:
         case "major":
             version = (major + 1, 0, 0)
@@ -59,11 +57,12 @@ def next_tag(bump: str, tags: list[str], fragments: list[str], release_date: dat
     return f"{prefix}{'.'.join(map(str, version))}"
 
 
-def previous_tag(tag: str, tags: list[str]) -> str | None:
+def previous_tag(tag: str, tags: list[str], *, stable_only: bool = False) -> str | None:
     """Select the greatest numeric release tag before ``tag``.
 
     :param tag: Release tag whose predecessor is needed.
     :param tags: Existing repository tags.
+    :param stable_only: Exclude prerelease and postrelease tags.
     :returns: The preceding tag, or ``None`` when this is the first release.
     """
     target = parse_tag(tag)
@@ -73,7 +72,7 @@ def previous_tag(tag: str, tags: list[str]) -> str | None:
             version = parse_tag(candidate)
         except ValueError:
             continue
-        if version < target:
+        if version < target and (not stable_only or (not version.is_prerelease and not version.is_postrelease)):
             candidates.append((version, candidate))
     return max(candidates)[1] if candidates else None
 

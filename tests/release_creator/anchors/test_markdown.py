@@ -50,9 +50,32 @@ def test_add_release_anchors_preserves_other_anchors() -> None:
     )
 
 
-def test_add_release_anchors_requires_release_heading() -> None:
+@pytest.mark.parametrize(
+    "changelog",
+    [
+        pytest.param("# Changelog\n", id="no-heading"),
+        pytest.param("## Contents\n", id="non-version-heading"),
+    ],
+)
+def test_add_release_anchors_requires_release_heading(changelog: str) -> None:
     with pytest.raises(ValueError, match="no Markdown release headings"):
-        add_release_anchors("# Changelog\n")
+        add_release_anchors(changelog)
+
+
+@pytest.mark.parametrize(
+    "version",
+    [
+        pytest.param("1.2.3.post1", id="postrelease"),
+        pytest.param("1.2.3.dev1", id="development"),
+    ],
+)
+def test_add_release_anchors_accepts_pep440_suffixes(version: str) -> None:
+    assert add_release_anchors(f"## {version} (2026-10-22)\n\n### Fixed\n") == (
+        f'<a name="release-{version.replace(".", "-")}"></a>\n\n'
+        f"## {version} (2026-10-22)\n\n"
+        f'<a name="release-{version.replace(".", "-")}-fixed"></a>\n\n'
+        "### Fixed\n"
+    )
 
 
 @pytest.mark.parametrize(

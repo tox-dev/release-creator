@@ -25,7 +25,7 @@ classifiers = [
   "Typing :: Typed",
 ]
 dynamic = [ "readme", "version" ]
-dependencies = [ "mdformat>=1,<2", "mdformat-gfm>=1,<2", "packaging>=26", "pyyaml>=6", "tomli-w>=1.2" ]
+dependencies = [ "docutils>=0.22", "mdformat>=1,<2", "mdformat-gfm>=1,<2", "packaging>=26", "pyyaml>=6" ]
 urls.Changelog = "https://release-creator.readthedocs.io/en/latest/changelog.html"
 urls.Documentation = "https://release-creator.readthedocs.io/"
 urls.Homepage = "https://release-creator.readthedocs.io/"
@@ -41,7 +41,7 @@ test = [
   "pytest>=9",
   "pytest-cov>=7",
   "pytest-mock>=3.17",
-  { include-group = "release" },
+  { include-group = "release-prepare" },
 ]
 type = [ "ty>=0.0.84", { include-group = "test" }, { include-group = "docs" } ]
 docs = [
@@ -53,8 +53,12 @@ docs = [
   "sphinxcontrib-mermaid>=2.1.1",
 ]
 fix = [ "prek>=0.2" ]
+lock-tools = [ "nab==0.0.22" ]
 pkg-meta = [ "check-wheel-contents>=0.6.3", "twine>=7", "uv>=0.12.22" ]
-release = [ "towncrier>=26.9" ]
+release-check = [ "prek>=0.2" ]
+release-notes = []
+release-prepare = [ "prek>=0.2", "towncrier>=26.9" ]
+release-validate = [ "prek>=0.2" ]
 
 [tool.hatch]
 version.source = "vcs"
@@ -112,6 +116,7 @@ directory = "changelog.d"
 filename = "docs/changelog.md"
 template = "release_creator.fragments:template.jinja2"
 title_format = false
+orphan_prefix = "+"
 type = [
   { directory = "feature", name = "Added", showcontent = true },
   { directory = "change", name = "Changes", showcontent = true },
@@ -124,3 +129,18 @@ type = [
   { directory = "removal", name = "Removed", showcontent = true },
   { directory = "packaging", name = "Packaging", showcontent = true },
 ]
+issue_pattern = "\\d+"
+
+[tool.nab]
+mode = "universal"
+base-group = "project-runtime"
+build-group = "build"
+default-groups = []
+uploaded-prior-to = "P7D"
+decision-order = "stable"
+matrix.python = ">=3.15,<3.16"
+matrix.platforms = [ "linux_x86_64", "linux_aarch64", "macos_arm64", "windows_amd64" ]
+
+[[tool.nab.package-rules]]
+match = [ "nab", "nab-index", "nab-markersets", "nab-project", "nab-provider", "nab-resolver" ]
+uploaded-prior-to = "2026-10-19T00:00:00Z"

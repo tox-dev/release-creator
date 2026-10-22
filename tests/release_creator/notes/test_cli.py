@@ -51,12 +51,10 @@ def test_notes_cli_renders_rst(
             "1.2.3",
             "--repository",
             "tox-dev/example",
-            "--issue-role",
-            "pull",
         ],
     )
     main()
-    assert "- Correct a bug ([#4](https://github.com/tox-dev/example/pull/4))." in capsys.readouterr().out
+    assert "- Correct a bug ([#4](https://github.com/tox-dev/example/issues/4))." in capsys.readouterr().out
 
 
 def test_notes_cli_selects_package(

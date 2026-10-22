@@ -1,14 +1,13 @@
-"""Stage only artifacts absent from PyPI and verify their identity."""
+"""Verify published PyPI distributions against local build files."""
 
 lazy import hashlib
 lazy import http
 lazy import json
-lazy import shutil
 lazy import time
 lazy from pathlib import Path
-lazy from typing import Literal
+lazy from typing import cast
 lazy from urllib.error import HTTPError
-lazy from urllib.parse import quote
+lazy from urllib.parse import quote, unquote, urlsplit, urlunsplit
 lazy from urllib.request import Request, urlopen
 
 lazy from packaging.utils import (
@@ -21,13 +20,14 @@ lazy from packaging.utils import (
 lazy from packaging.version import InvalidVersion, Version
 
 
-def verify_artifacts(project: str, version: str, dist: Path, wait_seconds: int) -> None:
+def verify_artifacts(project: str, version: str, dist: Path, wait_seconds: int) -> list[str]:
     """Wait only for PyPI's complete, consistent release view.
 
     :param project: PyPI project name.
     :param version: Release version.
     :param dist: Directory holding the expected distribution files.
     :param wait_seconds: Maximum time to wait for PyPI propagation.
+    :returns: Published distribution URLs for provenance verification.
     :raises ValueError: The release is incomplete at the deadline or its files differ.
     :raises _IncompleteReleaseError: PyPI has not published every expected file by the deadline.
     """
@@ -37,30 +37,22 @@ def verify_artifacts(project: str, version: str, dist: Path, wait_seconds: int) 
     deadline = time.monotonic() + wait_seconds
     while True:
         try:
-            reconcile_artifacts(project, version, dist, "verify")
+            urls = _verify_files(project, version, dist)
         except _IncompleteReleaseError:
             if (remaining := deadline - time.monotonic()) <= 0:
                 raise
             time.sleep(min(2, remaining))
         else:
-            return
+            return urls
 
 
-def reconcile_artifacts(
-    project: str,
-    version: str,
-    dist: Path,
-    mode: Literal["stage", "verify"],
-    missing_dir: Path | None = None,
-) -> int:
-    """Compare local artifacts with PyPI and stage the unpublished subset.
+def _verify_files(project: str, version: str, dist: Path) -> list[str]:
+    """Require PyPI to contain exactly the locally built files.
 
     :param project: PyPI project name.
     :param version: Release version.
     :param dist: Directory holding the expected distribution files.
-    :param mode: Whether to stage missing files or verify publication.
-    :param missing_dir: New directory for files absent from PyPI.
-    :returns: Number of artifacts absent from PyPI before this check.
+    :returns: Published distribution URLs.
     :raises ValueError: An artifact set is incomplete, mismatched, or malformed.
     :raises _IncompleteReleaseError: PyPI has not published every expected file.
     """
@@ -74,29 +66,17 @@ def reconcile_artifacts(
         msg = f"artifact directory does not exist: {dist}"
         raise ValueError(msg)
     local = _local_files(dist, normalized_project, release_version)
-    remote = _remote_files(normalized_project, version)
+    remote = _remote_files(normalized_project, release_version)
     if extra := remote.keys() - local.keys():
         msg = f"PyPI has unexpected files: {', '.join(sorted(extra))}"
         raise ValueError(msg)
-    if mismatched := {name for name in remote if remote[name] != local[name]}:
+    if mismatched := {name for name in remote if remote[name][0] != local[name]}:
         msg = f"PyPI has different SHA256 digests: {', '.join(sorted(mismatched))}"
         raise ValueError(msg)
-    missing = sorted(local.keys() - remote.keys())
-    if mode == "verify":
-        if missing:
-            msg = f"PyPI is missing files: {', '.join(missing)}"
-            raise _IncompleteReleaseError(msg)
-        return 0
-    if missing_dir is None or missing_dir.resolve().is_relative_to(dist.resolve()):
-        msg = "stage mode requires a fresh directory outside dist"
-        raise ValueError(msg)
-    missing_dir.mkdir()
-    for name in missing:
-        shutil.copyfile(dist / name, missing_dir / name)
-        if _sha256(missing_dir / name) != local[name]:
-            msg = f"artifact changed while staging: {name}"
-            raise ValueError(msg)
-    return len(missing)
+    if missing := sorted(local.keys() - remote.keys()):
+        msg = f"PyPI is missing files: {', '.join(missing)}"
+        raise _IncompleteReleaseError(msg)
+    return [remote[name][1] for name in sorted(local)]
 
 
 class _IncompleteReleaseError(ValueError):
@@ -128,43 +108,84 @@ def _local_files(dist: Path, project: str, version: Version) -> dict[str, str]:
     return files
 
 
-def _remote_files(project: str, version: str) -> dict[str, str]:
+def _remote_files(project: str, version: Version) -> dict[str, tuple[str, str]]:
+    files: dict[str, tuple[str, str]] = {}
+    for item in _simple_index(project):
+        if not isinstance(item, dict):
+            msg = "PyPI returned an invalid release file"
+            raise TypeError(msg)
+        name = item.get("filename")
+        if not isinstance(name, str):
+            msg = "PyPI returned an invalid filename"
+            raise TypeError(msg)
+        try:
+            release_name, release_version = (
+                parse_wheel_filename(name)[:2] if name.endswith(".whl") else parse_sdist_filename(name)
+            )
+        except InvalidSdistFilename, InvalidWheelFilename:
+            continue
+        if release_name != project or release_version != version:
+            continue
+        if name in files:
+            msg = f"PyPI returned a duplicate file: {name}"
+            raise ValueError(msg)
+        if item.get("yanked"):
+            msg = f"PyPI release file is yanked: {name}"
+            raise ValueError(msg)
+        files[name] = _file_metadata(item, name)
+    return files
+
+
+def _simple_index(project: str) -> list[object]:
     request = Request(
-        f"https://pypi.org/pypi/{quote(project)}/{quote(version, safe='')}/json",
-        headers={"Accept": "application/json", "Cache-Control": "no-cache"},
+        f"https://pypi.org/simple/{quote(project)}/",
+        headers={"Accept": "application/vnd.pypi.simple.v1+json", "Cache-Control": "no-cache"},
     )
     try:
         with urlopen(request, timeout=30) as response:  # ruff: ignore[suspicious-url-open-usage]  # The origin is fixed to HTTPS PyPI.
             payload: object = json.load(response)
     except HTTPError as error:
         if error.code == http.HTTPStatus.NOT_FOUND:
-            return {}
+            return []
         raise
-    if not isinstance(payload, dict) or not isinstance(payload.get("urls"), list) or not payload["urls"]:
-        msg = "PyPI returned no release files or an invalid response"
+    if not isinstance(payload, dict) or not isinstance(payload.get("files"), list):
+        msg = "PyPI returned an invalid Simple API response"
+        raise TypeError(msg)
+    meta = payload.get("meta")
+    if (
+        not isinstance(meta, dict)
+        or not isinstance(meta.get("api-version"), str)
+        or meta["api-version"].split(".")[0] != "1"
+    ):
+        msg = "unsupported PyPI Simple API version"
         raise ValueError(msg)
-    files: dict[str, str] = {}
-    for item in payload["urls"]:
-        if not isinstance(item, dict):
-            msg = "PyPI returned an invalid release file"
-            raise TypeError(msg)
-        name = item.get("filename")
-        digests = item.get("digests")
-        digest = digests.get("sha256") if isinstance(digests, dict) else None
-        if (
-            not isinstance(name, str)
-            or not isinstance(digest, str)
-            or len(digest) != hashlib.sha256().digest_size * 2
-            or any(character not in "0123456789abcdef" for character in digest)
-            or name in files
-        ):
-            msg = "PyPI returned an invalid filename or SHA256 digest"
-            raise ValueError(msg)
-        if item.get("yanked"):
-            msg = f"PyPI release file is yanked: {name}"
-            raise ValueError(msg)
-        files[name] = digest
-    return files
+    return cast("list[object]", payload["files"])
+
+
+def _file_metadata(item: dict[str, object], name: str) -> tuple[str, str]:
+    digests = item.get("hashes")
+    digest = digests.get("sha256") if isinstance(digests, dict) else None
+    url = item.get("url")
+    if not isinstance(digest, str) or len(digest) != hashlib.sha256().digest_size * 2 or not isinstance(url, str):
+        msg = "PyPI returned an invalid filename, URL, or SHA256 digest"
+        raise ValueError(msg)
+    if any(character not in "0123456789abcdef" for character in digest):
+        msg = "PyPI returned an invalid filename, URL, or SHA256 digest"
+        raise ValueError(msg)
+    try:
+        parsed_url = urlsplit(url)
+        valid_url = (
+            parsed_url.scheme == "https"
+            and parsed_url.hostname == "files.pythonhosted.org"
+            and unquote(parsed_url.path.rsplit("/", 1)[-1]) == name
+        )
+    except ValueError as error:
+        msg = "PyPI returned an invalid filename, URL, or SHA256 digest"
+        raise ValueError(msg) from error
+    if not valid_url:
+        msg = "PyPI returned an invalid filename, URL, or SHA256 digest"
+        raise ValueError(msg)
+    return digest, urlunsplit(parsed_url._replace(fragment=""))
 
 
 def _sha256(path: Path) -> str:
@@ -173,6 +194,5 @@ def _sha256(path: Path) -> str:
 
 
 __all__ = [
-    "reconcile_artifacts",
     "verify_artifacts",
 ]

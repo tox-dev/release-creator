@@ -95,19 +95,16 @@ jobs:
         run: git tag --list | uv run --no-default-groups release-creator tags --next auto
       - name: Validate Towncrier fragments
         if: steps.news.outputs.fragment == 'true'
-        run: uv run --no-default-groups --group release towncrier check --compare-with "origin/${GITHUB_BASE_REF}"
+        run: uv run --no-default-groups --group release-prepare towncrier check --compare-with "origin/${GITHUB_BASE_REF}"
   hook-update-cooldown:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-26.04
     permissions:
+      actions: read
       contents: read
       pull-requests: read
     steps:
       - uses: tox-dev/github-workflows/check-hook-update-cooldown@2b4ed19340a7ec97020f4fd0a403531845c49356
-        with:
-          repository: ${{ github.repository }}
-          pull-request: ${{ github.event.pull_request.number }}
-          head-sha: ${{ github.event.pull_request.head.sha }}
   gate:
     name: Required checks pass
     if: always()

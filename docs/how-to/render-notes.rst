@@ -120,17 +120,16 @@ already credit its author.
 reStructuredText changelogs
 ===========================
 
-Use a ``.rst`` changelog path to select the reStructuredText reader. For example, a project whose ``:issue:`` role
-points to pull requests can run:
+Use a ``.rst`` changelog path to select the reStructuredText reader:
 
 .. code-block:: bash
 
     uvx --from release-creator release-creator notes \
       --changelog docs/changelog.rst --tag 1.2.3 \
-      --repository owner/project --issue-role pull > release-notes.md
+      --repository owner/project > release-notes.md
 
-``--issue-role pull`` changes ``:issue:`42``` links to pull requests. Without it, they target issues. ``:pr:`` and
-``:pull:`` always target pull requests; ``:user:`` becomes an ``@handle`` mention.
+``:issue:`` links target issues; ``:pr:`` and ``:pull:`` target pull requests. ``:user:`` becomes an ``@handle``
+mention.
 
 Nested lists stay nested. ``.. code-block::`` directives become fenced Markdown blocks inside their release items.
 Top-level ``.. warning::`` directives become separate warning blocks after the preceding item.
