@@ -12,6 +12,31 @@ from release_creator.fragments.names import fragment_number, pending_changesets,
 from release_creator.fragments.pull_requests import PullRequestAuthor, fragment_pull_request_number
 from release_creator.github import MARKDOWN_AUTHOR, validate_repository
 
+_RE_PULL_REQUEST_LINK: Final = re.compile(
+    r"""
+    https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/(?P<number>\d+)  # Markdown PR link
+    |                                                                                       # Or
+    :(?:pr|pull):`(?P<rst_number>\d+)`                                                     # RST PR role
+    """,
+    re.VERBOSE,
+)
+_RE_AUTHOR_MARKER: Final = re.compile(
+    r"""
+    (?:,?\s+)                     # Optional comma and whitespace before the credit
+    by\s+                         # Credit marker and following whitespace
+    (?=\[@|:user:`|`@)            # Supported Markdown or RST author syntax
+    """,
+    re.VERBOSE,
+)
+_RE_RST_USER: Final = re.compile(
+    r"""
+    :user:`(?P<handle>[A-Za-z0-9-]+)`  # RST GitHub user role
+    |                                 # Or
+    `@(?P<link_handle>[A-Za-z0-9-]+)  # Explicit profile link text
+    \ <https://github\.com/(?P=link_handle)>`_  # Matching profile URL
+    """,
+    re.VERBOSE,
+)
 type _LinkMode = Literal["towncrier", "knope", "numbered-prs"]
 
 
@@ -74,20 +99,12 @@ def _link_text(
     content: str,
     target: _LinkTarget,
 ) -> str:
-    re_author_marker: Final = re.compile(
-        r"""
-        (?:,?\s+)                     # Optional comma and whitespace before the credit
-        by\s+                         # Credit marker and following whitespace
-        (?=\[@|:user:`|`@)            # Supported Markdown or RST author syntax
-        """,
-        re.VERBOSE,
-    )
     fragment = target.fragment
     linked = _has_pull_request_link(content, target.repository, target.number)
     if not target.knope and fragment_number(fragment) is None and linked:
         msg = f"pull request already linked in {fragment}"
         raise ValueError(msg)
-    if (match := re_author_marker.search(content)) is not None:
+    if (match := _RE_AUTHOR_MARKER.search(content)) is not None:
         handles = _credited_handles(content[match.end() :], fragment.suffix)
         if target.author is not None and target.author.is_bot and target.author.handle in handles:
             msg = f"bot author @{target.author.handle} must not be credited in {fragment}"
@@ -112,17 +129,9 @@ def _link_text(
 
 
 def _has_pull_request_link(content: str, repository: str, number: str) -> bool:
-    re_pull_request_link: Final = re.compile(
-        r"""
-        https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/(?P<number>\d+)  # Markdown PR link
-        |                                                                                       # Or
-        :(?:pr|pull):`(?P<rst_number>\d+)`                                                     # RST PR role
-        """,
-        re.VERBOSE,
-    )
     return any(
         (match["repository"] == repository and match["number"] == number) or match["rst_number"] == number
-        for match in re_pull_request_link.finditer(content)
+        for match in _RE_PULL_REQUEST_LINK.finditer(content)
     )
 
 
@@ -143,17 +152,8 @@ def _author_credit(author: str, extension: str) -> str:
 
 
 def _credited_handles(credit_text: str, extension: str) -> set[str]:
-    re_rst_user: Final = re.compile(
-        r"""
-        :user:`(?P<handle>[A-Za-z0-9-]+)`  # RST GitHub user role
-        |                                 # Or
-        `@(?P<link_handle>[A-Za-z0-9-]+)  # Explicit profile link text
-        \ <https://github\.com/(?P=link_handle)>`_  # Matching profile URL
-        """,
-        re.VERBOSE,
-    )
     if extension == ".rst":
-        return {author["handle"] or author["link_handle"] for author in re_rst_user.finditer(credit_text)}
+        return {author["handle"] or author["link_handle"] for author in _RE_RST_USER.finditer(credit_text)}
     return {author["handle"] for author in MARKDOWN_AUTHOR.finditer(credit_text)}
 
 

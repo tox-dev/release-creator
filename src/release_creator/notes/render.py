@@ -18,6 +18,29 @@ _RE_RELEASE_PULL: Final = re.compile(
     """,
     re.VERBOSE,
 )
+_RE_GITHUB_CREDIT: Final = re.compile(
+    r"""
+    \bby\s+                      # Author credit marker
+    (?P<credits>.*)$              # GitHub mentions following the marker
+    """,
+    re.VERBOSE,
+)
+_RE_GITHUB_HANDLE: Final = re.compile(
+    r"""
+    @(?P<handle>[A-Za-z0-9-]+)   # GitHub mention
+    """,
+    re.VERBOSE,
+)
+_RE_GENERATED_PR_AUTHOR: Final = re.compile(
+    r"""
+    \bby\s+@(?P<handle>[A-Za-z0-9-]+)  # GitHub generated PR author
+    (?P<bot>\[bot\])?                 # Bot accounts are not credited
+    \s+in\s+https://github\.com/
+    (?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)  # Repository in the generated link
+    /pull/(?P<number>\d+)              # Pull request number
+    """,
+    re.VERBOSE,
+)
 _RE_RST_VERSION: Final = re.compile(
     r"""
     ^(?:
@@ -45,6 +68,22 @@ _RE_MARKDOWN_VERSION: Final = re.compile(
     $                               # End of heading
     """,
     re.VERBOSE,
+)
+_RE_MARKDOWN_VERSION_ANCHOR: Final = re.compile(
+    r"""
+    ^<a\ name="release-             # Version anchor prefix
+    (?P<version>v?\d+(?:-\d+){1,3}(?:(?:a|b|rc)\d*)?)  # Version encoded for an anchor
+    "></a>$                         # Anchor terminator
+    """,
+    re.VERBOSE,
+)
+_RE_MARKDOWN_LINK_DEFINITION: Final = re.compile(
+    r"""
+    ^\[(?P<version>v?\d+(?:\.\d+){1,3}(?:(?:a|b|rc)\d*)?|unreleased)\]:  # Version reference
+    \s+https://github\.com/[^\s]+                    # GitHub destination
+    $                                                   # End of definition
+    """,
+    re.VERBOSE | re.IGNORECASE,
 )
 
 
@@ -135,16 +174,6 @@ def _verify_authors(notes: str, generated_notes: str, context: ReleaseContext) -
 
 
 def _generated_pr_authors(generated_notes: str, repository: str) -> tuple[dict[str, str | None], dict[str, str]]:
-    re_generated_pr_author: Final = re.compile(
-        r"""
-        \bby\s+@(?P<handle>[A-Za-z0-9-]+)  # GitHub generated PR author
-        (?P<bot>\[bot\])?                 # Bot accounts are not credited
-        \s+in\s+https://github\.com/
-        (?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)  # Repository in the generated link
-        /pull/(?P<number>\d+)              # Pull request number
-        """,
-        re.VERBOSE,
-    )
     authors: dict[str, str | None] = {}
     bots: dict[str, str] = {}
     in_new_contributors = False
@@ -153,7 +182,7 @@ def _generated_pr_authors(generated_notes: str, repository: str) -> tuple[dict[s
             in_new_contributors = line.removeprefix("### ").removeprefix("## ") == "New Contributors"
         if in_new_contributors:
             continue
-        match = re_generated_pr_author.search(line)
+        match = _RE_GENERATED_PR_AUTHOR.search(line)
         if match is not None and match["repository"] != repository:
             match = None
         for link in _RE_RELEASE_PULL.finditer(line):
@@ -171,19 +200,6 @@ def _generated_pr_authors(generated_notes: str, repository: str) -> tuple[dict[s
 
 
 def _release_entries(notes: str, repository: str) -> dict[str, list[tuple[set[str], bool]]]:
-    re_github_credit: Final = re.compile(
-        r"""
-        \bby\s+                      # Author credit marker
-        (?P<credits>.*)$              # GitHub mentions following the marker
-        """,
-        re.VERBOSE,
-    )
-    re_github_handle: Final = re.compile(
-        r"""
-        @(?P<handle>[A-Za-z0-9-]+)   # GitHub mention
-        """,
-        re.VERBOSE,
-    )
     entries: dict[str, list[tuple[set[str], bool]]] = {}
     for line in notes.splitlines():
         pull_requests = [
@@ -191,9 +207,9 @@ def _release_entries(notes: str, repository: str) -> dict[str, list[tuple[set[st
         ]
         if not pull_requests:
             continue
-        credit_text = re_github_credit.search(line)
+        credit_text = _RE_GITHUB_CREDIT.search(line)
         handles = (
-            {match["handle"] for match in re_github_handle.finditer(credit_text["credits"])}
+            {match["handle"] for match in _RE_GITHUB_HANDLE.finditer(credit_text["credits"])}
             if credit_text is not None
             else set()
         )
@@ -491,26 +507,10 @@ def _validate_context(context: ReleaseContext) -> None:
 
 
 def _extract_body(changelog: str, context: ReleaseContext) -> str:
-    re_markdown_version_anchor: Final = re.compile(
-        r"""
-        ^<a\ name="release-             # Version anchor prefix
-        (?P<version>v?\d+(?:-\d+){1,3}(?:(?:a|b|rc)\d*)?)  # Version encoded for an anchor
-        "></a>$                         # Anchor terminator
-        """,
-        re.VERBOSE,
-    )
-    re_markdown_link_definition: Final = re.compile(
-        r"""
-        ^\[(?P<version>v?\d+(?:\.\d+){1,3}(?:(?:a|b|rc)\d*)?|unreleased)\]:  # Version reference
-        \s+https://github\.com/[^\s]+                    # GitHub destination
-        $                                                   # End of definition
-        """,
-        re.VERBOSE | re.IGNORECASE,
-    )
     lines = [
         line
         for line in changelog.splitlines()
-        if not _is_comparison_line(line) and not re_markdown_link_definition.fullmatch(line)
+        if not _is_comparison_line(line) and not _RE_MARKDOWN_LINK_DEFINITION.fullmatch(line)
     ]
     heading_level = "###" if context.package is not None else "##"
     if context.package is not None:
@@ -538,7 +538,7 @@ def _extract_body(changelog: str, context: ReleaseContext) -> str:
     for source_line in lines[headings[0] + 1 :]:
         if (
             (match := _RE_MARKDOWN_VERSION.fullmatch(source_line)) is not None and match["level"] == heading_level
-        ) or re_markdown_version_anchor.fullmatch(source_line):
+        ) or _RE_MARKDOWN_VERSION_ANCHOR.fullmatch(source_line):
             break
         body.append(source_line)
     return _convert_markdown_body(body, "#### " if context.package is not None else "### ")
