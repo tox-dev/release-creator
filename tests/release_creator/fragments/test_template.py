@@ -90,7 +90,7 @@ def test_rst_template_renders_notes_with_stable_anchors(
         if underlines.startswith('underlines = ["*"')
         else "\n0.9.0 (2026-01-01)\n==================\n"
     )
-    (tmp_path / "changelog.rst").write_text("Changelog\n=========\n\n.. towncrier release notes start\n" + old_release)
+    (tmp_path / "changelog.rst").write_text(f"Changelog\n=========\n\n.. towncrier release notes start\n{old_release}")
     (tmp_path / "pyproject.toml").write_text(
         dedent("""\
         [tool.towncrier]

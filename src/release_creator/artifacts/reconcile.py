@@ -30,13 +30,14 @@ def reconcile_artifacts(
 ) -> int:
     """Compare local artifacts with PyPI and stage the unpublished subset.
 
-    Returns:
-        Number of artifacts absent from PyPI before this check.
-
-    Raises:
-        ValueError: An artifact set is incomplete, mismatched, or malformed.
-        _IncompleteReleaseError: PyPI has not published every expected file.
-
+    :param project: PyPI project name.
+    :param version: Release version.
+    :param dist: Directory holding the expected distribution files.
+    :param mode: Whether to stage missing files or verify publication.
+    :param missing_dir: New directory for files absent from PyPI.
+    :returns: Number of artifacts absent from PyPI before this check.
+    :raises ValueError: An artifact set is incomplete, mismatched, or malformed.
+    :raises _IncompleteReleaseError: PyPI has not published every expected file.
     """
     try:
         normalized_project = canonicalize_name(project, validate=True)
@@ -76,10 +77,12 @@ def reconcile_artifacts(
 def verify_artifacts(project: str, version: str, dist: Path, wait_seconds: int) -> None:
     """Wait only for PyPI's complete, consistent release view.
 
-    Raises:
-        ValueError: The release is incomplete at the deadline or its files differ.
-        _IncompleteReleaseError: PyPI has not published every expected file by the deadline.
-
+    :param project: PyPI project name.
+    :param version: Release version.
+    :param dist: Directory holding the expected distribution files.
+    :param wait_seconds: Maximum time to wait for PyPI propagation.
+    :raises ValueError: The release is incomplete at the deadline or its files differ.
+    :raises _IncompleteReleaseError: PyPI has not published every expected file by the deadline.
     """
     if wait_seconds < 0:
         msg = "wait_seconds must be nonnegative"

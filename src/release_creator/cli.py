@@ -27,9 +27,7 @@ def main() -> None:
 def build_parser() -> argparse.ArgumentParser:
     """Expose the same parser to Sphinx and the executable.
 
-    Returns:
-        Parser shared by the documentation and command line.
-
+    :returns: Parser shared by the documentation and command line.
     """
     parser = argparse.ArgumentParser(description="Release preparation tools")
     commands = parser.add_subparsers(dest="command", required=True)

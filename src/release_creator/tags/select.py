@@ -11,12 +11,13 @@ if TYPE_CHECKING:
 def next_tag(bump: str, tags: list[str], fragments: list[str], release_date: date, prefix: str = "") -> str:
     """Choose a release version from existing tags and pending fragments.
 
-    Returns:
-        The next major.minor.patch or year.month.patch version, with the requested prefix.
-
-    Raises:
-        ValueError: The bump is unknown, no fragments exist, or the result is not newer.
-
+    :param bump: Automatic or explicit version bump type.
+    :param tags: Existing repository tags.
+    :param fragments: Pending fragment filenames.
+    :param release_date: Date used for CalVer.
+    :param prefix: Optional prefix for the new tag.
+    :returns: The next major.minor.patch or year.month.patch version, with the requested prefix.
+    :raises ValueError: The bump is unknown, no fragments exist, or the result is not newer.
     """
     if not fragments:
         msg = "no changelog fragments to release"
@@ -52,18 +53,15 @@ def next_tag(bump: str, tags: list[str], fragments: list[str], release_date: dat
     if version <= current:
         msg = f"calculated version must be newer than {'.'.join(map(str, current))}"
         raise ValueError(msg)
-    return prefix + ".".join(map(str, version))
+    return f"{prefix}{'.'.join(map(str, version))}"
 
 
 def parse_tag(tag: str) -> tuple[int, int, int]:
     """Parse a major.minor.patch release tag with an optional v prefix.
 
-    Returns:
-        The numeric major, minor, and patch components.
-
-    Raises:
-        ValueError: The tag is not a numeric release version.
-
+    :param tag: Version tag to parse.
+    :returns: The numeric major, minor, and patch components.
+    :raises ValueError: The tag is not a numeric release version.
     """
     match tag.removeprefix("v").split("."):
         case [major, minor, patch] if all(part.isascii() and part.isdecimal() for part in (major, minor, patch)):
@@ -76,9 +74,9 @@ def parse_tag(tag: str) -> tuple[int, int, int]:
 def previous_tag(tag: str, tags: list[str]) -> str | None:
     """Select the greatest numeric release tag before ``tag``.
 
-    Returns:
-        The preceding tag, or ``None`` when this is the first release.
-
+    :param tag: Release tag whose predecessor is needed.
+    :param tags: Existing repository tags.
+    :returns: The preceding tag, or ``None`` when this is the first release.
     """
     target = parse_tag(tag)
     candidates: list[tuple[tuple[int, int, int], str]] = []
@@ -95,9 +93,9 @@ def previous_tag(tag: str, tags: list[str]) -> str | None:
 def require_newer_tag(tag: str, tags: list[str]) -> None:
     """Require ``tag`` to follow every existing numeric release tag.
 
-    Raises:
-        ValueError: A matching or newer release tag already exists.
-
+    :param tag: Candidate release tag.
+    :param tags: Existing repository tags.
+    :raises ValueError: A matching or newer release tag already exists.
     """
     target = parse_tag(tag)
     versions: list[tuple[int, int, int]] = []

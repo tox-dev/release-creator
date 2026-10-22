@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, call, create_autospec
 
 import pytest
 
+from release_creator import process
 from release_creator.fragments import pull_requests
 from release_creator.fragments.pull_requests import PullRequestAuthor
 
@@ -32,7 +33,7 @@ def test_pull_request_authors_deduplicates_numbers_and_skips_bots(monkeypatch: p
     run: MagicMock = cast(
         "MagicMock",
         create_autospec(
-            pull_requests.subprocess.run,
+            process.subprocess.run,
             side_effect=[
                 subprocess.CompletedProcess([], 0, "alice\tUser\n", ""),
                 subprocess.CompletedProcess([], 0, "dependabot[bot]\tBot\n", ""),
@@ -40,7 +41,7 @@ def test_pull_request_authors_deduplicates_numbers_and_skips_bots(monkeypatch: p
         ),
     )
     monkeypatch.setattr(pull_requests.shutil, "which", gh_lookup)
-    monkeypatch.setattr(pull_requests.subprocess, "run", run)
+    monkeypatch.setattr(process.subprocess, "run", run)
 
     authors = pull_requests.pull_request_authors(
         "tox-dev/example",
@@ -64,6 +65,8 @@ def test_pull_request_authors_deduplicates_numbers_and_skips_bots(monkeypatch: p
                 "--jq",
                 '.user | [(.login // ""), (.type // "")] | @tsv',
             ],
+            cwd=None,
+            input=None,
             capture_output=True,
             check=False,
             text=True,
@@ -77,6 +80,8 @@ def test_pull_request_authors_deduplicates_numbers_and_skips_bots(monkeypatch: p
                 "--jq",
                 '.user | [(.login // ""), (.type // "")] | @tsv',
             ],
+            cwd=None,
+            input=None,
             capture_output=True,
             check=False,
             text=True,
@@ -88,13 +93,13 @@ def test_pull_request_authors_deduplicates_numbers_and_skips_bots(monkeypatch: p
 def test_pull_request_authors_uses_numbered_pr_stems(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pull_requests.shutil, "which", create_autospec(pull_requests.shutil.which, return_value="gh"))
     run = create_autospec(
-        pull_requests.subprocess.run,
+        process.subprocess.run,
         side_effect=[
             subprocess.CompletedProcess([], 0, "gaborbernat\tUser\n", ""),
             subprocess.CompletedProcess([], 0, "alice\tUser\n", ""),
         ],
     )
-    monkeypatch.setattr(pull_requests.subprocess, "run", run)
+    monkeypatch.setattr(process.subprocess, "run", run)
 
     authors = pull_requests.pull_request_authors(
         "quotaline/quotaline",
@@ -149,9 +154,9 @@ def test_pull_request_authors_rejects_bad_api_responses(
         create_autospec(pull_requests.shutil.which, return_value="/usr/bin/gh"),
     )
     monkeypatch.setattr(
-        pull_requests.subprocess,
+        process.subprocess,
         "run",
-        create_autospec(pull_requests.subprocess.run, return_value=result),
+        create_autospec(process.subprocess.run, return_value=result),
     )
 
     with pytest.raises(ValueError, match=message):

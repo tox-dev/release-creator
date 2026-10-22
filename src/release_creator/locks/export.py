@@ -2,7 +2,6 @@
 
 lazy import json
 lazy import shutil
-lazy import subprocess  # ruff: ignore[suspicious-subprocess-import]  # uv owns the project resolver.
 lazy import tomllib
 lazy from collections import defaultdict
 lazy from pathlib import Path
@@ -12,6 +11,8 @@ lazy import tomli_w
 lazy from packaging.requirements import InvalidRequirement, Requirement
 lazy from packaging.specifiers import SpecifierSet
 lazy from packaging.version import Version
+
+from release_creator.process import run_text
 
 
 def export_lock(
@@ -23,10 +24,13 @@ def export_lock(
 ) -> None:
     """Export each resolved group and extra with its selection marker.
 
-    Raises:
-        ValueError: The project cannot describe a selectable lock.
-        FileNotFoundError: uv is not installed.
-
+    :param project: Project pyproject.toml.
+    :param output: PEP 751 lock file to write.
+    :param tool_python: Python requirement for a tool-only project.
+    :param build_requirements: Additional build requirements absent from build-system.requires.
+    :param exclude_newer_packages: Package-specific cutoff overrides for uv.
+    :raises ValueError: The project cannot describe a selectable lock.
+    :raises FileNotFoundError: uv is not installed.
     """
     data = tomllib.loads(project.read_text(encoding="utf-8"))
     requires_python, groups, extras, export_scope = _project_selections(project, data, tool_python)
@@ -153,7 +157,7 @@ def _compile_build(
         "--format",
         "pylock.toml",
         *cutoff_options,
-        stdin="\n".join(requirements) + "\n",
+        stdin=f"{'\n'.join(requirements)}\n",
     )
     return cast("list[dict[str, object]]", tomllib.loads(compiled)["packages"])
 
@@ -199,9 +203,7 @@ def _project_selections(
 
 
 def _run_uv(uv: str, directory: Path, *arguments: str, stdin: str | None = None) -> str:
-    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Fixed uv argv.
-        [uv, *arguments], cwd=directory, check=False, capture_output=True, text=True, encoding="utf-8", input=stdin
-    )
+    result = run_text([uv, *arguments], cwd=directory, stdin=stdin)
     if result.returncode:
         msg = result.stderr.strip() or f"uv {arguments[0]} failed"
         raise ValueError(msg)

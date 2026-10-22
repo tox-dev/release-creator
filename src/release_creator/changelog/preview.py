@@ -2,16 +2,17 @@
 
 lazy from pathlib import Path
 
+from release_creator.categories import CHANGELOG_CATEGORIES
+
 
 def render_preview(changelog: Path, package: str, fragments: Path) -> str:
     """Render one Markdown package changelog with pending news.
 
-    Returns:
-        The package's released history and current draft entries.
-
-    Raises:
-        ValueError: The package or a fragment has an unsupported form.
-
+    :param changelog: Shared Markdown changelog file.
+    :param package: Package whose history to display.
+    :param fragments: Directory of pending package fragments.
+    :returns: The package's released history and current draft entries.
+    :raises ValueError: The package or a fragment has an unsupported form.
     """
     if (
         not package
@@ -28,18 +29,7 @@ def render_preview(changelog: Path, package: str, fragments: Path) -> str:
         raise ValueError(msg)
     end = next((index for index in range(headings[0] + 1, len(lines)) if lines[index].startswith("## ")), len(lines))
     history = "\n".join(lines[headings[0] + 1 : end]).strip()
-    names = {
-        "feature": "Added",
-        "change": "Changes",
-        "bugfix": "Fixed",
-        "doc": "Documentation",
-        "breaking": "Breaking changes",
-        "security": "Security",
-        "performance": "Performance",
-        "deprecation": "Deprecated",
-        "removal": "Removed",
-        "packaging": "Packaging",
-    }
+    names = {kind: heading for kind, (heading, _) in CHANGELOG_CATEGORIES.items()}
     sections: dict[str, list[str]] = {}
     for fragment in sorted(fragments.glob("*.md")):
         stem, separator, category = fragment.stem.rpartition(".")
@@ -55,7 +45,7 @@ def render_preview(changelog: Path, package: str, fragments: Path) -> str:
         if not content or "\n\n" in content or content.startswith(("- ", "# ")):
             msg = f"expected one nonempty paragraph in {fragment}"
             raise ValueError(msg)
-        sections.setdefault(names[category], []).append("- " + " ".join(line.strip() for line in content.splitlines()))
+        sections.setdefault(names[category], []).append(f"- {' '.join(line.strip() for line in content.splitlines())}")
     page = ["# Changelog", f"## {package}"]
     if sections:
         draft = [f'<a name="draft-{package}"></a>', "", "### Draft", ""]
@@ -72,7 +62,7 @@ def render_preview(changelog: Path, package: str, fragments: Path) -> str:
         page.append("\n".join(draft).strip())
     if history:
         page.append(history)
-    return "\n\n".join(page) + "\n"
+    return f"{'\n\n'.join(page)}\n"
 
 
 __all__ = [

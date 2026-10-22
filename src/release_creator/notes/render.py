@@ -9,19 +9,9 @@ from typing import Final
 
 lazy import mdformat
 
-_CATEGORIES: Final = {
-    "Added": "Features",
-    "Changes": "Changes",
-    "Fixed": "Bug fixes",
-    "Documentation": "Documentation",
-    "Breaking changes": "Breaking changes",
-    "Security": "Security",
-    "Performance": "Performance",
-    "Deprecated": "Deprecations",
-    "Removed": "Removals",
-    "Packaging": "Packaging",
-    "Other changes": "Other changes",
-}
+from release_creator.categories import RELEASE_CATEGORIES
+from release_creator.github import MARKDOWN_AUTHOR, validate_repository
+
 _RE_RELEASE_PULL: Final = re.compile(
     r"""
     https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/(?P<number>\d+)  # PR link
@@ -87,13 +77,6 @@ _RE_MARKDOWN_VERSION_ANCHOR: Final = re.compile(
     """,
     re.VERBOSE,
 )
-_RE_MARKDOWN_AUTHOR: Final = re.compile(
-    r"""
-    \[@(?P<handle>[A-Za-z0-9-]+)\]  # GitHub handle in link text
-    \(https://github\.com/(?P=handle)\)  # Matching profile URL
-    """,
-    re.VERBOSE,
-)
 _RE_MARKDOWN_LINK_DEFINITION: Final = re.compile(
     r"""
     ^\[(?P<version>v?\d+(?:\.\d+){1,3}(?:(?:a|b|rc)\d*)?|unreleased)\]:  # Version reference
@@ -119,9 +102,10 @@ class ReleaseContext:
 def render_markdown(changelog: str, context: ReleaseContext, generated_notes: str | None = None) -> str:
     """Render one Markdown release section for GitHub without wrapped list items.
 
-    Returns:
-        The complete GitHub Release body.
-
+    :param changelog: Tagged Markdown changelog.
+    :param context: Repository and release links.
+    :param generated_notes: GitHub-generated text used only for verified contributor credits.
+    :returns: The complete GitHub Release body.
 
     """
     _validate_context(context)
@@ -134,12 +118,12 @@ def render_rst(
 ) -> str:
     """Render one reStructuredText release section for GitHub.
 
-    Returns:
-        The complete GitHub Release body.
-
-    Raises:
-        ValueError: The issue role must name a GitHub issue or pull request.
-
+    :param changelog: Tagged reStructuredText changelog.
+    :param context: Repository and release links.
+    :param issue_role: Whether issue roles link to issues or pull requests.
+    :param generated_notes: GitHub-generated text used only for verified contributor credits.
+    :returns: The complete GitHub Release body.
+    :raises ValueError: The issue role must name a GitHub issue or pull request.
     """
     _validate_context(context)
     if context.package is not None:
@@ -272,7 +256,7 @@ def _new_contributors(generated_notes: str, context: ReleaseContext) -> str:
     if not entries:
         return ""
     anchor = f"release-{context.tag.replace('.', '-').replace('/', '-')}-new-contributors"
-    return f'<a name="{anchor}"></a>\n\n### New Contributors\n\n' + "\n".join(entries)
+    return f'<a name="{anchor}"></a>\n\n### New Contributors\n\n{"\n".join(entries)}'
 
 
 def _contributor_reference(match: re.Match[str], repository: str) -> str:
@@ -306,7 +290,7 @@ def _extract_rst_body(changelog: str, context: ReleaseContext, issue_role: str) 
             body.extend((
                 f'<a name="{anchor}"></a>',
                 "",
-                f"### {_CATEGORIES[name]}",
+                f"### {RELEASE_CATEGORIES[name]}",
                 "",
                 *(_convert_rst(entry, context.repository, issue_role) for entry in entries),
                 "",
@@ -337,9 +321,7 @@ def _parse_rst_blocks(
                 raise ValueError(msg)
             content, index = _rst_directive_content(lines, index, end)
             language = line.removeprefix(".. code-block:: ")
-            entries[-1] += (
-                f"\n\n  ```{language}\n" + "\n".join(f"  {part}" for part in content.splitlines()) + "\n  ```"
-            )
+            entries[-1] += f"\n\n  ```{language}\n{'\n'.join(f'  {part}' for part in content.splitlines())}\n  ```"
             after_block = True
             nested = False
             continue
@@ -394,7 +376,7 @@ def _rst_directive_content(lines: list[str], index: int, end: int) -> tuple[str,
 
 
 def _require_category(name: str) -> str:
-    if name not in _CATEGORIES:
+    if name not in RELEASE_CATEGORIES:
         msg = f"unknown changelog category: {name}"
         raise ValueError(msg)
     return name
@@ -518,17 +500,7 @@ def _validate_context(context: ReleaseContext) -> None:
         if "/" in context.tag and not context.tag.startswith(f"{context.package}/"):
             msg = f"release tag does not match package: {context.tag}"
             raise ValueError(msg)
-    if not re.fullmatch(
-        r"""
-        (?P<owner>[A-Za-z0-9_.-]+)  # GitHub owner
-        /                            # Repository separator
-        (?P<name>[A-Za-z0-9_.-]+)   # GitHub repository
-        """,
-        context.repository,
-        re.VERBOSE,
-    ):
-        msg = f"invalid repository: {context.repository}"
-        raise ValueError(msg)
+    validate_repository(context.repository)
     if context.artifact_url is not None and not context.artifact_url.startswith("https://"):
         msg = "artifact URL must use HTTPS"
         raise ValueError(msg)
@@ -584,10 +556,10 @@ def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
                 msg = "empty changelog category"
                 raise ValueError(msg)
             category = source_line[len(category_prefix) :]
-            if category not in _CATEGORIES:
+            if category not in RELEASE_CATEGORIES:
                 msg = f"unknown changelog category: {category}"
                 raise ValueError(msg)
-            line = f"### {_CATEGORIES[category]}"
+            line = f"### {RELEASE_CATEGORIES[category]}"
             in_category = True
             in_item = False
             category_has_item = False
@@ -604,7 +576,7 @@ def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
         ):
             msg = f"release text outside an item: {source_line}"
             raise ValueError(msg)
-        body.append(_RE_MARKDOWN_AUTHOR.sub(lambda match: f"@{match['handle']}", line))
+        body.append(MARKDOWN_AUTHOR.sub(lambda match: f"@{match['handle']}", line))
 
     if in_category and not category_has_item:
         msg = "empty changelog category"

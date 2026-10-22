@@ -41,9 +41,9 @@ class CommandLexer(BashLexer):
     ) -> Iterator[tuple[int, _TokenType, str]]:
         """Yield Bash tokens with commands and options marked for color.
 
-        Yields:
-            Token offsets, kinds, and text.
-
+        :param text: Bash source to highlight.
+        :param stack: Lexer state stack.
+        :yield: Token offsets, kinds, and text.
         """
         for index, token, value in super().get_tokens_unprocessed(text, stack):
             if token in Text and value.startswith("--"):
@@ -68,11 +68,13 @@ def include_unreleased(app: Sphinx, docname: str, source: list[str]) -> None:
         entries = []
         for fragment in sorted(fragments.glob(f"*.{category['directory']}.md")):
             app.env.note_dependency(str(fragment))
-            entries.append("- " + fragment.read_text(encoding="utf-8").strip().replace("\n", "\n  "))
+            entry = fragment.read_text(encoding="utf-8").strip().replace("\n", "\n  ")
+            entries.append(f"- {entry}")
         if entries:
             sections.extend((f"### {category['name']}", "", *entries, ""))
     if sections:
+        draft = "\n".join(sections)
         source[0] = source[0].replace(
             "<!-- towncrier release notes start -->",
-            "## Unreleased\n\n" + "\n".join(sections) + "<!-- towncrier release notes start -->",
+            f"## Unreleased\n\n{draft}<!-- towncrier release notes start -->",
         )

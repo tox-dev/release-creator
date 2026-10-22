@@ -31,12 +31,9 @@ _RE_ANCHOR: Final = re.compile(
 def add_release_anchors(changelog: str) -> str:
     """Place stable anchors immediately before release headings.
 
-    Returns:
-        Markdown with version and category anchors in their current positions.
-
-    Raises:
-        ValueError: The changelog has no release heading.
-
+    :param changelog: Markdown changelog to update.
+    :returns: Markdown with version and category anchors in their current positions.
+    :raises ValueError: The changelog has no release heading.
     """
     lines = changelog.splitlines()
     anchors = _collect_anchors(lines)
@@ -88,7 +85,7 @@ def _insert_anchors(lines: list[str]) -> str:
         if result and result[-1]:
             result.append("")
         result.extend((f'<a name="{anchor}"></a>', "", line))
-    return "\n".join(result).rstrip("\n") + "\n"
+    return f"{'\n'.join(result).rstrip('\n')}\n"
 
 
 __all__ = [

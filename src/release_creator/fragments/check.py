@@ -11,12 +11,10 @@ from release_creator.fragments.knope import changeset_parts
 def changed_fragments(config: Path, base: str) -> int:
     """Count valid added or modified fragments relative to the PR base.
 
-    Returns:
-        Number of changed fragments.
-
-    Raises:
-        ValueError: The configuration or a changed fragment is invalid.
-
+    :param config: Towncrier configuration file.
+    :param base: Target branch name for the pull request diff.
+    :returns: Number of changed fragments.
+    :raises ValueError: The configuration or a changed fragment is invalid.
     """
     towncrier = tomllib.loads(config.read_text(encoding="utf-8"))["tool"]["towncrier"]
     directory = Path(towncrier["directory"])
@@ -49,12 +47,10 @@ def changed_fragments(config: Path, base: str) -> int:
 def changed_changesets(config: Path, base: str) -> int:
     """Count and validate changed Knope changesets.
 
-    Returns:
-        Number of added or modified changesets.
-
-    Raises:
-        ValueError: The configuration or a changed changeset is invalid.
-
+    :param config: Knope configuration file.
+    :param base: Target branch name for the pull request diff.
+    :returns: Number of added or modified changesets.
+    :raises ValueError: The configuration or a changed changeset is invalid.
     """
     if not base:
         msg = "news validation needs a PR base"

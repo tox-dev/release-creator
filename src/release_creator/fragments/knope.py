@@ -6,12 +6,10 @@ lazy from pathlib import Path
 def changeset_parts(fragment: Path, content: str) -> tuple[str, str, str]:
     """Separate a changeset's front matter, heading, and remaining text.
 
-    Returns:
-        Front matter, heading text, and text following the heading.
-
-    Raises:
-        ValueError: The changeset has no front matter or summary heading.
-
+    :param fragment: Changeset path used in errors.
+    :param content: Complete changeset text.
+    :returns: Front matter, heading text, and text following the heading.
+    :raises ValueError: The changeset has no front matter or summary heading.
     """
     if not content.startswith("---\n") or (boundary := content.find("\n---\n", 3)) == -1:
         msg = f"missing YAML front matter in {fragment}"

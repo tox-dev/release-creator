@@ -1,7 +1,6 @@
 """Refresh exact dependency pins without changing other pre-commit YAML."""
 
 import shutil
-import subprocess  # ruff: ignore[suspicious-subprocess-import]  # uv resolves public package versions.
 lazy from pathlib import Path
 lazy from typing import cast
 
@@ -10,12 +9,11 @@ lazy from packaging.utils import canonicalize_name
 lazy from yaml import MappingNode, ScalarNode, SequenceNode, compose
 lazy from yaml.error import Mark, YAMLError
 
-from release_creator.optional import require_yaml
+from release_creator.process import run_text
 
 
 def update_pins(config: Path, exclude_newer: str, python_version: str) -> None:
     """Refresh exact hook dependency pins that have eligible updates."""
-    require_yaml()
     source = config.read_text(encoding="utf-8")
     pinned = _pinned_dependencies(source)
     if pinned:
@@ -52,7 +50,7 @@ def _resolve(names: set[str], config: Path, exclude_newer: str, python_version: 
     if (uv := shutil.which("uv")) is None:
         msg = "uv is required to refresh hook dependency pins"
         raise FileNotFoundError(msg)
-    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Fixed uv argv.
+    result = run_text(
         [
             uv,
             "pip",
@@ -67,11 +65,7 @@ def _resolve(names: set[str], config: Path, exclude_newer: str, python_version: 
             "--python-version",
             python_version,
         ],
-        input="".join(f"{name}\n" for name in sorted(names)),
-        text=True,
-        encoding="utf-8",
-        capture_output=True,
-        check=False,
+        stdin="".join(f"{name}\n" for name in sorted(names)),
         cwd=config.parent,
     )
     if result.returncode:

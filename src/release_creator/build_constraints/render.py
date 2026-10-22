@@ -21,9 +21,12 @@ def write_build_constraints(
 ) -> None:
     """Write exact build pins with all available artifact hashes.
 
-    Raises:
-        ValueError: The lock cannot provide a complete build selection.
-
+    :param lock: PEP 751 lock to read.
+    :param output: Requirements file to write.
+    :param group: Dependency group containing build tools.
+    :param python_versions: Target Python versions to compare.
+    :param platform: Target operating system, or the current platform.
+    :raises ValueError: The lock cannot provide a complete build selection.
     """
     data = tomllib.loads(lock.read_text(encoding="utf-8"))
     if missing := next((key for key in ("dependency-groups", "requires-python", "packages") if key not in data), None):
@@ -40,7 +43,7 @@ def write_build_constraints(
             raise ValueError(msg)
     output.write_text(
         "".join(
-            f"{name}=={version} " + " ".join(f"--hash=sha256:{digest}" for digest in sorted(hashes)) + "\n"
+            f"{name}=={version} {' '.join(f'--hash=sha256:{digest}' for digest in sorted(hashes))}\n"
             for name, (version, hashes) in sorted(selected.items())
         ),
         encoding="utf-8",

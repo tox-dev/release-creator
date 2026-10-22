@@ -7,20 +7,17 @@ lazy import yaml
 
 from release_creator.fragments.knope import changeset_parts
 from release_creator.fragments.names import pending_changesets
-from release_creator.optional import require_yaml
 
 
 def render_knope_preview(changelog: Path, config: Path, fragments: Path) -> str:
     """Add a Draft section from current changesets to a Markdown changelog.
 
-    Returns:
-        The unchanged history with a pending Draft section when changesets exist.
-
-    Raises:
-        ValueError: The changelog or a changeset cannot be rendered.
-
+    :param changelog: Released changelog file.
+    :param config: Knope configuration file.
+    :param fragments: Directory of pending changesets.
+    :returns: The unchanged history with a pending Draft section when changesets exist.
+    :raises ValueError: The changelog or a changeset cannot be rendered.
     """
-    require_yaml()
     history = changelog.read_text(encoding="utf-8")
     changesets = pending_changesets(fragments)
     if not changesets:
@@ -44,7 +41,7 @@ def render_knope_preview(changelog: Path, config: Path, fragments: Path) -> str:
                 raise ValueError(msg)
             body = remainder.removeprefix("\n").rstrip()
             items.setdefault(categories[kind], []).append(
-                "- " + heading + "".join(f"\n  {line}" if line else "\n" for line in body.splitlines())
+                f"- {heading}{''.join(f'\n  {line}' if line else '\n' for line in body.splitlines())}"
             )
     draft = ['<a name="draft"></a>', "", "## Draft", ""]
     for section in sections:
@@ -58,7 +55,7 @@ def render_knope_preview(changelog: Path, config: Path, fragments: Path) -> str:
                 "",
             ))
     intro, marker, released = history.partition('<a name="release-')
-    return "\n\n".join(part.rstrip() for part in (intro, "\n".join(draft), marker + released) if part) + "\n"
+    return f"{'\n\n'.join(part.rstrip() for part in (intro, '\n'.join(draft), f'{marker}{released}') if part)}\n"
 
 
 __all__ = [

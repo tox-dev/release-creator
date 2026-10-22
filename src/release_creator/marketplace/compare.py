@@ -18,13 +18,13 @@ _ZIP_UNIX_SYSTEM: Final = 3
 def reconcile_marketplace(plugin_id: str, version: str, archive: Path, mode: Literal["stage", "verify"]) -> bool:
     """Return whether an absent version needs publishing; verify an existing version's ZIP members.
 
-    Returns:
-        Whether a version absent from Marketplace needs publishing.
-
-    Raises:
-        ValueError: The archive is invalid, differs from Marketplace, or is absent during verification.
-        HTTPError: Marketplace returned an HTTP error other than 404.
-
+    :param plugin_id: Marketplace plugin ID.
+    :param version: Plugin version.
+    :param archive: Signed plugin ZIP to compare.
+    :param mode: Whether to stage or verify the Marketplace version.
+    :returns: Whether a version absent from Marketplace needs publishing.
+    :raises ValueError: The archive is invalid, differs from Marketplace, or is absent during verification.
+    :raises HTTPError: Marketplace returned an HTTP error other than 404.
     """
     if not plugin_id or not version or any(value.strip() != value for value in (plugin_id, version)):
         msg = "plugin ID and version must be nonempty and have no surrounding whitespace"

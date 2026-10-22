@@ -28,7 +28,7 @@ def test_updates_exact_pins_without_reformatting(tmp_path: Path, mocker: MockerF
     )
     mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
     run = mocker.patch(
-        "release_creator.hooks.update.subprocess.run",
+        "release_creator.process.subprocess.run",
         return_value=subprocess.CompletedProcess([], 0, "mdformat-gfm==1.1.0\nmdformat-ruff==0.2.0\n", ""),
     )
 
@@ -52,7 +52,7 @@ def test_skips_ranges_and_unpinned(tmp_path: Path, mocker: MockerFixture) -> Non
     config = tmp_path / ".pre-commit-config.yaml"
     source = "repos: [{hooks: [{additional_dependencies: [sphinx>=9, mdformat-gfm]}]}]\n"
     config.write_text(source, encoding="utf-8")
-    run = mocker.patch("release_creator.hooks.update.subprocess.run")
+    run = mocker.patch("release_creator.process.subprocess.run")
 
     update_pins(config, "2026-10-14T00:00:00Z", "3.15")
 
@@ -75,9 +75,7 @@ def test_rejects_bad_resolver_output(output: str, message: str, tmp_path: Path, 
     source = "repos: [{hooks: [{additional_dependencies: [mdformat-gfm==1.0.0]}]}]\n"
     config.write_text(source, encoding="utf-8")
     mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
-    mocker.patch(
-        "release_creator.hooks.update.subprocess.run", return_value=subprocess.CompletedProcess([], 0, output, "")
-    )
+    mocker.patch("release_creator.process.subprocess.run", return_value=subprocess.CompletedProcess([], 0, output, ""))
 
     with pytest.raises(ValueError, match=message):
         update_pins(config, "2026-10-14T00:00:00Z", "3.15")
@@ -90,7 +88,7 @@ def test_rejects_resolver_failure(tmp_path: Path, mocker: MockerFixture) -> None
     config.write_text("additional_dependencies: [mdformat-gfm==1.0.0]\n", encoding="utf-8")
     mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
     mocker.patch(
-        "release_creator.hooks.update.subprocess.run",
+        "release_creator.process.subprocess.run",
         return_value=subprocess.CompletedProcess([], 1, "", "index unavailable"),
     )
 
@@ -130,7 +128,7 @@ def test_leaves_current_pin_untouched(tmp_path: Path, mocker: MockerFixture) -> 
     config.write_text(source, encoding="utf-8")
     mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
     mocker.patch(
-        "release_creator.hooks.update.subprocess.run",
+        "release_creator.process.subprocess.run",
         return_value=subprocess.CompletedProcess([], 0, "mdformat-gfm==1.0.0\n", ""),
     )
 

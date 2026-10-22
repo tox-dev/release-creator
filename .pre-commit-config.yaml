@@ -29,6 +29,16 @@ repos:
       - id: ruff-check
         args: ["--fix", "--unsafe-fixes", "--exit-non-zero-on-fix"]
       - id: ruff-format
+  - repo: https://github.com/jsh9/pydoclint
+    rev: 871751487edc82248bd8ffdaef1aa0f09968102f # frozen: 0.11.1
+    hooks:
+      - id: pydoclint
+        args:
+          - --style=sphinx
+          - --arg-type-hints-in-docstring=False
+          - --check-return-types=False
+          - --check-yield-types=False
+          - --check-style-mismatch=True
   - repo: https://github.com/asottile/blacken-docs
     rev: fda77690955e9b63c6687d8806bafd56a526e45f # frozen: 1.20.0
     hooks:

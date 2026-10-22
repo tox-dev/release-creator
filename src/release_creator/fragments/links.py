@@ -9,7 +9,8 @@ lazy from pathlib import Path
 
 from release_creator.fragments.knope import changeset_parts
 from release_creator.fragments.names import fragment_number, pending_changesets, pending_fragments
-from release_creator.fragments.pull_requests import PullRequestAuthor, fragment_pull_request_number, validate_repository
+from release_creator.fragments.pull_requests import PullRequestAuthor, fragment_pull_request_number
+from release_creator.github import MARKDOWN_AUTHOR, validate_repository
 
 _RE_PULL_REQUEST_LINK: Final = re.compile(
     r"""
@@ -24,13 +25,6 @@ _RE_AUTHOR_MARKER: Final = re.compile(
     (?:,?\s+)                     # Optional comma and whitespace before the credit
     by\s+                         # Credit marker and following whitespace
     (?=\[@|:user:`|`@)            # Supported Markdown or RST author syntax
-    """,
-    re.VERBOSE,
-)
-_RE_MARKDOWN_AUTHOR: Final = re.compile(
-    r"""
-    \[@(?P<handle>[A-Za-z0-9-]+)\]  # Markdown GitHub handle
-    \(https://github\.com/(?P=handle)\)  # Matching profile link
     """,
     re.VERBOSE,
 )
@@ -160,7 +154,7 @@ def _author_credit(author: str, extension: str) -> str:
 def _credited_handles(credit_text: str, extension: str) -> set[str]:
     if extension == ".rst":
         return {author["handle"] or author["link_handle"] for author in _RE_RST_USER.finditer(credit_text)}
-    return {author["handle"] for author in _RE_MARKDOWN_AUTHOR.finditer(credit_text)}
+    return {author["handle"] for author in MARKDOWN_AUTHOR.finditer(credit_text)}
 
 
 def _pull_request_url(repository: str, number: str) -> str:

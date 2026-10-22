@@ -8,7 +8,8 @@ lazy from release_creator.fragments.check import changed_changesets, changed_fra
 lazy from release_creator.fragments.git import commit_subjects_from_git
 lazy from release_creator.fragments.links import add_pull_request_links
 lazy from release_creator.fragments.names import pending_changesets, pending_fragments
-lazy from release_creator.fragments.pull_requests import pull_request_authors, validate_repository
+lazy from release_creator.fragments.pull_requests import pull_request_authors
+lazy from release_creator.github import validate_repository
 
 
 def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:

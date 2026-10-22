@@ -1,4 +1,4 @@
-{% set release = "release-" + versiondata.version | replace(".", "-") %}
+{% set release = "release-" ~ (versiondata.version | replace(".", "-")) %}
 <a name="{{ release }}"></a>
 
 ## {{ versiondata.version }} ({{ versiondata.date }})
@@ -13,7 +13,7 @@
 
 {% for text, values in sections[section][category].items() %}
 {% set missing = values | reject("in", text) | reject("in", text | replace("/pull/", "/issues/") | replace(":pr:", ":issue:")) | list %}
-- {{ text }}{{ (" (" + (missing | join(", ")) + ")") if missing else "" }}
+- {{ text }}{{ (" (" ~ (missing | join(", ")) ~ ")") if missing else "" }}
 {% endfor %}
 
 {% endif %}

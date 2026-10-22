@@ -5,9 +5,6 @@
 ``prek update --freeze`` moves pre-commit hook revisions to commit SHAs. It does not update packages installed through
 ``additional_dependencies``. Use ``release-creator hooks`` in the same weekly change to refresh exact package pins:
 
-Install ``release-creator[yaml]`` for this command. The base package leaves out PyYAML so commands that do not read YAML
-can install on Python 3.15 Windows without compiling it.
-
 .. code-block:: bash
 
     prek update --freeze --cooldown-days 7
