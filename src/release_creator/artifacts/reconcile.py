@@ -21,6 +21,31 @@ lazy from packaging.utils import (
 lazy from packaging.version import InvalidVersion, Version
 
 
+def verify_artifacts(project: str, version: str, dist: Path, wait_seconds: int) -> None:
+    """Wait only for PyPI's complete, consistent release view.
+
+    :param project: PyPI project name.
+    :param version: Release version.
+    :param dist: Directory holding the expected distribution files.
+    :param wait_seconds: Maximum time to wait for PyPI propagation.
+    :raises ValueError: The release is incomplete at the deadline or its files differ.
+    :raises _IncompleteReleaseError: PyPI has not published every expected file by the deadline.
+    """
+    if wait_seconds < 0:
+        msg = "wait_seconds must be nonnegative"
+        raise ValueError(msg)
+    deadline = time.monotonic() + wait_seconds
+    while True:
+        try:
+            reconcile_artifacts(project, version, dist, "verify")
+        except _IncompleteReleaseError:
+            if (remaining := deadline - time.monotonic()) <= 0:
+                raise
+            time.sleep(min(2, remaining))
+        else:
+            return
+
+
 def reconcile_artifacts(
     project: str,
     version: str,
@@ -72,31 +97,6 @@ def reconcile_artifacts(
             msg = f"artifact changed while staging: {name}"
             raise ValueError(msg)
     return len(missing)
-
-
-def verify_artifacts(project: str, version: str, dist: Path, wait_seconds: int) -> None:
-    """Wait only for PyPI's complete, consistent release view.
-
-    :param project: PyPI project name.
-    :param version: Release version.
-    :param dist: Directory holding the expected distribution files.
-    :param wait_seconds: Maximum time to wait for PyPI propagation.
-    :raises ValueError: The release is incomplete at the deadline or its files differ.
-    :raises _IncompleteReleaseError: PyPI has not published every expected file by the deadline.
-    """
-    if wait_seconds < 0:
-        msg = "wait_seconds must be nonnegative"
-        raise ValueError(msg)
-    deadline = time.monotonic() + wait_seconds
-    while True:
-        try:
-            reconcile_artifacts(project, version, dist, "verify")
-        except _IncompleteReleaseError:
-            if (remaining := deadline - time.monotonic()) <= 0:
-                raise
-            time.sleep(min(2, remaining))
-        else:
-            return
 
 
 class _IncompleteReleaseError(ValueError):

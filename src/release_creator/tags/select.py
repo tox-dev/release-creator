@@ -56,21 +56,6 @@ def next_tag(bump: str, tags: list[str], fragments: list[str], release_date: dat
     return f"{prefix}{'.'.join(map(str, version))}"
 
 
-def parse_tag(tag: str) -> tuple[int, int, int]:
-    """Parse a major.minor.patch release tag with an optional v prefix.
-
-    :param tag: Version tag to parse.
-    :returns: The numeric major, minor, and patch components.
-    :raises ValueError: The tag is not a numeric release version.
-    """
-    match tag.removeprefix("v").split("."):
-        case [major, minor, patch] if all(part.isascii() and part.isdecimal() for part in (major, minor, patch)):
-            return int(major), int(minor), int(patch)
-        case _:
-            msg = f"expected a major.minor.patch version with optional v prefix: {tag}"
-            raise ValueError(msg)
-
-
 def previous_tag(tag: str, tags: list[str]) -> str | None:
     """Select the greatest numeric release tag before ``tag``.
 
@@ -107,6 +92,21 @@ def require_newer_tag(tag: str, tags: list[str]) -> None:
     if versions and target <= max(versions):
         msg = f"{tag} must be newer than the latest release tag"
         raise ValueError(msg)
+
+
+def parse_tag(tag: str) -> tuple[int, int, int]:
+    """Parse a major.minor.patch release tag with an optional v prefix.
+
+    :param tag: Version tag to parse.
+    :returns: The numeric major, minor, and patch components.
+    :raises ValueError: The tag is not a numeric release version.
+    """
+    match tag.removeprefix("v").split("."):
+        case [major, minor, patch] if all(part.isascii() and part.isdecimal() for part in (major, minor, patch)):
+            return int(major), int(minor), int(patch)
+        case _:
+            msg = f"expected a major.minor.patch version with optional v prefix: {tag}"
+            raise ValueError(msg)
 
 
 __all__ = [
