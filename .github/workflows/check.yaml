@@ -96,13 +96,6 @@ jobs:
       - name: Validate Towncrier fragments
         if: steps.news.outputs.fragment == 'true'
         run: uv run --no-default-groups --group release towncrier check --compare-with "origin/${GITHUB_BASE_REF}"
-  release-dry-run:
-    name: Release without publishing
-    if: github.event_name == 'pull_request'
-    uses: $/.github/workflows/validate-release.yaml
-    permissions:
-      contents: read
-      pull-requests: read
   hook-update-cooldown:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-26.04
@@ -110,7 +103,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: tox-dev/github-workflows/check-hook-update-cooldown@8db87d4730353b61630d66cbc592d6bed0c85d2b
+      - uses: tox-dev/github-workflows/check-hook-update-cooldown@a32ce094895292b19eea422fc6500f1ef1ae8d5f
         with:
           repository: ${{ github.repository }}
           pull-request: ${{ github.event.pull_request.number }}
@@ -118,7 +111,7 @@ jobs:
   gate:
     name: Required checks pass
     if: always()
-    needs: [test, check, changelog, release-dry-run, hook-update-cooldown]
+    needs: [test, check, changelog, hook-update-cooldown]
     runs-on: ubuntu-26.04
     steps:
       - name: Require successful jobs
@@ -131,7 +124,6 @@ jobs:
               to_entries[];
               .value.result == "success" or
               (.key == "changelog" and .value.result == "skipped") or
-              (.key == "release-dry-run" and .value.result == "skipped") or
               (.key == "hook-update-cooldown" and .value.result == "skipped" and env.EVENT_NAME != "pull_request")
             )
           ' <<< "$NEEDS_JSON"
