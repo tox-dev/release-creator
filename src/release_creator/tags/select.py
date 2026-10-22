@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from packaging.version import InvalidVersion, Version
+
 if TYPE_CHECKING:
     from datetime import date
 
@@ -22,13 +24,14 @@ def next_tag(bump: str, tags: list[str], fragments: list[str], release_date: dat
     if not fragments:
         msg = "no changelog fragments to release"
         raise ValueError(msg)
-    versions: list[tuple[int, int, int]] = []
+    versions: list[Version] = []
     for tag in tags:
         try:
             versions.append(parse_tag(tag))
         except ValueError:
             continue
-    current = max(versions, default=(0, 0, 0))
+    current = max(versions, default=Version("0.0.0"))
+    major, minor, patch = current.release
     if bump == "auto":
         bump = (
             "major"
@@ -39,19 +42,19 @@ def next_tag(bump: str, tags: list[str], fragments: list[str], release_date: dat
         )
     match bump:
         case "major":
-            version = (current[0] + 1, 0, 0)
+            version = (major + 1, 0, 0)
         case "minor":
-            version = (current[0], current[1] + 1, 0)
+            version = (major, minor + 1, 0)
         case "patch":
-            version = (current[0], current[1], current[2] + 1)
+            version = (major, minor, patch + 1)
         case "calver":
             year_month = release_date.year, release_date.month
-            version = (*year_month, current[2] + 1 if current[:2] == year_month else 0)
+            version = (*year_month, patch + 1 if (major, minor) == year_month else 0)
         case _:
             msg = f"unknown version bump: {bump}"
             raise ValueError(msg)
-    if version <= current:
-        msg = f"calculated version must be newer than {'.'.join(map(str, current))}"
+    if Version(".".join(map(str, version))) <= current:
+        msg = f"calculated version must be newer than {current}"
         raise ValueError(msg)
     return f"{prefix}{'.'.join(map(str, version))}"
 
@@ -64,7 +67,7 @@ def previous_tag(tag: str, tags: list[str]) -> str | None:
     :returns: The preceding tag, or ``None`` when this is the first release.
     """
     target = parse_tag(tag)
-    candidates: list[tuple[tuple[int, int, int], str]] = []
+    candidates: list[tuple[Version, str]] = []
     for candidate in tags:
         try:
             version = parse_tag(candidate)
@@ -72,7 +75,7 @@ def previous_tag(tag: str, tags: list[str]) -> str | None:
             continue
         if version < target:
             candidates.append((version, candidate))
-    return max(candidates, default=((), ""))[1] or None
+    return max(candidates)[1] if candidates else None
 
 
 def require_newer_tag(tag: str, tags: list[str]) -> None:
@@ -83,7 +86,7 @@ def require_newer_tag(tag: str, tags: list[str]) -> None:
     :raises ValueError: A matching or newer release tag already exists.
     """
     target = parse_tag(tag)
-    versions: list[tuple[int, int, int]] = []
+    versions: list[Version] = []
     for candidate in tags:
         try:
             versions.append(parse_tag(candidate))
@@ -94,16 +97,22 @@ def require_newer_tag(tag: str, tags: list[str]) -> None:
         raise ValueError(msg)
 
 
-def parse_tag(tag: str) -> tuple[int, int, int]:
+def parse_tag(tag: str) -> Version:
     """Parse a major.minor.patch release tag with an optional v prefix.
 
     :param tag: Version tag to parse.
-    :returns: The numeric major, minor, and patch components.
+    :returns: The canonical release version.
     :raises ValueError: The tag is not a numeric release version.
     """
-    match tag.removeprefix("v").split("."):
-        case [major, minor, patch] if all(part.isascii() and part.isdecimal() for part in (major, minor, patch)):
-            return int(major), int(minor), int(patch)
+    candidate = tag.removeprefix("v")
+    try:
+        version = Version(candidate)
+    except InvalidVersion as error:
+        msg = f"expected a major.minor.patch version with optional v prefix: {tag}"
+        raise ValueError(msg) from error
+    match version.release:
+        case [_, _, _] if str(version) == candidate and not version.epoch and version.local is None:
+            return version
         case _:
             msg = f"expected a major.minor.patch version with optional v prefix: {tag}"
             raise ValueError(msg)

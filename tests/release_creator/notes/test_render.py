@@ -140,6 +140,8 @@ def test_render_markdown_accepts_existing_version_headings(heading: str) -> None
         pytest.param("1.10rc1", id="two-part-candidate"),
         pytest.param("v1.3.4rc", id="candidate-without-number"),
         pytest.param("0.10.2.0", id="four-part"),
+        pytest.param("1.3.4.post1", id="postrelease"),
+        pytest.param("1.3.4.dev1", id="development"),
     ],
 )
 def test_render_markdown_accepts_historical_version_shapes(tag: str) -> None:
@@ -385,6 +387,14 @@ def test_render_rst_rejects_uncredited_entry_with_unavailable_generated_author()
             "* Add a feature by @alice in https://github.com/tox-dev/other/pull/42\n",
             "no author for pull request #42",
             id="different-repository",
+        ),
+        pytest.param(
+            "## 1.2.3 (today)\n\n### Added\n\n"
+            "- Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) by @alice.\n",
+            "* Title by @alice in https://github.com/tox-dev/example/pull/42 "
+            "by @bob in https://github.com/tox-dev/example/pull/42\n",
+            "does not include @bob",
+            id="title-spoofs-author",
         ),
         pytest.param(
             "## 1.2.3 (today)\n\n### Added\n\n- Add a feature "
@@ -764,6 +774,8 @@ def test_render_rst_accepts_two_part_historical_tags(heading: str) -> None:
         pytest.param("1.10rc1", id="two-part-candidate"),
         pytest.param("v1.3.4rc", id="candidate-without-number"),
         pytest.param("0.10.2.0", id="four-part"),
+        pytest.param("1.3.4.post1", id="postrelease"),
+        pytest.param("1.3.4.dev1", id="development"),
     ],
 )
 def test_render_rst_accepts_historical_version_shapes(tag: str) -> None:

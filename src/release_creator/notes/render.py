@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from textwrap import dedent
 from typing import Final
 
+from packaging.version import InvalidVersion, Version
 lazy import mdformat
 
 from release_creator.categories import RELEASE_CATEGORIES
@@ -38,15 +39,16 @@ _RE_GENERATED_PR_AUTHOR: Final = re.compile(
     \s+in\s+https://github\.com/
     (?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)  # Repository in the generated link
     /pull/(?P<number>\d+)              # Pull request number
+    \s*$                                # Actual credit follows the entire title
     """,
     re.VERBOSE,
 )
 _RE_RST_VERSION: Final = re.compile(
     r"""
     ^(?:
-        (?P<tag>v?\d+(?:\.\d+){1,3}(?:(?:a|b|rc)\d*)?)\ \((?P<date>[^)]+)\)  # Version and date
+        (?P<tag>v?[A-Za-z0-9.+-]+)\ \((?P<date>[^)]+)\)  # Version and date
         |
-        `(?P<link_tag>v?\d+(?:\.\d+){1,3}(?:(?:a|b|rc)\d*)?)\ <https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/tree/
+        `(?P<link_tag>v?[A-Za-z0-9.+-]+)\ <https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/tree/
         (?P=link_tag)>`_(?:\ -\ (?P<link_date>\d{4}-\d{2}-\d{2}))?  # Linked version, with optional date
     )$
     """,
@@ -62,7 +64,7 @@ _RE_MARKDOWN_VERSION: Final = re.compile(
     r"""
     ^(?P<level>\#{2,3})\          # Markdown version heading level
     (?P<open>\[)?                   # Optional Keep a Changelog link bracket
-    (?P<tag>v?\d+(?:\.\d+){1,3}(?:(?:a|b|rc)\d*)?)  # Release version, including historical prereleases
+    (?P<tag>v?[A-Za-z0-9.+-]+)  # Release version; Version validates its syntax
     (?(open)\])                     # Close the optional bracket
     (?:\ \([^)]+\)|\ -\ [^\n]+)? # Parenthesized or dash-separated date
     $                               # End of heading
@@ -72,14 +74,14 @@ _RE_MARKDOWN_VERSION: Final = re.compile(
 _RE_MARKDOWN_VERSION_ANCHOR: Final = re.compile(
     r"""
     ^<a\ name="release-             # Version anchor prefix
-    (?P<version>v?\d+(?:-\d+){1,3}(?:(?:a|b|rc)\d*)?)  # Version encoded for an anchor
+    (?P<version>v?[A-Za-z0-9.-]+)  # Version encoded for an anchor
     "></a>$                         # Anchor terminator
     """,
     re.VERBOSE,
 )
 _RE_MARKDOWN_LINK_DEFINITION: Final = re.compile(
     r"""
-    ^\[(?P<version>v?\d+(?:\.\d+){1,3}(?:(?:a|b|rc)\d*)?|unreleased)\]:  # Version reference
+    ^\[(?P<version>v?[A-Za-z0-9.+-]+|unreleased)\]:  # Version reference
     \s+https://github\.com/[^\s]+                    # GitHub destination
     $                                                   # End of definition
     """,
@@ -270,13 +272,19 @@ def _extract_rst_body(changelog: str, context: ReleaseContext, issue_role: str) 
         index
         for index, line in enumerate(lines)
         if (match := _RE_RST_VERSION.fullmatch(line.strip()))
+        and _is_version(match["tag"] or match["link_tag"])
         and (match["tag"] or match["link_tag"]).removeprefix("v") == context.tag.removeprefix("v")
     ]
     if len(headings) != 1:
         msg = f"expected one changelog section for {context.tag}, found {len(headings)}"
         raise ValueError(msg)
     end = next(
-        (index for index in range(headings[0] + 1, len(lines)) if _RE_RST_VERSION.fullmatch(lines[index].strip())),
+        (
+            index
+            for index in range(headings[0] + 1, len(lines))
+            if (match := _RE_RST_VERSION.fullmatch(lines[index].strip()))
+            and _is_version(match["tag"] or match["link_tag"])
+        ),
         len(lines),
     )
     body: list[str] = []
@@ -510,7 +518,11 @@ def _extract_body(changelog: str, context: ReleaseContext) -> str:
     lines = [
         line
         for line in changelog.splitlines()
-        if not _is_comparison_line(line) and not _RE_MARKDOWN_LINK_DEFINITION.fullmatch(line)
+        if not _is_comparison_line(line)
+        and not (
+            (match := _RE_MARKDOWN_LINK_DEFINITION.fullmatch(line))
+            and (match["version"].lower() == "unreleased" or _is_version(match["version"]))
+        )
     ]
     heading_level = "###" if context.package is not None else "##"
     if context.package is not None:
@@ -527,6 +539,7 @@ def _extract_body(changelog: str, context: ReleaseContext) -> str:
         index
         for index, line in enumerate(lines)
         if (match := _RE_MARKDOWN_VERSION.fullmatch(line))
+        and _is_version(match["tag"])
         and match["level"] == heading_level
         and match["tag"].removeprefix("v") == version
     ]
@@ -537,8 +550,13 @@ def _extract_body(changelog: str, context: ReleaseContext) -> str:
     body: list[str] = []
     for source_line in lines[headings[0] + 1 :]:
         if (
-            (match := _RE_MARKDOWN_VERSION.fullmatch(source_line)) is not None and match["level"] == heading_level
-        ) or _RE_MARKDOWN_VERSION_ANCHOR.fullmatch(source_line):
+            (match := _RE_MARKDOWN_VERSION.fullmatch(source_line)) is not None
+            and _is_version(match["tag"])
+            and match["level"] == heading_level
+        ) or (
+            (match := _RE_MARKDOWN_VERSION_ANCHOR.fullmatch(source_line)) is not None
+            and _is_version(match["version"].replace("-", "."))
+        ):
             break
         body.append(source_line)
     return _convert_markdown_body(body, "#### " if context.package is not None else "### ")
@@ -587,6 +605,14 @@ def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
 
 def _is_comparison_line(line: str) -> bool:
     return line.strip().startswith(("**Full Changelog**:", "Full Changelog:"))
+
+
+def _is_version(tag: str) -> bool:
+    try:
+        Version(tag.removeprefix("v"))
+    except InvalidVersion:
+        return False
+    return True
 
 
 __all__ = [

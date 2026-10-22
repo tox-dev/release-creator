@@ -3,6 +3,7 @@
 from datetime import date
 
 import pytest
+from packaging.version import Version
 
 lazy from release_creator.tags.select import next_tag, parse_tag, previous_tag, require_newer_tag
 
@@ -17,6 +18,7 @@ lazy from release_creator.tags.select import next_tag, parse_tag, previous_tag, 
         pytest.param("auto", ["v1.2.3"], ["+one.feature.md"], "1.3.0", id="prefixed-history"),
         pytest.param("auto", ["1.2.3"], ["+one.feature.rst"], "1.3.0", id="feature-rst"),
         pytest.param("auto", ["1.2.3"], ["+one.bugfix.md"], "1.2.4", id="fix"),
+        pytest.param("auto", ["1.2.3rc1"], ["+one.bugfix.md"], "1.2.4", id="fix-after-prerelease"),
         pytest.param("major", ["1.2.3"], ["+one.bugfix.md"], "2.0.0", id="major"),
         pytest.param("minor", ["1.2.3"], ["+one.bugfix.md"], "1.3.0", id="minor"),
         pytest.param("patch", ["1.2.3"], ["+one.feature.md"], "1.2.4", id="patch"),
@@ -48,12 +50,14 @@ def test_next_tag_rejects_invalid(bump: str, tags: list[str], fragments: list[st
 @pytest.mark.parametrize(
     ("tag", "expected"),
     [
-        pytest.param("1.2.3", (1, 2, 3), id="normal"),
-        pytest.param("v1.2.3", (1, 2, 3), id="prefixed"),
-        pytest.param("01.002.3", (1, 2, 3), id="leading-zeros"),
+        pytest.param("1.2.3", Version("1.2.3"), id="normal"),
+        pytest.param("v1.2.3", Version("1.2.3"), id="prefixed"),
+        pytest.param("1.2.3rc1", Version("1.2.3rc1"), id="prerelease"),
+        pytest.param("1.2.3.post1", Version("1.2.3.post1"), id="postrelease"),
+        pytest.param("1.2.3.dev1", Version("1.2.3.dev1"), id="development"),
     ],
 )
-def test_parse_tag(tag: str, expected: tuple[int, int, int]) -> None:
+def test_parse_tag(tag: str, expected: Version) -> None:
     assert parse_tag(tag) == expected
 
 
@@ -66,6 +70,8 @@ def test_parse_tag(tag: str, expected: tuple[int, int, int]) -> None:
         pytest.param("1.2.x", id="non-numeric"),
         pytest.param("vv1.2.3", id="double-prefix"),
         pytest.param("\u0661.2.3", id="non-ascii"),
+        pytest.param("1.01.0", id="leading-zero"),
+        pytest.param("1.2.3+local", id="local-version"),
     ],
 )
 def test_parse_tag_rejects_invalid(tag: str) -> None:
@@ -81,6 +87,10 @@ def test_previous_tag_preserves_prefix() -> None:
     assert previous_tag("v1.1.0", ["1.0.3", "v1.0.5", "v1.1.0", "v1"]) == "v1.0.5"
 
 
+def test_previous_tag_orders_prereleases() -> None:
+    assert previous_tag("1.2.3", ["1.2.2", "1.2.3rc1", "1.2.3b1"]) == "1.2.3rc1"
+
+
 def test_previous_tag_missing() -> None:
     assert previous_tag("1.0.0", ["junk", "1.0.0", "2.0.0"]) is None
 
@@ -91,6 +101,10 @@ def test_require_newer_tag_accepts_first_release() -> None:
 
 def test_require_newer_tag_accepts_new_version() -> None:
     require_newer_tag("1.10.0", ["junk", "1.9.0"])
+
+
+def test_require_newer_tag_accepts_stable_after_prerelease() -> None:
+    require_newer_tag("1.2.3", ["1.2.3rc1"])
 
 
 def test_require_newer_tag_rejects_unprefixed_duplicate() -> None:
