@@ -14,10 +14,12 @@
       --python-version 3.15
     prek run --all-files
 
-The command reads ``.pre-commit-config.yaml`` and resolves all exact pins in ``additional_dependencies`` in one uv
-request. For example, ``mdformat-gfm==1.0.0`` can become ``mdformat-gfm==1.1.0``. A range such as ``mdformat-gfm>=1``
-stays as written. YAML comments, quoting, and hook configuration stay in place. The Python version must match the hooks'
-intended interpreter, and the cutoff keeps newly published packages out of the weekly update.
+The command resolves each hook's exact ``additional_dependencies`` and their transitive packages separately. It pins the
+full closure across platforms, including conditional dependencies such as Windows-only packages. Each added pin has an
+inline ``# release-creator managed`` marker so a later update can replace or remove it. Direct pins retain their
+spelling and comments; a flow-style list becomes a block list when the closure adds packages. A range such as
+``mdformat-gfm>=1`` stays as written and is not a resolution root. Use the Python version that the hooks run with; the
+cutoff excludes newly published packages.
 
 If uv cannot resolve every pinned package, the command fails without changing the file. Review the patch and run
 ``prek`` before opening the update PR. The command does not update hook revisions, project requirements, or

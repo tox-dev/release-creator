@@ -1,31 +1,40 @@
-"""Refresh exact dependency pins without changing other pre-commit YAML."""
+"""Refresh hook dependencies while preserving unrelated pre-commit YAML."""
 
+import json
+import operator
 import shutil
 lazy from pathlib import Path
 lazy from typing import cast
 
 lazy from packaging.requirements import InvalidRequirement, Requirement
-lazy from packaging.utils import canonicalize_name
+lazy from packaging.utils import NormalizedName, canonicalize_name
 lazy from yaml import MappingNode, ScalarNode, SequenceNode, compose
 lazy from yaml.error import Mark, YAMLError
 
 from release_creator.process import run_text
 
+type _Group = tuple[ScalarNode, SequenceNode, list[tuple[ScalarNode, Requirement]], list[ScalarNode]]
+type _Edit = tuple[int, int, str]
+
 
 def update_pins(config: Path, exclude_newer: str, python_version: str) -> None:
-    """Refresh exact hook dependency pins that have eligible updates."""
+    """Refresh each hook's complete dependency closure under the selected cutoff."""
     source = config.read_text(encoding="utf-8")
-    pinned = _pinned_dependencies(source)
-    if pinned:
-        resolved = _resolve(
-            {canonicalize_name(requirement.name) for _, requirement in pinned}, config, exclude_newer, python_version
-        )
-        updated = _replace_pins(source, pinned, resolved)
-        if source != updated:
-            config.write_text(updated, encoding="utf-8")
+    edits: list[_Edit] = []
+    for group in _groups(source):
+        direct = group[2]
+        if direct:
+            resolved = _resolve([requirement for _, requirement in direct], config, exclude_newer, python_version)
+            edits.extend(_group_edits(source, group, resolved))
+        elif group[3]:
+            edits.extend(_group_edits(source, group, []))
+    for start, end, replacement in sorted(edits, key=operator.itemgetter(0), reverse=True):
+        source = f"{source[:start]}{replacement}{source[end:]}"
+    if edits:
+        config.write_text(source, encoding="utf-8")
 
 
-def _pinned_dependencies(source: str) -> list[tuple[ScalarNode, Requirement]]:
+def _groups(source: str) -> list[_Group]:
     try:
         root = compose(source)
     except YAMLError as error:
@@ -34,19 +43,43 @@ def _pinned_dependencies(source: str) -> list[tuple[ScalarNode, Requirement]]:
     if not isinstance(root, MappingNode):
         msg = "pre-commit configuration must be a YAML mapping"
         raise TypeError(msg)
-    pinned: list[tuple[ScalarNode, Requirement]] = []
-    for node in _dependency_nodes(root):
+    groups: list[_Group] = []
+    pending: list[MappingNode | SequenceNode | ScalarNode] = [root]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, MappingNode):
+            for key, value in node.value:
+                if isinstance(key, ScalarNode) and key.value == "additional_dependencies":
+                    groups.append(_parse_group(source, key, value))
+                else:
+                    pending.append(value)
+        elif isinstance(node, SequenceNode):
+            pending.extend(node.value)
+    return groups
+
+
+def _parse_group(source: str, key: ScalarNode, value: MappingNode | SequenceNode | ScalarNode) -> _Group:
+    if not isinstance(value, SequenceNode) or not all(isinstance(item, ScalarNode) for item in value.value):
+        msg = "additional_dependencies must be a list of package strings"
+        raise TypeError(msg)
+    direct: list[tuple[ScalarNode, Requirement]] = []
+    managed: list[ScalarNode] = []
+    for item in value.value:
+        line_end = source.find("\n", _end(item))
+        if "# release-creator managed" in source[_end(item) : line_end if line_end >= 0 else len(source)]:
+            managed.append(item)
+            continue
         try:
-            requirement = Requirement(node.value)
+            requirement = Requirement(item.value)
         except InvalidRequirement as error:
-            msg = f"invalid hook dependency {node.value!r}"
+            msg = f"invalid hook dependency {item.value!r}"
             raise ValueError(msg) from error
         if len(requirement.specifier) == 1 and next(iter(requirement.specifier)).operator == "==":
-            pinned.append((node, requirement))
-    return pinned
+            direct.append((item, requirement))
+    return key, value, direct, managed
 
 
-def _resolve(names: set[str], config: Path, exclude_newer: str, python_version: str) -> dict[str, str]:
+def _resolve(roots: list[Requirement], config: Path, exclude_newer: str, python_version: str) -> list[Requirement]:
     if (uv := shutil.which("uv")) is None:
         msg = "uv is required to refresh hook dependency pins"
         raise FileNotFoundError(msg)
@@ -56,7 +89,7 @@ def _resolve(names: set[str], config: Path, exclude_newer: str, python_version: 
             "pip",
             "compile",
             "-",
-            "--no-deps",
+            "--universal",
             "--quiet",
             "--no-header",
             "--no-annotate",
@@ -65,71 +98,127 @@ def _resolve(names: set[str], config: Path, exclude_newer: str, python_version: 
             "--python-version",
             python_version,
         ],
-        stdin="".join(f"{name}\n" for name in sorted(names)),
+        stdin="".join(f"{_root_input(root)}\n" for root in roots),
         cwd=config.parent,
     )
     if result.returncode:
         msg = f"cannot resolve hook dependencies: {result.stderr.strip()}"
         raise ValueError(msg)
-    lines = [_resolved_line(line) for line in result.stdout.splitlines()]
-    resolved = dict(lines)
-    if len(resolved) != len(lines) or set(resolved) != names:
-        msg = f"uv returned different hook dependencies: {result.stdout.strip()}"
+    resolved = [_resolved_line(line) for line in result.stdout.splitlines() if line.strip()]
+    root_names = {canonicalize_name(root.name) for root in roots}
+    for name in root_names:
+        if len([item for item in resolved if canonicalize_name(item.name) == name]) != 1:
+            msg = f"uv returned different hook dependencies: {result.stdout.strip()}"
+            raise ValueError(msg)
+    if len({(canonicalize_name(item.name), str(item.marker)) for item in resolved}) != len(resolved):
+        msg = f"uv returned duplicate hook dependencies: {result.stdout.strip()}"
         raise ValueError(msg)
     return resolved
 
 
-def _resolved_line(line: str) -> tuple[str, str]:
+def _root_input(requirement: Requirement) -> str:
+    extras = f"[{','.join(sorted(requirement.extras))}]" if requirement.extras else ""
+    marker = f"; {requirement.marker}" if requirement.marker else ""
+    return f"{requirement.name}{extras}{marker}"
+
+
+def _resolved_line(line: str) -> Requirement:
     try:
         requirement = Requirement(line)
     except InvalidRequirement as error:
         msg = f"invalid package from uv: {error}"
         raise ValueError(msg) from error
-    if len(requirement.specifier) != 1 or (specifier := next(iter(requirement.specifier))).operator != "==":
+    if len(requirement.specifier) != 1 or next(iter(requirement.specifier)).operator != "==":
         msg = f"expected an exact pin from uv: {line}"
         raise ValueError(msg)
-    return canonicalize_name(requirement.name), specifier.version
+    return requirement
 
 
-def _replace_pins(source: str, pinned: list[tuple[ScalarNode, Requirement]], resolved: dict[str, str]) -> str:
-    for node, requirement in sorted(pinned, key=lambda item: _start(item[0]), reverse=True):
-        old_version = next(iter(requirement.specifier)).version
-        new_version = resolved[canonicalize_name(requirement.name)]
-        if old_version == new_version:
-            continue
-        start = _start(node)
-        end = cast("Mark", node.end_mark).index
-        scalar = source[start:end]
-        before, _, after = scalar.partition("==")
-        spacing = after[: len(after) - len(after.lstrip())]
-        updated = f"{before}=={spacing}{new_version}{after[len(spacing) + len(old_version) :]}"
-        source = f"{source[:start]}{updated}{source[end:]}"
-    return source
+def _group_edits(source: str, group: _Group, resolved: list[Requirement]) -> list[_Edit]:
+    key, sequence, direct, managed = group
+    if not direct and len(managed) == len(sequence.value):
+        end = source.find("\n", _end(sequence))
+        return [(_start(key), end + 1 if end >= 0 else len(source), f"{key.value}: []\n")]
+    roots = {canonicalize_name(requirement.name) for _, requirement in direct}
+    transitive = [item for item in resolved if canonicalize_name(item.name) not in roots]
+    versions = {
+        canonicalize_name(item.name): next(iter(item.specifier)).version
+        for item in resolved
+        if canonicalize_name(item.name) in roots
+    }
+    if cast("Mark", sequence.start_mark).line == cast("Mark", sequence.end_mark).line and transitive:
+        return [_inline_edit(source, group, versions, transitive)]
+    return _block_edits(source, group, versions, transitive)
+
+
+def _inline_edit(
+    source: str,
+    group: _Group,
+    versions: dict[NormalizedName, str],
+    transitive: list[Requirement],
+) -> _Edit:
+    key, sequence, direct, _ = group
+    indent = " " * cast("Mark", key.start_mark).column
+    existing = []
+    for item in sequence.value:
+        item = cast("ScalarNode", item)
+        scalar = source[_start(item) : _end(item)]
+        match = next(((node, requirement) for node, requirement in direct if node is item), None)
+        if match:
+            scalar = _replace_scalar(scalar, match[1], versions[canonicalize_name(match[1].name)])
+        existing.append(f"{indent}  - {scalar}\n")
+    generated = [f"{indent}  - {json.dumps(str(item))} # release-creator managed\n" for item in transitive]
+    line_end = source.find("\n", _end(sequence))
+    if line_end < 0:
+        line_end = len(source)
+    suffix = source[_end(sequence) : line_end]
+    replacement = f"{key.value}:" + (suffix if suffix.strip() else "") + "\n" + "".join(existing + generated)
+    return _start(key), line_end + 1 if line_end < len(source) else line_end, replacement
+
+
+def _block_edits(
+    source: str,
+    group: _Group,
+    versions: dict[NormalizedName, str],
+    transitive: list[Requirement],
+) -> list[_Edit]:
+    _, sequence, direct, managed = group
+    edits: list[_Edit] = []
+    for node, requirement in direct:
+        scalar = source[_start(node) : _end(node)]
+        updated = _replace_scalar(scalar, requirement, versions[canonicalize_name(requirement.name)])
+        if scalar != updated:
+            edits.append((_start(node), _end(node), updated))
+    for node in managed:
+        start = source.rfind("\n", 0, _start(node)) + 1
+        end = source.find("\n", _end(node))
+        edits.append((start, end + 1 if end >= 0 else len(source), ""))
+    if transitive:
+        indent = " " * (cast("Mark", sequence.value[0].start_mark).column - 2)
+        end = source.find("\n", _end(sequence))
+        insertion = end + 1 if end >= 0 else len(source)
+        generated = ("\n" if end < 0 and not source.endswith("\n") else "") + "".join(
+            f"{indent}- {json.dumps(str(item))} # release-creator managed\n" for item in transitive
+        )
+        edits.append((insertion, insertion, generated))
+    return edits
+
+
+def _replace_scalar(scalar: str, requirement: Requirement, version: str) -> str:
+    old_version = next(iter(requirement.specifier)).version
+    if old_version == version:
+        return scalar
+    before, _, after = scalar.partition("==")
+    spacing = after[: len(after) - len(after.lstrip())]
+    return f"{before}=={spacing}{version}{after[len(spacing) + len(old_version) :]}"
 
 
 def _start(node: ScalarNode) -> int:
     return int(cast("Mark", node.start_mark).index)
 
 
-def _dependency_nodes(root: MappingNode) -> list[ScalarNode]:
-    result: list[ScalarNode] = []
-    pending: list[MappingNode | SequenceNode | ScalarNode] = [root]
-    while pending:
-        node = pending.pop()
-        if isinstance(node, MappingNode):
-            for key, value in node.value:
-                if isinstance(key, ScalarNode) and key.value == "additional_dependencies":
-                    if not isinstance(value, SequenceNode) or not all(
-                        isinstance(item, ScalarNode) for item in value.value
-                    ):
-                        msg = "additional_dependencies must be a list of package strings"
-                        raise TypeError(msg)
-                    result.extend(value.value)
-                else:
-                    pending.append(value)
-        elif isinstance(node, SequenceNode):
-            pending.extend(node.value)
-    return result
+def _end(node: ScalarNode | SequenceNode) -> int:
+    return int(cast("Mark", node.end_mark).index)
 
 
 __all__ = [
