@@ -12,21 +12,6 @@ from release_creator.fragments.names import fragment_number
 from release_creator.github import validate_repository
 from release_creator.process import run_text
 
-_RE_PULL_REQUEST: Final = re.compile(
-    r"""
-    \(\#                         # Squash merge pull request marker
-    (?P<number>\d+)             # Pull request number
-    \)$                          # Marker ends the commit subject
-    """,
-    re.VERBOSE,
-)
-_RE_HANDLE: Final = re.compile(
-    r"""
-    (?P<handle>[A-Za-z0-9-]+)   # GitHub account handle
-    """,
-    re.VERBOSE,
-)
-
 
 @dataclass(frozen=True, kw_only=True)
 class PullRequestAuthor:
@@ -43,7 +28,15 @@ def pull_request_number(subject: str) -> str:
     :returns: Pull request number from the squash commit subject.
     :raises ValueError: The commit subject does not end in a squash pull request number.
     """
-    if (match := _RE_PULL_REQUEST.search(subject)) is None:
+    re_pull_request: Final = re.compile(
+        r"""
+        \(\#                         # Squash merge pull request marker
+        (?P<number>\d+)             # Pull request number
+        \)$                          # Marker ends the commit subject
+        """,
+        re.VERBOSE,
+    )
+    if (match := re_pull_request.search(subject)) is None:
         msg = f"no squash pull request number in commit subject: {subject}"
         raise ValueError(msg)
     return cast("str", match["number"])
@@ -74,6 +67,12 @@ def pull_request_authors(
     :raises FileNotFoundError: GitHub CLI is not installed.
     :raises ValueError: GitHub could not return a valid pull request author.
     """
+    re_handle: Final = re.compile(
+        r"""
+        (?P<handle>[A-Za-z0-9-]+)   # GitHub account handle
+        """,
+        re.VERBOSE,
+    )
     validate_repository(repository)
     if (gh := shutil.which("gh")) is None:
         msg = "GitHub CLI is required to resolve pull request authors"
@@ -105,7 +104,7 @@ def pull_request_authors(
             raise ValueError(msg)
         bot = account_type == "Bot"
         handle = login.removesuffix("[bot]") if bot else login
-        if _RE_HANDLE.fullmatch(handle) is None:
+        if re_handle.fullmatch(handle) is None:
             msg = f"invalid GitHub author for pull request #{number}: {login}"
             raise ValueError(msg)
         authors[number] = PullRequestAuthor(handle=handle, is_bot=bot)

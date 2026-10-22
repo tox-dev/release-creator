@@ -1,15 +1,14 @@
 """Select build artifacts whose lock markers match this runner."""
 
+lazy import hashlib
 lazy import tomllib
 lazy from pathlib import Path
-lazy from typing import Any, Final, Literal
+lazy from typing import Any, Literal
 
 lazy from packaging.markers import InvalidMarker, Marker, default_environment
 lazy from packaging.specifiers import SpecifierSet
 lazy from packaging.utils import canonicalize_name
 lazy from packaging.version import InvalidVersion, Version
-
-_SHA256_LENGTH: Final = 64
 
 
 def write_build_constraints(
@@ -155,7 +154,7 @@ def _hashes(package: dict[str, Any]) -> set[str]:
         digest = file.get("hashes", {}).get("sha256")
         if (
             not isinstance(digest, str)
-            or len(digest) != _SHA256_LENGTH
+            or len(digest) != hashlib.sha256().digest_size * 2
             or any(char not in "0123456789abcdef" for char in digest)
         ):
             msg = f"build package {package['name']} has an artifact without a SHA256 hash"

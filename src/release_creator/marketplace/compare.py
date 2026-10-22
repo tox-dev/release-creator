@@ -12,8 +12,6 @@ lazy from urllib.parse import urlencode
 lazy from urllib.request import Request, urlopen
 lazy from zipfile import BadZipFile, ZipFile
 
-_ZIP_UNIX_SYSTEM: Final = 3
-
 
 def reconcile_marketplace(plugin_id: str, version: str, archive: Path, mode: Literal["stage", "verify"]) -> bool:
     """Return whether an absent version needs publishing; verify an existing version's ZIP members.
@@ -72,6 +70,7 @@ def _member_digests(source: Path | IO[bytes]) -> dict[str, tuple[str, str, int]]
 
 
 def _read_members(source: Path | IO[bytes]) -> dict[str, tuple[str, str, int]]:
+    zip_unix_system: Final = 3
     with ZipFile(source) as archive:
         members: dict[str, tuple[str, str, int]] = {}
         for member in archive.infolist():
@@ -79,7 +78,7 @@ def _read_members(source: Path | IO[bytes]) -> dict[str, tuple[str, str, int]]:
                 msg = f"duplicate plugin ZIP member: {member.filename}"
                 raise ValueError(msg)
             mode = member.external_attr >> 16
-            if member.create_system == _ZIP_UNIX_SYSTEM:
+            if member.create_system == zip_unix_system:
                 member_type = stat.S_IFMT(mode)
                 if member_type not in {0, stat.S_IFDIR if member.is_dir() else stat.S_IFREG}:
                     msg = f"unsupported plugin ZIP member type: {member.filename}"
