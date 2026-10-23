@@ -174,8 +174,12 @@ def test_add_pull_request_links_preserves_shared_credits(tmp_path: Path) -> None
     ("extension", "code"),
     [
         pytest.param("md", "```sh\necho yes\n```", id="markdown-fence"),
+        pytest.param("md", "```sh\necho yes\n````", id="markdown-longer-closing-fence"),
         pytest.param("md", "    echo yes", id="markdown-indented"),
         pytest.param("rst", ".. code-block:: sh\n\n  echo yes", id="rst-directive"),
+        pytest.param("rst", ".. code-block:: cpp\n\n  using std::", id="rst-indented-colons"),
+        pytest.param("rst", ".. code-block:: haskell\n\n  f :: Int", id="rst-indented-type"),
+        pytest.param("rst", ".. code-block:: text\n\n  Example::", id="rst-indented-literal"),
         pytest.param("rst", ".. code:: sh\n\n  echo yes", id="rst-code-directive"),
         pytest.param("rst", ".. sourcecode:: sh\n\n  echo yes", id="rst-sourcecode-directive"),
         pytest.param("rst", "Example::\n\n  echo yes", id="rst-literal"),
@@ -195,10 +199,24 @@ def test_add_pull_request_links_before_trailing_code(tmp_path: Path, extension: 
     assert fragment.read_text() == f"Add a feature {link}.\n\n{code}\n"
 
 
+def test_add_pull_request_links_after_earlier_fence_before_final_fence(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    fragment.write_text("Example.\n\n```sh\nfirst\n```\n\nMore details.\n\n```sh\nsecond\n```\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == (
+        "Example.\n\n```sh\nfirst\n```\n\n"
+        "More details ([#42](https://github.com/tox-dev/example/pull/42)) "
+        "by [@alice](https://github.com/alice).\n\n```sh\nsecond\n```\n"
+    )
+
+
 @pytest.mark.parametrize(
     ("extension", "code"),
     [
         pytest.param("md", "```sh\necho yes\n```", id="markdown-fence"),
+        pytest.param("md", "```sh\necho yes\n````", id="markdown-longer-closing-fence"),
         pytest.param("md", "````sh\n```\necho yes\n````", id="markdown-long-fence"),
         pytest.param("rst", ".. code:: sh\n\n  echo yes", id="rst-directive"),
         pytest.param("md", "    echo yes", id="markdown-indented"),

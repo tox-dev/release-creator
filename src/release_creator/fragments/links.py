@@ -152,17 +152,10 @@ def _append_pull_request_link(content: str, target: _LinkTarget, author: str | N
 
 def _split_trailing_code(content: str, suffix: str) -> tuple[str, str]:
     lines = content.splitlines(keepends=True)
-    if suffix == ".md" and lines and (closing := lines[-1].strip()).startswith(("```", "~~~")):
-        minimum_fence_length: Final = 3
-        if closing == closing[0] * len(closing) and len(closing) >= minimum_fence_length:
-            opening = next(
-                (index for index in range(len(lines) - 2, -1, -1) if lines[index].strip().startswith(closing)),
-                None,
-            )
-            if opening is not None:
-                position = sum(map(len, lines[:opening]))
-                before = content[:position].rstrip()
-                return before, content[len(before) :]
+    if suffix == ".md" and (opening := _final_fence_opening(lines)) is not None:
+        position = sum(map(len, lines[:opening]))
+        before = content[:position].rstrip()
+        return before, content[len(before) :]
     if suffix == ".md":
         opening = next(
             (
@@ -192,8 +185,11 @@ def _split_trailing_code(content: str, suffix: str) -> tuple[str, str]:
             (
                 index
                 for index in range(len(lines) - 1, -1, -1)
-                if lines[index].lstrip().startswith((".. code-block::", ".. code::", ".. sourcecode::"))
-                or lines[index].rstrip().endswith("::")
+                if not lines[index][:1].isspace()
+                and (
+                    lines[index].startswith((".. code-block::", ".. code::", ".. sourcecode::"))
+                    or lines[index].rstrip().endswith("::")
+                )
             ),
             None,
         )
@@ -206,6 +202,22 @@ def _split_trailing_code(content: str, suffix: str) -> tuple[str, str]:
             before = content[:position].rstrip()
             return before, content[len(before) :]
     return content, ""
+
+
+def _final_fence_opening(lines: list[str]) -> int | None:
+    fence: tuple[int, str, int] | None = None
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.startswith(("```", "~~~")):
+            continue
+        width = len(stripped) - len(stripped.lstrip(stripped[0]))
+        if fence is None:
+            fence = index, stripped[0], width
+        elif stripped == fence[1] * len(stripped) and width >= fence[2]:
+            if index == len(lines) - 1:
+                return fence[0]
+            fence = None
+    return None
 
 
 def _pull_request_link(repository: str, number: str, extension: str) -> str:
