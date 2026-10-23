@@ -47,7 +47,11 @@ def _bumped_release(current: Version, bump: str, release_date: date) -> tuple[in
     if bump == "calver":
         year_month = release_date.year, release_date.month
         return *year_month, patch + 1 if (major, minor) == year_month else 0
-    return {"major": (major + 1, 0, 0), "minor": (major, minor + 1, 0), "patch": (major, minor, patch + 1)}[bump]
+    try:
+        return {"major": (major + 1, 0, 0), "minor": (major, minor + 1, 0), "patch": (major, minor, patch + 1)}[bump]
+    except KeyError as error:
+        msg = f"unknown version bump: {bump}"
+        raise ValueError(msg) from error
 
 
 def _auto_bump(fragments: list[str]) -> str:

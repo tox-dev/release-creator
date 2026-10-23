@@ -45,6 +45,7 @@ def test_next_tag_with_prefix() -> None:
     [
         pytest.param("auto", [], [], "no changelog fragments", id="empty"),
         pytest.param("calver", ["2026.11.0"], ["+one.feature.md"], "must be newer", id="older-calver"),
+        pytest.param("unknown", ["1.2.3"], ["+one.feature.md"], "unknown version bump", id="unknown-bump"),
     ],
 )
 def test_next_tag_rejects_invalid(bump: str, tags: list[str], fragments: list[str], message: str) -> None:
