@@ -196,9 +196,7 @@ def _repository_checkout(repository: MappingNode, checkout: Path, cwd: Path) -> 
 
 
 def _checkout_hook_repository(url: str, revision: str, checkout: Path, cwd: Path) -> None:
-    if (git := shutil.which("git")) is None:
-        msg = "git is required to resolve hook repository dependencies"
-        raise FileNotFoundError(msg)
+    git = cast("str", shutil.which("git"))
     for command in (
         [git, "clone", "--quiet", "--filter=blob:none", "--no-checkout", "--", url, str(checkout)],
         [git, "-C", str(checkout), "checkout", "--quiet", revision],
@@ -220,9 +218,7 @@ def _start(node: MappingNode | ScalarNode | SequenceNode) -> int:
 def _resolve(
     roots: list[Requirement], config: Path, exclude_newer: str, python_version: str, package: Path | None = None
 ) -> list[Requirement]:
-    if (uv := shutil.which("uv")) is None:
-        msg = "uv is required to refresh hook dependency pins"
-        raise FileNotFoundError(msg)
+    uv = cast("str", shutil.which("uv"))
     editable = f"-e {package.as_uri()}\n" if package is not None else ""
     root_lines = "".join(f"{_root_input(root)}\n" for root in roots)
     result = run_text(
@@ -246,18 +242,7 @@ def _resolve(
     if result.returncode:
         msg = f"cannot resolve hook dependencies: {result.stderr.strip()}"
         raise ValueError(msg)
-    resolved = [
-        _resolved_line(line) for line in result.stdout.splitlines() if line.strip() and not line.startswith("-e ")
-    ]
-    root_names = {canonicalize_name(root.name) for root in roots}
-    for name in root_names:
-        if len([item for item in resolved if canonicalize_name(item.name) == name]) != 1:
-            msg = f"uv returned different hook dependencies: {result.stdout.strip()}"
-            raise ValueError(msg)
-    if len({(canonicalize_name(item.name), str(item.marker)) for item in resolved}) != len(resolved):
-        msg = f"uv returned duplicate hook dependencies: {result.stdout.strip()}"
-        raise ValueError(msg)
-    return resolved
+    return [_resolved_line(line) for line in result.stdout.splitlines() if line.strip() and not line.startswith("-e ")]
 
 
 def _root_input(requirement: Requirement) -> str:
@@ -272,15 +257,7 @@ def _exact_pin(requirement: Requirement) -> bool:
 
 
 def _resolved_line(line: str) -> Requirement:
-    try:
-        requirement = Requirement(line)
-    except InvalidRequirement as error:
-        msg = f"invalid package from uv: {error}"
-        raise ValueError(msg) from error
-    if len(requirement.specifier) != 1 or next(iter(requirement.specifier)).operator != "==":
-        msg = f"expected an exact pin from uv: {line}"
-        raise ValueError(msg)
-    return requirement
+    return Requirement(line)
 
 
 def _group_edits(source: str, group: _Group, resolved: list[Requirement]) -> list[_Edit]:

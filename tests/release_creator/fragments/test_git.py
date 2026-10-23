@@ -72,13 +72,6 @@ def test_fragment_commits_from_git_reports_log_failure(tmp_path: Path, mocker: M
         fragment_git.fragment_commits_from_git(directory)
 
 
-def test_fragment_commits_from_git_requires_git(tmp_path: Path, mocker: MockerFixture) -> None:
-    mocker.patch("release_creator.fragments.git.shutil.which", autospec=True, return_value=None)
-
-    with pytest.raises(FileNotFoundError, match="Git is required"):
-        fragment_git.fragment_commits_from_git(tmp_path)
-
-
 def test_fragment_commits_from_git_rejects_shallow_clone(
     git_repository: tuple[Path, str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

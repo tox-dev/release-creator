@@ -11,7 +11,7 @@ lazy from typing import Final, Literal
 lazy from release_creator.fragments.knope import changeset_parts
 lazy from release_creator.fragments.names import fragment_number, pending_changesets, pending_fragments
 lazy from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor
-lazy from release_creator.github import MARKDOWN_AUTHOR, validate_repository
+lazy from release_creator.github import MARKDOWN_AUTHOR
 
 _RE_PULL_REQUEST_LINK: Final = re.compile(
     r"""
@@ -49,7 +49,6 @@ def add_pull_request_links(
     mode: _LinkMode = "towncrier",
 ) -> None:
     """Keep fragment links and credits tied to their introducing pull requests."""
-    validate_repository(repository)
     updates: list[tuple[Path, str]] = [
         (
             fragment,

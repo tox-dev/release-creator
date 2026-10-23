@@ -405,29 +405,17 @@ def test_rejects_invalid_hook_entry(tmp_path: Path, upstream_python_hook: tuple[
     assert config.read_text(encoding="utf-8") == source
 
 
-@pytest.mark.parametrize(
-    "failure", [pytest.param("git-missing", id="git-missing"), pytest.param("clone-failed", id="clone-failed")]
-)
-def test_rejects_unavailable_hook_repository(tmp_path: Path, mocker: MockerFixture, failure: str) -> None:
+def test_rejects_unavailable_hook_repository(tmp_path: Path, mocker: MockerFixture) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
     source = f"repos:\n  - repo: file:///missing\n    rev: {'a' * 40}\n    hooks:\n      - id: lint\n"
     config.write_text(source, encoding="utf-8")
-    if failure == "git-missing":
-        mocker.patch(
-            "release_creator.hooks.update.shutil.which", side_effect=lambda name: None if name == "git" else name
-        )
-        expected = "git is required"
-    else:
-        mocker.patch(
-            "release_creator.hooks.update.run_text",
-            return_value=subprocess.CompletedProcess([], 1, "", "repository not found"),
-        )
-        expected = "cannot read hook repository"
+    mocker.patch(
+        "release_creator.hooks.update.run_text",
+        return_value=subprocess.CompletedProcess([], 1, "", "repository not found"),
+    )
 
-    with pytest.raises(FileNotFoundError if failure == "git-missing" else ValueError) as caught:
+    with pytest.raises(ValueError, match="cannot read hook repository"):
         update_pins(config, "7 days", "3.15")
-
-    assert expected in str(caught.value)
     assert config.read_text(encoding="utf-8") == source
 
 
@@ -580,30 +568,6 @@ def test_resolves_ranges_and_unpinned_roots(tmp_path: Path, mocker: MockerFixtur
     assert run.call_args.kwargs["stdin"] == "sphinx>=9\nmdformat-gfm\n"
 
 
-@pytest.mark.parametrize(
-    ("output", "message"),
-    [
-        pytest.param("", "different hook dependencies", id="missing"),
-        pytest.param("other==1.0\n", "different hook dependencies", id="unexpected"),
-        pytest.param("mdformat-gfm>=1\n", "expected an exact pin", id="range"),
-        pytest.param("mdformat-gfm==1\nmdformat-gfm==2\n", "different hook dependencies", id="forked-root"),
-        pytest.param("garbage!\n", "invalid package from uv", id="malformed"),
-        pytest.param("mdformat-gfm==1\nclick==1\nclick==2\n", "duplicate hook dependencies", id="duplicate"),
-    ],
-)
-def test_rejects_bad_resolver_output(output: str, message: str, tmp_path: Path, mocker: MockerFixture) -> None:
-    config = tmp_path / ".pre-commit-config.yaml"
-    source = "repos: [{hooks: [{additional_dependencies: [mdformat-gfm==1.0.0]}]}]\n"
-    config.write_text(source, encoding="utf-8")
-    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
-    mocker.patch("release_creator.process.subprocess.run", return_value=subprocess.CompletedProcess([], 0, output, ""))
-
-    with pytest.raises(ValueError, match=message):
-        update_pins(config, "2026-10-14T00:00:00Z", "3.15")
-
-    assert config.read_text(encoding="utf-8") == source
-
-
 def test_rejects_resolver_failure(tmp_path: Path, mocker: MockerFixture) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_text("additional_dependencies: [mdformat-gfm==1.0.0]\n", encoding="utf-8")
@@ -614,15 +578,6 @@ def test_rejects_resolver_failure(tmp_path: Path, mocker: MockerFixture) -> None
     )
 
     with pytest.raises(ValueError, match="index unavailable"):
-        update_pins(config, "2026-10-14T00:00:00Z", "3.15")
-
-
-def test_reports_missing_uv(tmp_path: Path, mocker: MockerFixture) -> None:
-    config = tmp_path / ".pre-commit-config.yaml"
-    config.write_text("additional_dependencies: [mdformat-gfm==1.0.0]\n", encoding="utf-8")
-    mocker.patch("release_creator.hooks.update.shutil.which", return_value=None)
-
-    with pytest.raises(FileNotFoundError, match="uv is required"):
         update_pins(config, "2026-10-14T00:00:00Z", "3.15")
 
 

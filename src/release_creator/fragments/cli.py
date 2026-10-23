@@ -7,7 +7,6 @@ lazy from pathlib import Path
 lazy from release_creator.fragments.check import changed_changesets, changed_fragments, validate_fragment_deletions
 lazy from release_creator.fragments.git import fragment_commits_from_git
 lazy from release_creator.fragments.links import add_pull_request_links
-lazy from release_creator.fragments.names import pending_changesets, pending_fragments
 lazy from release_creator.fragments.pull_requests import fragment_pull_requests
 lazy from release_creator.github import validate_repository
 
@@ -31,7 +30,6 @@ def _link(args: argparse.Namespace) -> None:
     validate_repository(args.repository)
     knope = args.format == "knope"
     directory = args.directory or Path(".changeset" if knope else "changelog.d")
-    (pending_changesets if knope else pending_fragments)(directory)
     commits = fragment_commits_from_git(directory, knope=knope)
     pull_requests = fragment_pull_requests(args.repository, commits)
     mode = "knope" if knope else "towncrier"

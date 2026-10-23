@@ -14,7 +14,6 @@ lazy from release_creator.anchors.names import release_anchor
 lazy from release_creator.categories import RELEASE_CATEGORIES
 lazy from release_creator.github import MARKDOWN_AUTHOR, validate_repository
 lazy from release_creator.notes.rst import render_rst_section
-lazy from release_creator.package_name import valid_package_name
 
 _RE_RELEASE_PULL: Final = re.compile(
     r"""
@@ -316,13 +315,9 @@ def _validate_context(context: ReleaseContext) -> None:
     ):
         msg = f"invalid previous tag: {context.previous}"
         raise ValueError(msg)
-    if context.package is not None:
-        if not valid_package_name(context.package):
-            msg = f"invalid package: {context.package}"
-            raise ValueError(msg)
-        if "/" in context.tag and not context.tag.startswith(f"{context.package}/"):
-            msg = f"release tag does not match package: {context.tag}"
-            raise ValueError(msg)
+    if context.package is not None and "/" in context.tag and not context.tag.startswith(f"{context.package}/"):
+        msg = f"release tag does not match package: {context.tag}"
+        raise ValueError(msg)
     validate_repository(context.repository)
     if context.artifact_url is not None and not context.artifact_url.startswith("https://"):
         msg = "artifact URL must use HTTPS"

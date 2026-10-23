@@ -4,20 +4,11 @@
 from __future__ import annotations
 
 lazy import json
-lazy import re
 lazy import shutil
 lazy from dataclasses import dataclass
-lazy from typing import Final
+lazy from typing import Final, cast
 
-lazy from release_creator.github import validate_repository
 lazy from release_creator.process import run_text
-
-_RE_HANDLE: Final = re.compile(
-    r"""
-    (?P<handle>[A-Za-z0-9-]+)   # GitHub account handle
-    """,
-    re.VERBOSE,
-)
 
 
 def fragment_pull_requests(repository: str, commits: dict[str, str]) -> dict[str, PullRequest]:
@@ -26,12 +17,8 @@ def fragment_pull_requests(repository: str, commits: dict[str, str]) -> dict[str
     :param repository: GitHub owner and repository.
     :param commits: Fragment names mapped to introducing commit hashes.
     :returns: Fragment names mapped to the merged pull request and its author.
-    :raises FileNotFoundError: GitHub CLI is not installed.
     """
-    validate_repository(repository)
-    if (gh := shutil.which("gh")) is None:
-        msg = "GitHub CLI is required to resolve pull request authors"
-        raise FileNotFoundError(msg)
+    gh = cast("str", shutil.which("gh"))
     by_commit = _pulls(gh, repository, list(dict.fromkeys(commits.values())))
     return {name: by_commit[sha] for name, sha in commits.items()}
 
@@ -39,10 +26,6 @@ def fragment_pull_requests(repository: str, commits: dict[str, str]) -> dict[str
 def _pulls(gh: str, repository: str, shas: list[str]) -> dict[str, PullRequest]:
     if not shas:
         return {}
-    sha_length: Final = 40
-    if any(len(sha) != sha_length or any(character not in "0123456789abcdef" for character in sha) for sha in shas):
-        msg = "fragment commits must be 40-character lowercase Git object IDs"
-        raise ValueError(msg)
     owner, name = repository.split("/", 1)
     pulls: dict[str, PullRequest] = {}
     aliases = [
@@ -118,9 +101,6 @@ def _pull_request(response: dict[str, object], source: str) -> PullRequest:
         raise ValueError(msg)
     bot = account_type == "Bot"
     handle = login.removesuffix("[bot]") if bot else login
-    if _RE_HANDLE.fullmatch(handle) is None:
-        msg = f"invalid GitHub author for pull request #{number}: {login}"
-        raise ValueError(msg)
     return PullRequest(number=str(number), author=PullRequestAuthor(handle=handle, is_bot=bot))
 
 

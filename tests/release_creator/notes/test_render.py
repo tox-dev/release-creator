@@ -1280,7 +1280,6 @@ def test_render_rst_rejects_invalid_input(changelog: str, message: str) -> None:
     [
         pytest.param("## 1.2.3 (today)\n", {"tag": "bad//tag"}, "invalid release tag", id="tag"),
         pytest.param("## 1.2.3 (today)\n", {"previous": "bad//tag"}, "invalid previous tag", id="previous"),
-        pytest.param("## 1.2.3 (today)\n", {"package": "bad/name"}, "invalid package", id="package"),
         pytest.param(
             "## 1.2.3 (today)\n",
             {"tag": "other/1.2.3", "package": "example"},

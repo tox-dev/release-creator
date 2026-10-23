@@ -138,13 +138,6 @@ def test_changed_fragments_rejects_invalid_context(news_repository: Path, base: 
         changed_fragments(config, base)
 
 
-def test_changed_fragments_requires_git(news_repository: Path, mocker: MockerFixture) -> None:
-    mocker.patch("release_creator.fragments.check.shutil.which", return_value=None)
-
-    with pytest.raises(FileNotFoundError, match="Git is required"):
-        changed_fragments(news_repository / "pyproject.toml", "main")
-
-
 def test_changed_fragments_reads_towncrier_tables(news_repository: Path) -> None:
     (news_repository / "towncrier.toml").write_text(
         '[tool.towncrier]\ndirectory = "changelog.d"\nfilename = "CHANGELOG.md"\n'

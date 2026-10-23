@@ -5,6 +5,7 @@ lazy import sys
 lazy import tomllib
 lazy from fnmatch import fnmatch
 lazy from pathlib import Path
+lazy from typing import cast
 
 lazy from release_creator.fragments.knope import changeset_parts, knope_kinds, load_knope_package
 lazy from release_creator.fragments.names import fragment_category
@@ -155,10 +156,7 @@ def _git_paths(directory: Path, options: list[str]) -> list[Path]:
 
 
 def _git_executable() -> str:
-    if (git := shutil.which("git")) is None:
-        msg = "Git is required to validate changelog fragments"
-        raise FileNotFoundError(msg)
-    return git
+    return cast("str", shutil.which("git"))
 
 
 __all__ = [

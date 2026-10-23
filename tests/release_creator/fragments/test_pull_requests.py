@@ -63,7 +63,6 @@ def test_fragment_pull_requests_sends_valid_graphql(monkeypatch: pytest.MonkeyPa
         pytest.param([_pull("a" * 40)] * 2, ValueError, "expected one squash-merged pull request", id="two-pulls"),
         pytest.param([{}], ValueError, "expected one squash-merged pull request", id="missing-merge"),
         pytest.param([_pull("a" * 40, account_type="Mannequin")], ValueError, "invalid GitHub author", id="type"),
-        pytest.param([_pull("a" * 40, login="bad handle")], ValueError, "invalid GitHub author", id="handle"),
         pytest.param([_pull("a" * 40, number=0)], ValueError, "invalid pull request number", id="number"),
         pytest.param([_pull("a" * 40, number=True)], TypeError, "invalid pull request response", id="boolean"),
     ],
@@ -104,20 +103,6 @@ def test_fragment_pull_requests_reports_api_failures(
 
     with pytest.raises(ValueError, match=message):
         pull_requests.fragment_pull_requests("tox-dev/example", {"+news.feature.md": "a" * 40})
-
-
-@pytest.mark.parametrize(
-    ("sha", "message"),
-    [
-        pytest.param("short", "40-character lowercase", id="short"),
-        pytest.param("A" * 40, "40-character lowercase", id="uppercase"),
-    ],
-)
-def test_fragment_pull_requests_rejects_invalid_commit(monkeypatch: pytest.MonkeyPatch, sha: str, message: str) -> None:
-    monkeypatch.setattr(pull_requests.shutil, "which", create_autospec(pull_requests.shutil.which, return_value="gh"))
-
-    with pytest.raises(ValueError, match=message):
-        pull_requests.fragment_pull_requests("tox-dev/example", {"+news.feature.md": sha})
 
 
 @pytest.mark.parametrize(
@@ -203,20 +188,3 @@ def test_fragment_pull_requests_accepts_empty_commit_map(monkeypatch: pytest.Mon
     monkeypatch.setattr(pull_requests.shutil, "which", create_autospec(pull_requests.shutil.which, return_value="gh"))
 
     assert pull_requests.fragment_pull_requests("tox-dev/example", {}) == {}
-
-
-def test_fragment_pull_requests_requires_gh(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(pull_requests.shutil, "which", create_autospec(pull_requests.shutil.which, return_value=None))
-
-    with pytest.raises(FileNotFoundError, match="GitHub CLI is required"):
-        pull_requests.fragment_pull_requests("tox-dev/example", {"+news.feature.md": "a" * 40})
-
-
-def test_fragment_pull_requests_checks_repository_before_gh(monkeypatch: pytest.MonkeyPatch) -> None:
-    lookup = create_autospec(pull_requests.shutil.which)
-    monkeypatch.setattr(pull_requests.shutil, "which", lookup)
-
-    with pytest.raises(ValueError, match="invalid repository"):
-        pull_requests.fragment_pull_requests("bad", {"+news.feature.md": "a" * 40})
-
-    lookup.assert_not_called()

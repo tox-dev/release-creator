@@ -10,7 +10,7 @@ lazy from typing import IO, Final, Literal
 lazy from urllib.error import HTTPError
 lazy from urllib.parse import urlencode
 lazy from urllib.request import Request, urlopen
-lazy from zipfile import BadZipFile, ZipFile
+lazy from zipfile import ZipFile
 
 
 def reconcile_marketplace(plugin_id: str, version: str, archive: Path, mode: Literal["stage", "verify"]) -> bool:
@@ -21,16 +21,10 @@ def reconcile_marketplace(plugin_id: str, version: str, archive: Path, mode: Lit
     :param archive: Signed plugin ZIP to compare.
     :param mode: Whether to stage or verify the Marketplace version.
     :returns: Whether a version absent from Marketplace needs publishing.
-    :raises ValueError: The archive is invalid, differs from Marketplace, or is absent during verification.
+    :raises ValueError: The archive differs from Marketplace or is absent during verification.
     :raises HTTPError: Marketplace returned an HTTP error other than 404.
     """
-    if not plugin_id or not version or any(value.strip() != value for value in (plugin_id, version)):
-        msg = "plugin ID and version must be nonempty and have no surrounding whitespace"
-        raise ValueError(msg)
-    if archive.is_symlink() or not archive.is_file():
-        msg = f"plugin archive is not a regular file: {archive}"
-        raise ValueError(msg)
-    local = _member_digests(archive)
+    local = _read_members(archive)
     request = Request(
         f"https://plugins.jetbrains.com/plugin/download?{urlencode({'pluginId': plugin_id, 'version': version})}",
         headers={"Accept": "application/zip", "Cache-Control": "no-cache"},
@@ -54,19 +48,7 @@ def _download_members(request: Request) -> dict[str, tuple[str, str, int]]:
     with urlopen(request, timeout=30) as response, tempfile.TemporaryFile() as downloaded:  # ruff: ignore[suspicious-url-open-usage]  # The origin is fixed to HTTPS Marketplace.
         shutil.copyfileobj(response, downloaded, 1 << 20)
         downloaded.seek(0)
-        return _member_digests(downloaded)
-
-
-def _member_digests(source: Path | IO[bytes]) -> dict[str, tuple[str, str, int]]:
-    try:
-        members = _read_members(source)
-    except BadZipFile as error:
-        msg = "invalid plugin ZIP"
-        raise ValueError(msg) from error
-    if not members:
-        msg = "plugin ZIP has no members"
-        raise ValueError(msg)
-    return members
+        return _read_members(downloaded)
 
 
 def _read_members(source: Path | IO[bytes]) -> dict[str, tuple[str, str, int]]:
@@ -78,18 +60,8 @@ def _read_members(source: Path | IO[bytes]) -> dict[str, tuple[str, str, int]]:
                 msg = f"duplicate plugin ZIP member: {member.filename}"
                 raise ValueError(msg)
             mode = member.external_attr >> 16
-            if member.create_system == zip_unix_system:
-                member_type = stat.S_IFMT(mode)
-                if member_type not in {0, stat.S_IFDIR if member.is_dir() else stat.S_IFREG}:
-                    msg = f"unsupported plugin ZIP member type: {member.filename}"
-                    raise ValueError(msg)
-                permissions = stat.S_IMODE(mode)
-            else:
-                permissions = member.external_attr
+            permissions = stat.S_IMODE(mode) if member.create_system == zip_unix_system else member.external_attr
             if member.is_dir():
-                if member.file_size:
-                    msg = f"directory member has content: {member.filename}"
-                    raise ValueError(msg)
                 digest = hashlib.sha256(b"").hexdigest()
             else:
                 with archive.open(member) as stream:

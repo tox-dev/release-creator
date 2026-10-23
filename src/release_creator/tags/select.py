@@ -44,19 +44,10 @@ def next_tag(bump: str, tags: list[str], fragments: list[str], release_date: dat
 
 def _bumped_release(current: Version, bump: str, release_date: date) -> tuple[int, int, int]:
     major, minor, patch = current.release
-    match bump:
-        case "major":
-            return major + 1, 0, 0
-        case "minor":
-            return major, minor + 1, 0
-        case "patch":
-            return major, minor, patch + 1
-        case "calver":
-            year_month = release_date.year, release_date.month
-            return *year_month, patch + 1 if (major, minor) == year_month else 0
-        case _:
-            msg = f"unknown version bump: {bump}"
-            raise ValueError(msg)
+    if bump == "calver":
+        year_month = release_date.year, release_date.month
+        return *year_month, patch + 1 if (major, minor) == year_month else 0
+    return {"major": (major + 1, 0, 0), "minor": (major, minor + 1, 0), "patch": (major, minor, patch + 1)}[bump]
 
 
 def _auto_bump(fragments: list[str]) -> str:

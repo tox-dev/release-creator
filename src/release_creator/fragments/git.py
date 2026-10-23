@@ -2,6 +2,7 @@
 
 lazy import shutil
 lazy from pathlib import Path
+lazy from typing import cast
 
 lazy from release_creator.fragments.names import pending_changesets, pending_fragments
 lazy from release_creator.process import run_text
@@ -13,12 +14,9 @@ def fragment_commits_from_git(directory: Path, *, knope: bool = False) -> dict[s
     :param directory: Fragment directory in the checkout.
     :param knope: Use Knope changesets instead of Towncrier fragments.
     :returns: Fragment filenames mapped to introducing commit hashes.
-    :raises FileNotFoundError: Git is not installed.
     :raises ValueError: Git cannot read the checkout history or a fragment has no introducing commit.
     """
-    if (git := shutil.which("git")) is None:
-        msg = "Git is required to read fragment history"
-        raise FileNotFoundError(msg)
+    git = cast("str", shutil.which("git"))
     shallow = run_text([git, "rev-parse", "--is-shallow-repository"])
     if shallow.returncode:
         msg = shallow.stderr.strip() or f"could not read Git history for {directory}"

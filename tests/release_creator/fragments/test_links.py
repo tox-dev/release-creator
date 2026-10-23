@@ -342,16 +342,6 @@ def test_add_pull_request_links_rejects_a_mismatched_author_without_partial_writ
     [
         pytest.param(
             (
-                "bad",
-                "Add news (#42)",
-                "Fix a bug.\n",
-                {"42": PullRequestAuthor(handle="alice", is_bot=False)},
-                "invalid repository",
-            ),
-            id="repository",
-        ),
-        pytest.param(
-            (
                 "tox-dev/example",
                 "Add news",
                 "Fix a bug.\n",
