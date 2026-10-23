@@ -315,20 +315,15 @@ def _extract_rst_body(changelog: str, context: ReleaseContext) -> str:
     lines = [line for line in changelog.splitlines() if not _is_comparison_line(line)]
     headings = [
         index
-        for index, line in enumerate(lines)
-        if (match := _RE_RST_VERSION.fullmatch(line))
-        and _is_version(match["tag"] or match["link_tag"])
+        for index in range(len(lines))
+        if (match := _rst_version_at(lines, index))
         and (match["tag"] or match["link_tag"]).removeprefix("v") == context.tag.removeprefix("v")
     ]
     if len(headings) != 1:
         msg = f"expected one changelog section for {context.tag}, found {len(headings)}"
         raise ValueError(msg)
     end = next(
-        (
-            index
-            for index in range(headings[0] + 1, len(lines))
-            if (match := _RE_RST_VERSION.fullmatch(lines[index])) and _is_version(match["tag"] or match["link_tag"])
-        ),
+        (index for index in range(headings[0] + 1, len(lines)) if _rst_version_at(lines, index) is not None),
         len(lines),
     )
     start = headings[0] + 1
@@ -337,6 +332,21 @@ def _extract_rst_body(changelog: str, context: ReleaseContext) -> str:
     if end < len(lines) and _is_rst_adornment(lines[end - 1]):
         end -= 1
     return render_rst_section("\n".join(lines[start:end]), context.tag, context.repository)
+
+
+def _rst_version_at(lines: list[str], index: int) -> re.Match[str] | None:
+    line = lines[index]
+    if line[:1].isspace() and not (
+        line.startswith(" ")
+        and not line.startswith("  ")
+        and index > 0
+        and index + 1 < len(lines)
+        and _is_rst_adornment(lines[index - 1])
+        and _is_rst_adornment(lines[index + 1])
+    ):
+        return None
+    match = _RE_RST_VERSION.fullmatch(line.strip())
+    return match if match is not None and _is_version(match["tag"] or match["link_tag"]) else None
 
 
 def _is_rst_adornment(line: str) -> bool:
