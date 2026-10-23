@@ -17,17 +17,26 @@ lazy from release_creator.notes.rst import render_rst_section
 
 _RE_RELEASE_PULL: Final = re.compile(
     r"""
-    https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/(?P<number>\d+)  # PR URL
+    (?<![A-Za-z0-9_.-])
+    (?:
+        \(\#  # GitHub's short PR reference
+        |
+        (?:https?://)?(?:www\.)?github\.com/
+        (?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/
+        (?P<kind>pull|issues)/  # GitHub also serves PRs at their issue URL
+    )
+    (?P<number>\d+)
     """,
-    re.VERBOSE,
+    re.VERBOSE | re.IGNORECASE,
 )
 _RE_MARKDOWN_PULL_LABEL: Final = re.compile(
     r"""
     \[\#(?P<label>\d+)\]\(  # Displayed PR number
-    https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/(?P<number>\d+)  # URL number
+    https://(?:www\.)?github\.com/
+    (?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/(?:pull|issues)/(?P<number>\d+)  # URL number
     \)
     """,
-    re.VERBOSE,
+    re.VERBOSE | re.IGNORECASE,
 )
 _RE_GITHUB_CREDIT: Final = re.compile(
     r"""
@@ -163,7 +172,7 @@ def _finish(notes: str, context: ReleaseContext, generated_notes: str | None) ->
 
 def _verify_authors(notes: str, generated_notes: str, context: ReleaseContext) -> None:
     generated_authors, generated_bots = _generated_pr_authors(generated_notes, context.repository)
-    for number, entries in _release_entries(notes, context.repository).items():
+    for number, entries in _release_entries(notes, context.repository, set(generated_authors)).items():
         if number not in generated_authors:
             if any(not handles for handles, _ in entries):
                 msg = f"generated notes have no author for pull request #{number}"
@@ -203,10 +212,10 @@ def _generated_pr_authors(generated_notes: str, repository: str) -> tuple[dict[s
     return authors, bots
 
 
-def _release_entries(notes: str, repository: str) -> dict[str, list[tuple[set[str], bool]]]:
+def _release_entries(notes: str, repository: str, known_numbers: set[str]) -> dict[str, list[tuple[set[str], bool]]]:
     entries: dict[str, list[tuple[set[str], bool]]] = {}
     for line in notes.splitlines():
-        references = _pull_references(line, repository)
+        references = _pull_references(line, repository, known_numbers)
         if not references:
             continue
         initial_credit = _entry_credit(line[: references[0].start()], named=False)
@@ -236,12 +245,18 @@ def _parenthetical_pull_link(line: str, reference: re.Match[str]) -> bool:
     return line[: reference.start()].endswith(f"([#{reference['number']}](")
 
 
-def _pull_references(line: str, repository: str) -> list[re.Match[str]]:
+def _pull_references(line: str, repository: str, known_numbers: set[str]) -> list[re.Match[str]]:
     for label in _RE_MARKDOWN_PULL_LABEL.finditer(line):
-        if label["repository"] == repository and label["label"] != label["number"]:
+        if label["repository"].casefold() == repository.casefold() and label["label"] != label["number"]:
             msg = f"pull request label #{label['label']} points to #{label['number']}"
             raise ValueError(msg)
-    return [match for match in _RE_RELEASE_PULL.finditer(line) if match["repository"] == repository]
+    candidates = [
+        match
+        for match in _RE_RELEASE_PULL.finditer(line)
+        if match["repository"] is None or match["repository"].casefold() == repository.casefold()
+    ]
+    known = known_numbers | {match["number"] for match in candidates if match["kind"] == "pull"}
+    return [match for match in candidates if match["kind"] == "pull" or match["number"] in known]
 
 
 def _entry_credit(text: str, *, named: bool) -> tuple[set[str], bool] | None:
@@ -301,7 +316,7 @@ def _extract_rst_body(changelog: str, context: ReleaseContext) -> str:
     headings = [
         index
         for index, line in enumerate(lines)
-        if (match := _RE_RST_VERSION.fullmatch(line.strip()))
+        if (match := _RE_RST_VERSION.fullmatch(line))
         and _is_version(match["tag"] or match["link_tag"])
         and (match["tag"] or match["link_tag"]).removeprefix("v") == context.tag.removeprefix("v")
     ]
@@ -312,8 +327,7 @@ def _extract_rst_body(changelog: str, context: ReleaseContext) -> str:
         (
             index
             for index in range(headings[0] + 1, len(lines))
-            if (match := _RE_RST_VERSION.fullmatch(lines[index].strip()))
-            and _is_version(match["tag"] or match["link_tag"])
+            if (match := _RE_RST_VERSION.fullmatch(lines[index])) and _is_version(match["tag"] or match["link_tag"])
         ),
         len(lines),
     )

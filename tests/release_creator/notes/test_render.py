@@ -408,6 +408,10 @@ def test_render_markdown_does_not_credit_a_prose_pull_reference(separator: str) 
     [
         pytest.param("https://github.com/tox-dev/example/pull/42", id="bare-url"),
         pytest.param("[PR 42](https://github.com/tox-dev/example/pull/42)", id="other-link-label"),
+        pytest.param("(#42)", id="short-reference"),
+        pytest.param("[#42](https://github.com/tox-dev/example/issues/42)", id="issue-url"),
+        pytest.param("https://www.github.com/tox-dev/example/pull/42", id="www-url"),
+        pytest.param("https://GitHub.com/TOX-DEV/Example/pull/42", id="mixed-case-url"),
     ],
 )
 def test_render_markdown_checks_noncanonical_pull_references(reference: str) -> None:
@@ -418,10 +422,15 @@ def test_render_markdown_checks_noncanonical_pull_references(reference: str) -> 
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
 
-def test_render_markdown_rejects_mismatched_pull_link_number() -> None:
-    changelog = (
-        "## 1.2.3 (today)\n\n### Added\n\n- Add support [#1](https://github.com/tox-dev/example/pull/2) by @alice.\n"
-    )
+@pytest.mark.parametrize(
+    "url",
+    [
+        pytest.param("https://github.com/tox-dev/example/pull/2", id="pull"),
+        pytest.param("https://www.github.com/tox-dev/example/issues/2", id="www-issue"),
+    ],
+)
+def test_render_markdown_rejects_mismatched_pull_link_number(url: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Added\n\n- Add support [#1]({url}) by @alice.\n"
 
     with pytest.raises(ValueError, match="pull request label #1 points to #2"):
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), "")
@@ -938,6 +947,29 @@ def test_render_rst_joins_wrapped_author_marker() -> None:
         "- Correct a long description. [#42](https://github.com/tox-dev/example/pull/42) by @alice and @bob.\n\n"
         "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
+
+
+def test_render_rst_keeps_indented_version_shaped_text() -> None:
+    changelog = dedent("""\
+        1.2.3 (2026-10-18)
+        ==================
+
+        Added
+        -----
+
+        - Support Python
+          3.14 (free-threaded)
+          builds.
+        - Keep the second change.
+
+        1.2.2 (2026-10-17)
+        ==================
+        """)
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert "3.14 (free-threaded) builds." in result
+    assert "Keep the second change." in result
 
 
 def test_render_rst_preserves_legacy_other_changes() -> None:
