@@ -603,6 +603,22 @@ def test_flow_mapping_removes_orphaned_managed_dependency(tmp_path: Path) -> Non
     assert safe_load(config.read_text(encoding="utf-8"))["repos"][0]["hooks"][0]["additional_dependencies"] == []
 
 
+def test_flow_sequence_replaces_managed_dependency(tmp_path: Path, mocker: MockerFixture) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(
+        'additional_dependencies: [\n  black==1,\n  "click==8", # release-creator managed\n]\n', encoding="utf-8"
+    )
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch(
+        "release_creator.hooks.update.run_text",
+        return_value=subprocess.CompletedProcess([], 0, "black==2\nclick==9\n", ""),
+    )
+
+    update_pins(config, "7 days", "3.15")
+
+    assert safe_load(config.read_text(encoding="utf-8"))["additional_dependencies"] == ["black==2", "click==9"]
+
+
 def test_preserves_crlf_in_hook_config(tmp_path: Path, mocker: MockerFixture) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_bytes(b"additional_dependencies: [black==1]\r\n")
@@ -702,16 +718,34 @@ def test_resolves_ranges_and_unpinned_roots(tmp_path: Path, mocker: MockerFixtur
     assert run.call_args.kwargs["stdin"] == "sphinx>=9\nmdformat-gfm\n"
 
 
-def test_rejects_aliased_dependency_lists(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param(
+            "repos:\n  - repo: local\n    hooks:\n"
+            "      - id: first\n        language: python\n        additional_dependencies: &deps [black==1]\n"
+            "      - id: second\n        language: python\n        additional_dependencies: *deps\n",
+            id="shared-dependency-list",
+        ),
+        pytest.param(
+            "repos:\n  - repo: local\n    hooks:\n"
+            "      - id: first\n        language: python\n        args: &deps [black==1]\n"
+            "        additional_dependencies: *deps\n",
+            id="unrelated-anchored-list",
+        ),
+        pytest.param(
+            "repos:\n  - repo: local\n    hooks:\n"
+            "      - id: first\n        language: python\n        additional_dependencies: [&dep black==1]\n"
+            "      - id: second\n        language: python\n        additional_dependencies: [*dep]\n",
+            id="shared-scalar",
+        ),
+    ],
+)
+def test_rejects_aliased_hook_configuration(tmp_path: Path, source: str) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
-    source = (
-        "repos:\n  - repo: local\n    hooks:\n"
-        "      - id: first\n        language: python\n        additional_dependencies: &deps [black==1]\n"
-        "      - id: second\n        language: python\n        additional_dependencies: *deps\n"
-    )
     config.write_text(source, encoding="utf-8")
 
-    with pytest.raises(ValueError, match="aliased additional_dependencies"):
+    with pytest.raises(ValueError, match="YAML aliases cannot be updated safely"):
         update_pins(config, "7 days", "3.15")
 
     assert config.read_text(encoding="utf-8") == source

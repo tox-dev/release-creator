@@ -423,6 +423,49 @@ def test_render_markdown_checks_noncanonical_pull_references(reference: str) -> 
 
 
 @pytest.mark.parametrize(
+    "literal",
+    [
+        pytest.param("`(#42)`", id="inline-markdown"),
+        pytest.param("``(#42)``", id="long-inline-markdown"),
+    ],
+)
+def test_render_markdown_ignores_short_pull_references_in_code(literal: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Added\n\n- Display the literal syntax {literal} in the help text.\n"
+    generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "Display the literal syntax `(#42)`" in result
+
+
+def test_render_rst_ignores_short_pull_references_in_inline_literals() -> None:
+    changelog = (
+        "1.2.3 (today)\n==============\n\nAdded\n-----\n\n- Display the literal syntax ``(#42)`` in the help text.\n"
+    )
+    generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "Display the literal syntax `(#42)`" in result
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        pytest.param("  ```text\n  (#42)\n  ```", id="fence"),
+        pytest.param("  ````text\n  ```\n  (#42)\n  ```\n  ````", id="nested-fence"),
+    ],
+)
+def test_render_markdown_ignores_short_pull_references_in_fences(code: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Added\n\n- Display the literal syntax:\n\n{code}\n"
+    generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "(#42)" in result
+
+
+@pytest.mark.parametrize(
     "url",
     [
         pytest.param("https://github.com/tox-dev/example/pull/2", id="pull"),

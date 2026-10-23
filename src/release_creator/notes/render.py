@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 lazy import re
+lazy from collections.abc import Iterator
 lazy from dataclasses import dataclass
 lazy from typing import Final
 
@@ -108,6 +109,20 @@ _RE_MARKDOWN_LINK_DEFINITION: Final = re.compile(
     $                                                   # End of definition
     """,
     re.VERBOSE | re.IGNORECASE,
+)
+_RE_CODE_SPAN: Final = re.compile(
+    r"""
+    (?P<delimiter>`+)  # Opening backticks
+    (?P<content>.*?)   # Inline code is ignored when checking PR credits
+    (?P=delimiter)      # Closing backticks of the same length
+    """,
+    re.VERBOSE,
+)
+_RE_CODE_FENCE: Final = re.compile(
+    r"""
+    ^[ ]{0,3}(?P<delimiter>`{3,}|~{3,})(?P<rest>.*)$  # Markdown fence and optional info string
+    """,
+    re.VERBOSE,
 )
 
 
@@ -214,7 +229,7 @@ def _generated_pr_authors(generated_notes: str, repository: str) -> tuple[dict[s
 
 def _release_entries(notes: str, repository: str, known_numbers: set[str]) -> dict[str, list[tuple[set[str], bool]]]:
     entries: dict[str, list[tuple[set[str], bool]]] = {}
-    for line in notes.splitlines():
+    for line in _release_lines(notes):
         references = _pull_references(line, repository, known_numbers)
         if not references:
             continue
@@ -239,6 +254,20 @@ def _release_entries(notes: str, repository: str, known_numbers: set[str]) -> di
                 initial_credit if len(pending) == len(references) and initial_credit is not None else (set(), False)
             )
     return entries
+
+
+def _release_lines(notes: str) -> Iterator[str]:
+    fence: str | None = None
+    for line in notes.splitlines():
+        if match := _RE_CODE_FENCE.match(line):
+            delimiter = str(match["delimiter"])
+            if fence is None:
+                fence = delimiter
+            elif delimiter[0] == fence[0] and len(delimiter) >= len(fence) and not match["rest"].strip():
+                fence = None
+            continue
+        if fence is None and not line.startswith("    "):
+            yield _RE_CODE_SPAN.sub(lambda match: " " * len(match.group()), line)
 
 
 def _parenthetical_pull_link(line: str, reference: re.Match[str]) -> bool:

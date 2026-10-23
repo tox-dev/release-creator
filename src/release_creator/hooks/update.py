@@ -65,12 +65,23 @@ def _config_root(source: str) -> MappingNode:
     if not isinstance(root, MappingNode):
         msg = "pre-commit configuration must be a YAML mapping"
         raise TypeError(msg)
+    seen: set[int] = set()
+    pending: list[Node] = [root]
+    while pending:
+        node = pending.pop()
+        if id(node) in seen:
+            msg = "YAML aliases cannot be updated safely"
+            raise ValueError(msg)
+        seen.add(id(node))
+        if isinstance(node, MappingNode):
+            pending.extend(child for pair in node.value for child in pair)
+        elif isinstance(node, SequenceNode):
+            pending.extend(node.value)
     return root
 
 
 def _groups(source: str, root: MappingNode, python_groups: set[int]) -> list[_Group]:
     groups: list[_Group] = []
-    seen: set[int] = set()
     pending: list[MappingNode | SequenceNode | ScalarNode] = [root]
     while pending:
         node = pending.pop()
@@ -81,10 +92,6 @@ def _groups(source: str, root: MappingNode, python_groups: set[int]) -> list[_Gr
                     and key.value == "additional_dependencies"
                     and (_start(key) in python_groups or _mapping_value(root, "repos") is None)
                 ):
-                    if id(value) in seen:
-                        msg = "aliased additional_dependencies cannot be updated independently"
-                        raise ValueError(msg)
-                    seen.add(id(value))
                     groups.append(_parse_group(source, key, value, flow_mapping=node.flow_style is True))
                 else:
                     pending.append(value)
@@ -347,13 +354,11 @@ def _inline_edit(
     key, sequence, direct, _, _ = group
     indent = " " * cast("Mark", key.start_mark).column
     existing = []
-    for item in sequence.value:
-        item = cast("ScalarNode", item)
-        scalar = source[_start(item) : _end(item)]
-        match = next(((node, requirement) for node, requirement in direct if node is item), None)
-        if match:
-            scalar = _replace_scalar(scalar, match[1], versions[canonicalize_name(match[1].name)])
-        existing.append(f"{indent}  - {scalar}\n")
+    for node, requirement in direct:
+        scalar = source[_start(node) : _end(node)]
+        existing.append(
+            f"{indent}  - {_replace_scalar(scalar, requirement, versions[canonicalize_name(requirement.name)])}\n"
+        )
     generated = [f"{indent}  - {json.dumps(str(item))} # release-creator managed\n" for item in transitive]
     line_end = source.find("\n", _end(sequence))
     if line_end < 0:
