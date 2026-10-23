@@ -52,6 +52,13 @@ _RE_GITHUB_HANDLE: Final = re.compile(
     """,
     re.VERBOSE,
 )
+_RE_LINKED_HANDLE: Final = re.compile(
+    r"""
+    \[@(?P<handle>[A-Za-z0-9-]+)\]  # Displayed GitHub handle
+    \((?P<url>[^)]+)\)              # Profile destination
+    """,
+    re.VERBOSE,
+)
 _RE_GENERATED_PR_AUTHOR: Final = re.compile(
     r"""
     \bby\s+@(?P<handle>[A-Za-z0-9-]+)  # GitHub generated PR author
@@ -99,6 +106,12 @@ _RE_MARKDOWN_VERSION_ANCHOR: Final = re.compile(
     ^<a\ name="release-             # Version anchor prefix
     (?P<version>v?[A-Za-z0-9.-]+)  # Version encoded for an anchor
     "></a>$                         # Anchor terminator
+    """,
+    re.VERBOSE,
+)
+_RE_MARKDOWN_ANCHOR: Final = re.compile(
+    r"""
+    ^<a\ name="(?P<anchor>release-[A-Za-z0-9-]+)"></a>$  # Complete release or category anchor
     """,
     re.VERBOSE,
 )
@@ -468,6 +481,7 @@ def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
     category_has_item = False
     for source_line in lines:
         line = source_line
+        _validate_profile_links(line)
         if source_line.startswith(category_prefix):
             if in_category and not category_has_item:
                 msg = "empty changelog category"
@@ -488,7 +502,7 @@ def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
             category_has_item = True
         elif (
             source_line.strip()
-            and not (source_line.startswith('<a name="release-') and source_line.endswith('"></a>'))
+            and _RE_MARKDOWN_ANCHOR.fullmatch(source_line) is None
             and (not in_item or not source_line[0].isspace())
         ):
             msg = f"release text outside an item: {source_line}"
@@ -500,6 +514,13 @@ def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
         raise ValueError(msg)
 
     return "\n".join(body).strip()
+
+
+def _validate_profile_links(text: str) -> None:
+    for link in _RE_LINKED_HANDLE.finditer(text):
+        if link["url"].casefold() != f"https://github.com/{link['handle']}".casefold():
+            msg = f"GitHub credit link for @{link['handle']} points to another profile"
+            raise ValueError(msg)
 
 
 def _is_comparison_line(line: str) -> bool:

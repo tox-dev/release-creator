@@ -51,6 +51,13 @@ def test_render_markdown_maps_categories_and_credits() -> None:
         """)
 
 
+def test_render_markdown_rejects_markup_inside_anchor() -> None:
+    changelog = '## 1.2.3 (today)\n\n<a name="release-1-2-3-added"><details></a>\n\n### Added\n\n- Add support.\n'
+
+    with pytest.raises(ValueError, match="release text outside an item"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+
 def test_render_markdown_first_release_without_artifact() -> None:
     result = render_markdown("## 0.1.0 (2026-02-13)\n", ReleaseContext(tag="0.1.0", repository="tox-dev/example"))
     assert result == "[Full Changelog](https://github.com/tox-dev/example/commits/0.1.0)\n"
@@ -514,6 +521,35 @@ def test_render_markdown_ignores_pull_links_inside_generated_titles() -> None:
     result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
     assert "by @bob" in result
+
+
+def test_render_markdown_rejects_credit_link_to_another_profile() -> None:
+    changelog = dedent("""\
+        ## 1.2.3 (today)
+
+        ### Added
+
+        - Add support ([#42](https://github.com/tox-dev/example/pull/42)) by [@bob](https://github.com/bob) and [@alice](https://github.com/mallory).
+        """)
+    generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
+
+    with pytest.raises(ValueError, match="credit link for @alice points to another profile"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+def test_render_markdown_accepts_multiple_profile_credit_links() -> None:
+    changelog = dedent("""\
+        ## 1.2.3 (today)
+
+        ### Added
+
+        - Add support ([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice) and [@bob](https://github.com/bob).
+        """)
+    generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "by @alice and @bob" in result
 
 
 @pytest.mark.parametrize(
