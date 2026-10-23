@@ -52,7 +52,8 @@ other generated sections are discarded.
 Named Towncrier fragments need no issue or PR number. Before Towncrier builds the changelog, run
 `release-creator fragments --repository owner/repo`. The command reads the commits that introduced pending fragments,
 asks GitHub which squash-merged pull request owns each commit, and adds its PR link and human author credit. The
-checkout needs complete fragment history, and `gh` needs read access to the repository.
+checkout needs complete fragment history, and `gh` needs read access to the repository. Merge commits and rebase merges
+cannot identify a fragment's PR through its introducing commit; use squash merges.
 
 The `tags` command calculates a version from pending fragments, validates numeric tags, and selects the preceding tag
 for GitHub comparisons:

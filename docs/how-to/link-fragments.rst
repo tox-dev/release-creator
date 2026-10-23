@@ -4,7 +4,8 @@
 
 ``fragments`` answers one question: which merged pull request introduced each changelog entry? Contributors can write
 ``+cache.bugfix.md`` before a pull request number exists. Run the command on the default branch after squash merge and
-before Towncrier consumes the fragments.
+before Towncrier consumes the fragments. Merge and rebase merges are unsupported because their introducing commit does
+not identify one squash-merged PR.
 
 What the command changes
 ========================

@@ -1,11 +1,12 @@
 """Read the pull requests associated with fragment commits."""
 
+# ruff: file-ignore[lazy-import-immediately-resolved]  # The shared regex and dataclass decorators resolve during module load.
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
 lazy import json
+lazy import re
 lazy import shutil
+lazy from dataclasses import dataclass
 lazy from pathlib import Path
 lazy from typing import Final
 
@@ -117,7 +118,13 @@ def _pulls(
 
 
 def _read_alias(response: object, alias: str, identifier: str) -> PullRequest:
-    if not isinstance(response, dict) or not isinstance(pull := response.get(alias), dict):
+    if not isinstance(response, dict):
+        msg = f"invalid pull request response for {identifier}"
+        raise TypeError(msg)
+    if (pull := response.get(alias)) is None:
+        msg = f"missing pull request response for {identifier}"
+        raise ValueError(msg)
+    if not isinstance(pull, dict):
         msg = f"invalid pull request response for {identifier}"
         raise TypeError(msg)
     if alias.startswith("c"):

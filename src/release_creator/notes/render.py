@@ -1,9 +1,10 @@
 """Render release notes from tagged changelogs."""
 
+# ruff: file-ignore[lazy-import-immediately-resolved]  # Shared regexes and the dataclass decorator resolve during module load.
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
+lazy import re
+lazy from dataclasses import dataclass
 lazy from typing import Final
 
 lazy import mdformat

@@ -1,6 +1,7 @@
 """Validate repository names used in GitHub URLs and API paths."""
 
-import re
+# ruff: file-ignore[lazy-import-immediately-resolved]  # Shared regexes compile when the module loads.
+lazy import re
 lazy from typing import Final
 
 MARKDOWN_AUTHOR: Final = re.compile(

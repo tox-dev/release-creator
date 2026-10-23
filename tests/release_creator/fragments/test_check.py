@@ -47,8 +47,9 @@ def news_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         pytest.param("+topic.feature.md", " \n", 0, "empty changelog fragment", id="empty"),
         pytest.param("README.md", "Read me.\n", 0, "", id="outside-directory"),
         pytest.param("nested/+topic.feature.md", "Nested.\n", 0, "", id="nested-directory"),
-        pytest.param("notes.txt", "Other file.\n", 0, "", id="other-extension"),
+        pytest.param("notes.txt", "Other file.\n", 0, "unsupported changelog fragment", id="other-extension"),
         pytest.param("README.rst", "Fragment guide.\n", 0, "", id="fragment-guide"),
+        pytest.param("+topic.feature.md~", "Editor backup.\n", 0, "", id="editor-backup"),
         pytest.param(".keep", "", 0, "", id="directory-marker"),
         pytest.param("+.md", "Uncategorized.\n", 0, "unsupported changelog fragment", id="incomplete-name"),
         pytest.param(
@@ -92,6 +93,19 @@ def test_changed_fragments_ignores_towncrier_template(news_repository: Path) -> 
     _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Add template")
 
     assert changed_fragments(config, "main") == 0
+
+
+def test_changed_fragments_rejects_renamed_extension(news_repository: Path) -> None:
+    source = news_repository / "changelog.d/+topic.feature.md"
+    source.write_text("Add a feature.\n")
+    _git("add", str(source))
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Add news")
+    _git("update-ref", "refs/remotes/origin/main", "HEAD")
+    _git("mv", str(source), str(source.with_suffix(".rst")))
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Rename news")
+
+    with pytest.raises(ValueError, match="unsupported changelog fragment extension"):
+        changed_fragments(news_repository / "pyproject.toml", "main")
 
 
 def test_changed_fragments_reports_missing_repository_root(news_repository: Path, mocker: MockerFixture) -> None:
@@ -368,11 +382,25 @@ def test_changed_changesets_accepts_single_named_package(news_repository: Path) 
     assert changed_changesets(news_repository / "knope.toml", "main") == 1
 
 
+def test_changed_changesets_accepts_footer_only_section(news_repository: Path) -> None:
+    (news_repository / ".changeset").mkdir()
+    (news_repository / "knope.toml").write_text(
+        '[package]\nextra_changelog_sections = [{ name = "Security", footers = ["Security-Note"] }]\n',
+        encoding="utf-8",
+    )
+    (news_repository / ".changeset" / "fix.md").write_text("---\ndefault: patch\n---\n\n# Fix a bug\n")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+
+    assert changed_changesets(news_repository / "knope.toml", "main") == 1
+
+
 @pytest.mark.parametrize(
     "section",
     [
         pytest.param('{ types = ["security"] }', id="missing-name"),
         pytest.param('{ name = "Security" }', id="missing-types"),
+        pytest.param('{ name = "Security", footers = "Security-Note" }', id="invalid-footers"),
     ],
 )
 def test_changed_changesets_rejects_incomplete_section(news_repository: Path, section: str) -> None:

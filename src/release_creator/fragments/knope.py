@@ -36,25 +36,27 @@ def knope_sections(config: dict[str, object]) -> list[tuple[str, list[str]]]:
     :param config: Knope package configuration.
     :returns: Section names and their accepted types.
     :raises TypeError: The section collection has an invalid type.
-    :raises ValueError: A section lacks its name or types.
+    :raises ValueError: A section lacks its name or sources.
     """
     sections = config.get("extra_changelog_sections", [])
     if not isinstance(sections, list):
-        msg = "Knope changelog sections need a name and nonempty types"
+        msg = "Knope changelog sections need a name and nonempty types or footers"
         raise TypeError(msg)
     result: list[tuple[str, list[str]]] = []
     for section in sections:
         if not isinstance(section, dict):
-            msg = "Knope changelog sections need a name and nonempty types"
+            msg = "Knope changelog sections need a name and nonempty types or footers"
             raise TypeError(msg)
-        name, kinds = section.get("name"), section.get("types")
+        name, kinds, footers = section.get("name"), section.get("types", []), section.get("footers", [])
+        if not isinstance(name, str) or not name or not isinstance(kinds, list) or not isinstance(footers, list):
+            msg = "Knope changelog sections need a name and nonempty types or footers"
+            raise ValueError(msg)
         if (
-            not isinstance(name, str)
-            or not isinstance(kinds, list)
-            or not kinds
+            not (kinds or footers)
             or not all(isinstance(kind, str) for kind in kinds)
+            or not all(isinstance(footer, str) for footer in footers)
         ):
-            msg = "Knope changelog sections need a name and nonempty types"
+            msg = "Knope changelog sections need a name and nonempty types or footers"
             raise ValueError(msg)
         result.append((name, kinds))
     return result

@@ -24,7 +24,7 @@ def changed_fragments(config: Path, base: str) -> int:
         msg = "news validation needs a PR base and a Markdown or reStructuredText changelog"
         raise ValueError(msg)
     count = 0
-    for path in _git_paths(directory, ["--diff-filter=AM", f"origin/{base}...HEAD"]):
+    for path in _git_paths(directory, ["--diff-filter=AM", "--no-renames", f"origin/{base}...HEAD"]):
         count += _validate_changed_fragment(path, directory, suffix, categories, ignored)
     if count:
         root = run_text([_git_executable(), "rev-parse", "--show-toplevel"])
@@ -55,11 +55,10 @@ def _validate_changed_fragment(
 ) -> int:
     if path.parent != directory or any(fnmatch(path.name.lower(), pattern) for pattern in ignored):
         return 0
-    if path.suffix != suffix and set(path.name.split(".")[1:]) & categories:
-        msg = f"unsupported changelog fragment extension: {path}"
-        raise ValueError(msg)
     if path.suffix != suffix:
-        return 0
+        kind = " extension" if set(path.name.split(".")[1:]) & categories else ""
+        msg = f"unsupported changelog fragment{kind}: {path}"
+        raise ValueError(msg)
     if fragment_category(path, categories) is None:
         msg = f"unsupported changelog fragment: {path}"
         raise ValueError(msg)
@@ -97,7 +96,7 @@ def changed_changesets(config: Path, base: str) -> int:
     categories = knope_kinds(knope)
     directory = Path(".changeset")
     count = 0
-    for path in _git_paths(directory, ["--diff-filter=AM", f"origin/{base}...HEAD"]):
+    for path in _git_paths(directory, ["--diff-filter=AM", "--no-renames", f"origin/{base}...HEAD"]):
         if path.parent != directory or path.suffix != ".md" or path.name == "README.md":
             continue
         frontmatter, _, _ = changeset_parts(path, path.read_text(encoding="utf-8"))
@@ -134,7 +133,7 @@ def _towncrier_settings(config: Path) -> tuple[Path, Path, str, set[str], set[st
         if "type" in towncrier
         else {"feature", "bugfix", "doc", "removal", "misc"}
     )
-    ignored = {".gitignore", ".gitkeep", ".keep", "readme", "readme.md", "readme.rst"}
+    ignored = {".gitignore", ".gitkeep", ".keep", "readme", "readme.md", "readme.rst", "*~"}
     if isinstance(template := towncrier.get("template"), str):
         ignored.add(Path(template).name.lower())
     ignored.update(str(pattern).lower() for pattern in towncrier.get("ignore", []))

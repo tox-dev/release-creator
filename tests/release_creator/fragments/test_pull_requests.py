@@ -170,7 +170,11 @@ def test_fragment_pull_requests_rejects_zero_number(monkeypatch: pytest.MonkeyPa
     ("response", "error", "message"),
     [
         pytest.param({"data": {}}, ValueError, "invalid GitHub associated", id="missing-repository"),
-        pytest.param({"data": {"repository": {}}}, TypeError, "invalid pull request response", id="missing-commit"),
+        pytest.param({"data": {"repository": []}}, TypeError, "invalid pull request response", id="repository-type"),
+        pytest.param({"data": {"repository": {}}}, ValueError, "missing pull request response", id="missing-commit"),
+        pytest.param(
+            {"data": {"repository": {"c0": []}}}, TypeError, "invalid pull request response", id="commit-type"
+        ),
         pytest.param(
             {"data": {"repository": {"c0": {}}}},
             ValueError,

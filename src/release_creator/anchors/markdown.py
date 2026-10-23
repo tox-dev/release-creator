@@ -1,6 +1,7 @@
 """Repair anchors after a changelog generator inserts a release section."""
 
-import re
+# ruff: file-ignore[lazy-import-immediately-resolved]  # Shared regexes compile when the module loads.
+lazy import re
 lazy from typing import Final, cast
 
 lazy from packaging.version import InvalidVersion, Version

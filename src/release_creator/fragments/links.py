@@ -1,9 +1,10 @@
 """Associate named Towncrier fragments with merged pull requests."""
 
+# ruff: file-ignore[lazy-import-immediately-resolved]  # Shared regexes and dataclass decorators resolve during module load.
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
+lazy import re
+lazy from dataclasses import dataclass
 lazy from pathlib import Path
 lazy from typing import Final, Literal
 
@@ -104,6 +105,9 @@ def _link_text(
         raise ValueError(msg)
     if (match := _RE_AUTHOR_MARKER.search(content)) is not None:
         handles = _credited_handles(content[match.end() :], fragment.suffix)
+        if target.author.handle == "ghost":
+            msg = f"cannot verify explicit credit for deleted pull request author in {fragment}"
+            raise ValueError(msg)
         if target.author.is_bot and target.author.handle in handles:
             msg = f"bot author @{target.author.handle} must not be credited in {fragment}"
             raise ValueError(msg)

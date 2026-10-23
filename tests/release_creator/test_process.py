@@ -19,3 +19,16 @@ def test_run_text_reports_timeout(mocker: MockerFixture) -> None:
     with pytest.raises(ValueError, match="command timed out after 300 seconds: git status"):
         run_text(["git", "status"])
     assert execute.call_args.kwargs["timeout"] == timeout
+    assert execute.call_args.kwargs["stdin"] == subprocess.DEVNULL
+
+
+def test_run_text_sends_input_to_child(mocker: MockerFixture) -> None:
+    execute = mocker.patch(
+        "release_creator.process.subprocess.run",
+        return_value=subprocess.CompletedProcess([], 0, "", ""),
+    )
+
+    run_text(["gh", "api", "graphql"], stdin="query")
+
+    assert execute.call_args.kwargs["input"] == "query"
+    assert execute.call_args.kwargs["stdin"] is None

@@ -264,6 +264,19 @@ def test_add_pull_request_links_preserves_numbered_shared_credits(tmp_path: Path
     )
 
 
+def test_add_pull_request_links_reports_deleted_author_credit(tmp_path: Path) -> None:
+    fragment = tmp_path / "42.feature.md"
+    fragment.write_text("Add a feature by [@alice](https://github.com/alice).\n")
+
+    with pytest.raises(ValueError, match="cannot verify explicit credit for deleted pull request author"):
+        _link(
+            tmp_path,
+            "tox-dev/example",
+            {fragment.name: "Add a feature (#42)"},
+            {"42": PullRequestAuthor(handle="ghost", is_bot=False)},
+        )
+
+
 @pytest.mark.parametrize("second_name", ["+second.feature.md", "43.feature.md"])
 def test_add_pull_request_links_rejects_a_mismatched_author_without_partial_writes(
     tmp_path: Path, second_name: str

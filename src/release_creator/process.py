@@ -21,6 +21,7 @@ def run_text(
             command,
             cwd=cwd,
             input=stdin,
+            stdin=subprocess.DEVNULL if stdin is None else None,
             capture_output=True,
             check=False,
             text=True,
