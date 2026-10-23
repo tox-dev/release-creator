@@ -8,6 +8,7 @@ from typing import cast
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
+from graphql import parse
 
 from release_creator import process
 from release_creator.fragments import pull_requests
@@ -25,6 +26,32 @@ def _pull(sha: str, *, number: int = 42, login: str = "alice", account_type: str
         "mergeCommit": {"oid": sha},
         "author": {"login": login, "__typename": account_type},
     }
+
+
+def test_fragment_pull_requests_sends_valid_graphql(monkeypatch: pytest.MonkeyPatch) -> None:
+    response = {
+        "data": {
+            "repository": {
+                f"c{index}": {"associatedPullRequests": {"nodes": [_pull(sha)]}}
+                for index, sha in enumerate(("a" * 40, "b" * 40))
+            }
+        }
+    }
+    run: MagicMock = cast(
+        "MagicMock",
+        create_autospec(
+            process.subprocess.run,
+            return_value=subprocess.CompletedProcess([], 0, json.dumps(response), ""),
+        ),
+    )
+    monkeypatch.setattr(pull_requests.shutil, "which", create_autospec(pull_requests.shutil.which, return_value="gh"))
+    monkeypatch.setattr(process.subprocess, "run", run)
+
+    pull_requests.fragment_pull_requests(
+        "tox-dev/example", {"+first.feature.md": "a" * 40, "+second.feature.md": "b" * 40}
+    )
+
+    parse(run.call_args.args[0][-1].removeprefix("query="))
 
 
 def test_fragment_pull_requests_batches_commits_and_reads_numbered_stems(monkeypatch: pytest.MonkeyPatch) -> None:

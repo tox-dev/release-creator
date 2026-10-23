@@ -70,7 +70,7 @@ def _pulls_for_commits(gh: str, repository: str, shas: list[str]) -> dict[str, P
     owner, name = repository.split("/", 1)
     objects = " ".join(
         f'c{index}: object(oid: "{sha}") {{ ... on Commit {{ associatedPullRequests(first: 100) '
-        "{ nodes { number mergedAt author { login __typename } mergeCommit { oid } } } } } }"
+        "{ nodes { number mergedAt author { login __typename } mergeCommit { oid } } } } }"
         for index, sha in enumerate(shas)
     )
     result = run_text([
