@@ -4,7 +4,7 @@ from pathlib import Path
 lazy import argparse
 lazy import sys
 
-lazy from release_creator.fragments.check import changed_changesets, changed_fragments
+lazy from release_creator.fragments.check import changed_changesets, changed_fragments, validate_fragment_deletions
 lazy from release_creator.fragments.git import fragment_commits_from_git
 lazy from release_creator.fragments.links import add_pull_request_links
 lazy from release_creator.fragments.names import pending_changesets, pending_fragments
@@ -26,6 +26,8 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
     news.add_argument("--format", choices=("towncrier", "knope"), default="towncrier", help="fragment format")
     news.add_argument("--base", required=True, help="pull request base branch")
     news.set_defaults(handler=_check)
+    deletions = commands.add_parser("validate-fragment-deletions", help="check staged Towncrier fragment deletions")
+    deletions.set_defaults(handler=_check_deletions)
 
 
 def _link(args: argparse.Namespace) -> None:
@@ -46,6 +48,10 @@ def _check(args: argparse.Namespace) -> None:
     knope = args.format == "knope"
     config = Path("knope.toml" if knope else "pyproject.toml")
     sys.stdout.write(f"{(changed_changesets if knope else changed_fragments)(config, args.base)}\n")
+
+
+def _check_deletions(_: argparse.Namespace) -> None:
+    validate_fragment_deletions(Path("pyproject.toml"))
 
 
 __all__ = [

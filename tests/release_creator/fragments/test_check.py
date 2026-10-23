@@ -9,7 +9,7 @@ import pytest
 lazy from pytest_mock import MockerFixture
 
 from release_creator.cli import main
-from release_creator.fragments.check import changed_changesets, changed_fragments
+from release_creator.fragments.check import changed_changesets, changed_fragments, validate_fragment_deletions
 
 
 def _git(*args: str) -> None:
@@ -96,6 +96,66 @@ def test_changed_fragments_reads_towncrier_tables(news_repository: Path) -> None
     _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
 
     assert changed_fragments(news_repository / "pyproject.toml", "main") == 1
+
+
+def test_changed_fragments_rejects_towncrier_duplicate(news_repository: Path) -> None:
+    for filename in ("42.feature.md", "42.feature.0.md"):
+        (news_repository / "changelog.d" / filename).write_text("Add a feature.\n", encoding="utf-8")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+
+    with pytest.raises(ValueError, match=r"multiple files for 42\.feature"):
+        changed_fragments(news_repository / "pyproject.toml", "main")
+
+
+@pytest.mark.parametrize(
+    ("filename", "valid"),
+    [
+        pytest.param("+topic.feature.md", True, id="named"),
+        pytest.param("42.feature.2.md", True, id="counter"),
+        pytest.param("topic.feature.md", False, id="unprefixed"),
+        pytest.param("42.other.md", False, id="unknown-category"),
+        pytest.param("template.jinja", False, id="template"),
+        pytest.param("nested/42.feature.md", False, id="nested"),
+        pytest.param("42.feature.rst", False, id="wrong-extension"),
+    ],
+)
+def test_validate_fragment_deletions(news_repository: Path, filename: str, valid: bool) -> None:
+    _stage_fragment_deletion(news_repository, filename)
+
+    if valid:
+        validate_fragment_deletions(news_repository / "pyproject.toml")
+    else:
+        with pytest.raises(ValueError, match="unsupported release fragment"):
+            validate_fragment_deletions(news_repository / "pyproject.toml")
+
+
+def test_validate_fragment_deletions_reads_towncrier_toml(news_repository: Path) -> None:
+    (news_repository / "towncrier.toml").write_text(
+        '[tool.towncrier]\ndirectory = "changelog.d"\nfilename = "CHANGELOG.md"\n'
+        '[tool.towncrier.fragment.change]\nname = "Changes"\n',
+        encoding="utf-8",
+    )
+    _stage_fragment_deletion(news_repository, "+topic.change.2.md")
+
+    validate_fragment_deletions(news_repository / "pyproject.toml")
+
+
+def test_validate_fragment_deletions_cli(news_repository: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _stage_fragment_deletion(news_repository, "42.feature.md")
+    monkeypatch.setattr(sys, "argv", ["release-creator", "validate-fragment-deletions"])
+
+    main()
+
+
+def _stage_fragment_deletion(repository: Path, filename: str) -> None:
+    fragment = repository / "changelog.d" / filename
+    fragment.parent.mkdir(parents=True, exist_ok=True)
+    fragment.write_text("A change.\n", encoding="utf-8")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Add fragment")
+    fragment.unlink()
+    _git("add", "-u")
 
 
 def test_towncrier_check_rejects_unprefixed_fragment(news_repository: Path) -> None:

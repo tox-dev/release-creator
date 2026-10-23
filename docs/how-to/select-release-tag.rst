@@ -55,8 +55,9 @@ Suppose ``git tag --list`` prints ``1.2.1``, ``1.2.2``, and ``docs-preview``. Be
     git tag --list | uvx --from release-creator release-creator tags 1.2.3 --require-newer
 
 A successful check prints nothing and exits with status zero. If ``1.2.3``, ``v1.2.3``, or a newer numeric tag already
-exists, the command fails. This prevents release preparation from reusing a version or publishing an older one. A name
-such as ``1.2.3rc1`` also fails: this command accepts exactly three numeric components.
+exists, the command fails. This prevents release preparation from reusing a version or publishing an older one.
+Prerelease, postrelease, and development suffixes are accepted on tags with three numeric components. For example,
+``1.2.3`` is newer than ``1.2.3rc1``.
 
 Find the comparison base
 ========================

@@ -2,6 +2,7 @@
 
 import shutil
 import subprocess  # ruff: ignore[suspicious-subprocess-import]  # Git checks the PR diff without a shell.
+import sys
 lazy import tomllib
 lazy from pathlib import Path
 
@@ -17,21 +18,12 @@ def changed_fragments(config: Path, base: str) -> int:
     :returns: Number of changed fragments.
     :raises ValueError: The configuration or a changed fragment is invalid.
     """
-    if config.name == "pyproject.toml" and (towncrier_config := config.with_name("towncrier.toml")).is_file():
-        config = towncrier_config
-    towncrier = tomllib.loads(config.read_text(encoding="utf-8"))["tool"]["towncrier"]
-    directory = Path(towncrier["directory"])
-    suffix = Path(towncrier["filename"]).suffix
-    categories = (
-        set(towncrier["fragment"])
-        if "fragment" in towncrier
-        else {item.get("directory", item["name"].lower()) for item in towncrier["type"]}
-    )
+    config, directory, suffix, categories = _towncrier_settings(config)
     if not base or suffix not in {".md", ".rst"}:
         msg = "news validation needs a PR base and a Markdown or reStructuredText changelog"
         raise ValueError(msg)
     count = 0
-    for path in _changed_paths(directory, base):
+    for path in _git_paths(directory, ["--diff-filter=AM", f"origin/{base}...HEAD"]):
         if path.parent != directory or path.suffix != suffix:
             continue
         if fragment_category(path, categories) is None:
@@ -41,7 +33,30 @@ def changed_fragments(config: Path, base: str) -> int:
             msg = f"empty changelog fragment: {path}"
             raise ValueError(msg)
         count += 1
+    if count:
+        result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Towncrier receives argv.
+            [sys.executable, "-m", "towncrier", "check", "--config", str(config), "--compare-with", f"origin/{base}"],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        if result.returncode:
+            msg = result.stderr.strip() or result.stdout.strip()
+            raise ValueError(msg)
     return count
+
+
+def validate_fragment_deletions(config: Path) -> None:
+    """Reject staged deletions that Towncrier could not have consumed.
+
+    :param config: Towncrier configuration file.
+    :raises ValueError: A deleted path is not a configured fragment.
+    """
+    _, directory, suffix, categories = _towncrier_settings(config)
+    for path in _git_paths(directory, ["--cached", "--diff-filter=D", "--no-renames"]):
+        if path.parent != directory or path.suffix != suffix or fragment_category(path, categories) is None:
+            msg = f"unsupported release fragment: {path}"
+            raise ValueError(msg)
 
 
 def changed_changesets(config: Path, base: str) -> int:
@@ -60,7 +75,7 @@ def changed_changesets(config: Path, base: str) -> int:
     categories.update(kind for section in knope.get("extra_changelog_sections", []) for kind in section["types"])
     directory = Path(".changeset")
     count = 0
-    for path in _changed_paths(directory, base):
+    for path in _git_paths(directory, ["--diff-filter=AM", f"origin/{base}...HEAD"]):
         if path.parent != directory or path.suffix != ".md" or path.name == "README.md":
             continue
         frontmatter, _, _ = changeset_parts(path, path.read_text(encoding="utf-8"))
@@ -77,17 +92,29 @@ def changed_changesets(config: Path, base: str) -> int:
     return count
 
 
-def _changed_paths(directory: Path, base: str) -> list[Path]:
+def _towncrier_settings(config: Path) -> tuple[Path, Path, str, set[str]]:
+    if config.name == "pyproject.toml" and (towncrier_config := config.with_name("towncrier.toml")).is_file():
+        config = towncrier_config
+    towncrier = tomllib.loads(config.read_text(encoding="utf-8"))["tool"]["towncrier"]
+    categories = (
+        set(towncrier["fragment"])
+        if "fragment" in towncrier
+        else {item.get("directory", item["name"].lower()) for item in towncrier["type"]}
+    )
+    return config, Path(towncrier["directory"]), Path(towncrier["filename"]).suffix, categories
+
+
+def _git_paths(directory: Path, options: list[str]) -> list[Path]:
     if (git := shutil.which("git")) is None:
         msg = "Git is required to validate changelog fragments"
         raise FileNotFoundError(msg)
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Git argument list has no shell.
-        [git, "diff", "--diff-filter=AM", "--name-only", "-z", f"origin/{base}...HEAD", "--", str(directory)],
+        [git, "diff", "--name-only", "-z", *options, "--", str(directory)],
         capture_output=True,
         check=False,
     )
     if result.returncode:
-        msg = result.stderr.decode("utf-8").strip() or f"could not compare changelog fragments with origin/{base}"
+        msg = result.stderr.decode("utf-8").strip() or "could not inspect changelog fragments"
         raise ValueError(msg)
     return [Path(filename) for filename in result.stdout.decode("utf-8").strip("\0").split("\0") if filename]
 
@@ -95,4 +122,5 @@ def _changed_paths(directory: Path, base: str) -> list[Path]:
 __all__ = [
     "changed_changesets",
     "changed_fragments",
+    "validate_fragment_deletions",
 ]

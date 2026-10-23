@@ -35,9 +35,14 @@ This minimal ``pyproject.toml`` maps ``bugfix`` fragments to the ``Fixed`` categ
     filename = "docs/changelog.md"
     template = "release_creator.fragments:template.jinja2"
     title_format = false
+    orphan_prefix = "+"
+    issue_pattern = "\\d+"
     type = [
       { directory = "bugfix", name = "Fixed", showcontent = true },
     ]
+
+The orphan prefix lets a contributor name a fragment before a pull request exists. The issue pattern reserves bare
+numeric stems for issue or pull request numbers, so ``topic.bugfix.md`` cannot become a misleading issue reference.
 
 Create ``docs/changelog.md`` with the insertion marker:
 
