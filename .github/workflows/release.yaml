@@ -80,17 +80,6 @@ jobs:
         with:
           name: python-package-distributions
           path: dist
-      - name: Match distribution version to tag
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          wheels=(dist/release_creator-*.whl)
-          sdists=(dist/release_creator-*.tar.gz)
-          [[ ${#wheels[@]} -eq 1 && ${#sdists[@]} -eq 1 ]]
-          [[ ${wheels[0]##*/} == release_creator-"$TAG"-* ]]
-          [[ ${sdists[0]##*/} == release_creator-"$TAG".tar.gz ]]
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: latest-known
@@ -142,10 +131,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: latest-known

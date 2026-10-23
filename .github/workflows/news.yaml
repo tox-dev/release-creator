@@ -20,14 +20,16 @@ jobs:
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
-      - name: Check release note requirement
+      - name: Validate release news
         id: news
         env:
+          BASE_REF: ${{ github.base_ref }}
           SKIP_NEWS: ${{ contains(github.event.pull_request.labels.*.name, 'skip news') }}
           BOT_AUTHOR: ${{ github.event.pull_request.user.type == 'Bot' }}
         run: |
           set -euo pipefail
-          if git diff --name-only "origin/${GITHUB_BASE_REF}...HEAD" -- 'changelog.d/*.rst' | grep -q .; then
+          fragments=$(uv run --no-default-groups --group release-prepare release-creator validate-news --base "$BASE_REF")
+          if ((fragments)); then
             echo 'fragment=true' >> "$GITHUB_OUTPUT"
           elif [[ "$SKIP_NEWS" != true && "$BOT_AUTHOR" != true ]]; then
             echo '::error::add a changelog fragment or apply the skip news label'
@@ -35,7 +37,4 @@ jobs:
           fi
       - name: Require releasable version
         if: steps.news.outputs.fragment == 'true'
-        run: git tag --list | uv run --no-default-groups release-creator tags --next auto
-      - name: Validate Towncrier fragments
-        if: steps.news.outputs.fragment == 'true'
-        run: uv run --no-default-groups --group release-prepare towncrier check --compare-with "origin/${GITHUB_BASE_REF}"
+        run: git tag --list | uv run --no-default-groups --group release-prepare release-creator tags --next auto
