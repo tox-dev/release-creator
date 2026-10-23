@@ -12,14 +12,15 @@ weekly change to pin packages declared by Python hook repositories and packages 
     prek run --all-files
 
 The command checks out each external hook repository at its frozen commit and reads ``.pre-commit-hooks.yaml``. For
-selected Python hooks, it resolves the repository package with any exact ``additional_dependencies`` and adds the pinned
-closure to that hook's ``additional_dependencies``. It also resolves exact dependencies in local hooks. Conditional
+selected Python hooks, it resolves the repository package with all ``additional_dependencies`` and adds the pinned
+closure to that hook's ``additional_dependencies``. It also resolves dependencies in local hooks. Conditional
 dependencies remain conditional, so a Windows-only package does not install on Linux. Non-Python hooks are unchanged.
 
 Generated pins have a ``# release-creator managed`` marker. The next update replaces them. Direct pins retain their
-spelling and comments; a flow-style list becomes a block list when the closure adds packages. A range such as
-``mdformat-gfm>=1`` stays as written and is not a resolution root. Use the Python version that the hooks run with; the
-cutoff excludes newly published packages.
+comments; ranges and unpinned requirements become exact pins. A flow-style list becomes a block list when the closure
+adds packages. Use the Python version that the hooks run with; the cutoff excludes newly published packages. The
+resolution ignores uv config files and source overrides. Shared YAML aliases in dependency lists are rejected because
+each hook needs an independent set of pins.
 
 If uv cannot resolve every pinned package, the command fails without changing the file. Review the patch and run
 ``prek`` before opening the update PR. The command does not update hook revisions, project requirements, or

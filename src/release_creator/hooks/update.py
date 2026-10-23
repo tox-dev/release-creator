@@ -52,6 +52,7 @@ def update_pins(config: Path, exclude_newer: str, python_version: str) -> None:
     for start, end, replacement in sorted(edits, key=operator.itemgetter(0), reverse=True):
         source = f"{source[:start]}{replacement}{source[end:]}"
     if edits:
+        _config_root(source)
         config.write_bytes(source.replace("\n", newline).encode("utf-8"))
 
 
@@ -69,6 +70,7 @@ def _config_root(source: str) -> MappingNode:
 
 def _groups(source: str, root: MappingNode, python_groups: set[int]) -> list[_Group]:
     groups: list[_Group] = []
+    seen: set[int] = set()
     pending: list[MappingNode | SequenceNode | ScalarNode] = [root]
     while pending:
         node = pending.pop()
@@ -79,6 +81,10 @@ def _groups(source: str, root: MappingNode, python_groups: set[int]) -> list[_Gr
                     and key.value == "additional_dependencies"
                     and (_start(key) in python_groups or _mapping_value(root, "repos") is None)
                 ):
+                    if id(value) in seen:
+                        msg = "aliased additional_dependencies cannot be updated independently"
+                        raise ValueError(msg)
+                    seen.add(id(value))
                     groups.append(_parse_group(source, key, value, flow_mapping=node.flow_style is True))
                 else:
                     pending.append(value)
@@ -239,6 +245,8 @@ def _resolve(
             "--quiet",
             "--no-header",
             "--no-annotate",
+            "--no-config",
+            "--no-sources",
             "--exclude-newer",
             exclude_newer,
             "--python-version",
@@ -315,9 +323,7 @@ def _flow_mapping_edit(
         (
             _replace_scalar(
                 source[_start(node) : _end(node)], requirement, versions[canonicalize_name(requirement.name)]
-            )
-            if _exact_pin(requirement)
-            else source[_start(node) : _end(node)],
+            ),
             False,
         )
         for node, requirement in direct
@@ -345,7 +351,7 @@ def _inline_edit(
         item = cast("ScalarNode", item)
         scalar = source[_start(item) : _end(item)]
         match = next(((node, requirement) for node, requirement in direct if node is item), None)
-        if match and _exact_pin(match[1]):
+        if match:
             scalar = _replace_scalar(scalar, match[1], versions[canonicalize_name(match[1].name)])
         existing.append(f"{indent}  - {scalar}\n")
     generated = [f"{indent}  - {json.dumps(str(item))} # release-creator managed\n" for item in transitive]
@@ -358,6 +364,10 @@ def _inline_edit(
 
 
 def _replace_scalar(scalar: str, requirement: Requirement, version: str) -> str:
+    if not _exact_pin(requirement):
+        extras = f"[{','.join(sorted(requirement.extras))}]" if requirement.extras else ""
+        marker = f"; {requirement.marker}" if requirement.marker else ""
+        return json.dumps(f"{requirement.name}{extras}=={version}{marker}")
     old_version = next(iter(requirement.specifier)).version
     if old_version == version:
         return scalar
@@ -376,11 +386,7 @@ def _block_edits(
     edits: list[_Edit] = []
     for node, requirement in direct:
         scalar = source[_start(node) : _end(node)]
-        updated = (
-            _replace_scalar(scalar, requirement, versions[canonicalize_name(requirement.name)])
-            if _exact_pin(requirement)
-            else scalar
-        )
+        updated = _replace_scalar(scalar, requirement, versions[canonicalize_name(requirement.name)])
         if scalar != updated:
             edits.append((_start(node), _end(node), updated))
     for node in managed:

@@ -55,7 +55,7 @@ def test_updates_each_hook_with_its_universal_closure(tmp_path: Path, mocker: Mo
         "        language: python\n"
         "        additional_dependencies: # keep\n"
         "          - 'MDFormat_GFM==1.1.0'\n"
-        "          - sphinx>=9\n"
+        '          - "sphinx==9.1.1"\n'
         '          - "mdformat==1.0.0" # release-creator managed\n'
         "      - id: docs\n"
         "        language: python\n"
@@ -66,6 +66,8 @@ def test_updates_each_hook_with_its_universal_closure(tmp_path: Path, mocker: Mo
     assert len(run.call_args_list) == len({"format", "docs"})
     assert {call.kwargs["stdin"] for call in run.call_args_list} == set(responses)
     assert all("--universal" in call.args[0] for call in run.call_args_list)
+    assert all("--no-config" in call.args[0] for call in run.call_args_list)
+    assert all("--no-sources" in call.args[0] for call in run.call_args_list)
     assert all("--no-deps" not in call.args[0] for call in run.call_args_list)
 
 
@@ -663,7 +665,7 @@ def test_keeps_comment_on_empty_dependency_list(tmp_path: Path) -> None:
     assert config.read_text(encoding="utf-8") == source
 
 
-def test_keeps_nonexact_dependency_when_root_is_removed(tmp_path: Path, mocker: MockerFixture) -> None:
+def test_pins_nonexact_dependency_when_root_is_removed(tmp_path: Path, mocker: MockerFixture) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_text(
         'additional_dependencies:\n  - sphinx>=9\n  - "click==9" # release-creator managed\n',
@@ -677,7 +679,7 @@ def test_keeps_nonexact_dependency_when_root_is_removed(tmp_path: Path, mocker: 
 
     update_pins(config, "2026-10-14T00:00:00Z", "3.15")
 
-    assert config.read_text(encoding="utf-8") == "additional_dependencies:\n  - sphinx>=9\n"
+    assert config.read_text(encoding="utf-8") == 'additional_dependencies:\n  - "sphinx==9.1"\n'
 
 
 def test_resolves_ranges_and_unpinned_roots(tmp_path: Path, mocker: MockerFixture) -> None:
@@ -693,11 +695,26 @@ def test_resolves_ranges_and_unpinned_roots(tmp_path: Path, mocker: MockerFixtur
     update_pins(config, "2026-10-14T00:00:00Z", "3.15")
 
     assert safe_load(config.read_text(encoding="utf-8"))["additional_dependencies"] == [
-        "sphinx>=9",
-        "mdformat-gfm",
+        "sphinx==9.1",
+        "mdformat-gfm==1.2",
         "colorama==0.4.6",
     ]
     assert run.call_args.kwargs["stdin"] == "sphinx>=9\nmdformat-gfm\n"
+
+
+def test_rejects_aliased_dependency_lists(tmp_path: Path) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    source = (
+        "repos:\n  - repo: local\n    hooks:\n"
+        "      - id: first\n        language: python\n        additional_dependencies: &deps [black==1]\n"
+        "      - id: second\n        language: python\n        additional_dependencies: *deps\n"
+    )
+    config.write_text(source, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="aliased additional_dependencies"):
+        update_pins(config, "7 days", "3.15")
+
+    assert config.read_text(encoding="utf-8") == source
 
 
 def test_rejects_resolver_failure(tmp_path: Path, mocker: MockerFixture) -> None:
