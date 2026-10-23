@@ -14,7 +14,7 @@ lazy from zipfile import ZipFile
 
 
 def reconcile_marketplace(plugin_id: str, version: str, archive: Path, mode: Literal["stage", "verify"]) -> bool:
-    """Return whether an absent version needs publishing; verify an existing version's ZIP members.
+    """Compare ZIP members so Marketplace recompression does not affect release verification.
 
     :param plugin_id: Marketplace plugin ID.
     :param version: Plugin version.
