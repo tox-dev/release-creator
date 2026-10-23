@@ -40,7 +40,7 @@ Start with the tutorial for a complete release. Use the how-to guides for an exi
 and input formats; the explanation covers the source of each part of a GitHub Release.
 
 The :doc:`changelog <changelog>` includes an ``Unreleased`` section in PR builds when that branch has fragments.
-``docs/changelog.md`` receives those entries when the release is prepared.
+``docs/changelog.rst`` receives those entries when the release is prepared.
 
 .. toctree::
     :caption: Tutorial

@@ -15,7 +15,12 @@ if TYPE_CHECKING:
 
 project = "release-creator"
 release = package_version(project)
-extensions = ["myst_parser", "sphinx_argparse_cli", "sphinx_copybutton", "sphinxcontrib.mermaid"]
+extensions = ["sphinx.ext.extlinks", "sphinx_argparse_cli", "sphinx_copybutton", "sphinxcontrib.mermaid"]
+source_suffix = ".rst"
+extlinks = {
+    "pr": ("https://github.com/tox-dev/release-creator/pull/%s", "#%s"),
+    "user": ("https://github.com/%s", "@%s"),
+}
 html_theme = "furo"
 html_title = project
 html_logo = "_static/logo-128.png"
@@ -66,15 +71,23 @@ def include_unreleased(app: Sphinx, docname: str, source: list[str]) -> None:
     sections = []
     for category in categories:
         entries = []
-        for fragment in sorted(fragments.glob(f"*.{category['directory']}.md")):
+        for fragment in sorted(fragments.glob(f"*.{category['directory']}.rst")):
             app.env.note_dependency(str(fragment))
             entry = fragment.read_text(encoding="utf-8").strip().replace("\n", "\n  ")
             entries.append(f"- {entry}")
         if entries:
-            sections.extend((f"### {category['name']}", "", *entries, ""))
+            sections.extend((
+                f".. _release-unreleased-{category['name'].lower().replace(' ', '-')}:",
+                "",
+                category["name"],
+                "~" * len(category["name"]),
+                "",
+                *entries,
+                "",
+            ))
     if sections:
         draft = "\n".join(sections)
         source[0] = source[0].replace(
-            "<!-- towncrier release notes start -->",
-            f"## Unreleased\n\n{draft}<!-- towncrier release notes start -->",
+            ".. towncrier release notes start",
+            f".. _release-unreleased:\n\nUnreleased\n----------\n\n{draft}.. towncrier release notes start",
         )

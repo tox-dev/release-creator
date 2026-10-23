@@ -12,7 +12,7 @@ jobs:
     permissions:
       contents: read
     with:
-      changelog: docs/changelog.md
+      changelog: docs/changelog.rst
       artifact-base-url: https://pypi.org/project/release-creator/
       local-tool-source: true
   previous:
@@ -106,7 +106,7 @@ jobs:
       - uses: tox-dev/github-workflows/render-release-notes@cadf58a0dcc5d0c7853b248ab7c2b19bb93675d1
         with:
           tag: ${{ github.ref_name }}
-          changelog: docs/changelog.md
+          changelog: docs/changelog.rst
           artifact-url: https://pypi.org/project/release-creator/${{ github.ref_name }}/
           generated-notes: ${{ runner.temp }}/generated-notes.md
           output: ${{ runner.temp }}/release-notes.md

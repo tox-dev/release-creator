@@ -21,6 +21,8 @@ jobs:
       pull-requests: read
     with:
       bump: ${{ inputs.bump }}
+      changelog: docs/changelog.rst
+      format: rst
       local-tool-source: true
     secrets:
       RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}

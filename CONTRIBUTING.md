@@ -5,7 +5,7 @@ PR. CI tests Python 3.15 on Linux, macOS, and Windows.
 
 ## Release notes
 
-Add a `changelog.d/+short-name.<type>.md` fragment for each user-visible change. No issue or PR number is needed when
+Add a `changelog.d/+short-name.<type>.rst` fragment for each user-visible change. No issue or PR number is needed when
 opening the PR. Use `feature` for additions, `change` for changed behavior, `bugfix` for fixes, or `doc` for
 documentation. Other types are `breaking`, `security`, `performance`, `deprecation`, `removal`, and `packaging`. Keep
 separate changes in separate fragments.
@@ -16,8 +16,8 @@ install an older release. State the exact version change. Reserve `breaking` for
 
 Write a complete sentence and credit verified human authors:
 
-```markdown
-Render GitHub notes without wrapped bullets by [@gaborbernat](https://github.com/gaborbernat).
+```rst
+Render GitHub notes without wrapped bullets by :user:`gaborbernat`.
 ```
 
 For multiple authors, join linked handles with `by x, y and z`. Do not credit reviewers or bots. Bot PRs need no
@@ -33,4 +33,4 @@ tagged `release-creator` source. Set up the App, `release-auth` environment, and
 dispatching it.
 
 PR documentation builds show the branch's fragments in an `Unreleased` section on the changelog page. Towncrier adds
-them to `docs/changelog.md` only during release preparation.
+them to `docs/changelog.rst` only during release preparation.

@@ -55,7 +55,6 @@ test = [
 type = [ "ty>=0.0.84", { include-group = "test" }, { include-group = "docs" } ]
 docs = [
   "furo>=2025.12.19",
-  "myst-parser>=5.1",
   "sphinx>=9.1",
   "sphinx-argparse-cli>=1.24",
   "sphinx-copybutton>=0.5.2",
@@ -122,8 +121,8 @@ report.fail_under = 100
 [tool.towncrier]
 name = "release-creator"
 directory = "changelog.d"
-filename = "docs/changelog.md"
-template = "release_creator.fragments:template.jinja2"
+filename = "docs/changelog.rst"
+template = "release_creator.fragments:template.rst.jinja2"
 title_format = false
 orphan_prefix = "+"
 type = [
