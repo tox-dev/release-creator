@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@6657e5374d3aa63fb5a3890279ada74ea336b97c
+    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@c549001c2970bdc4e2bb5ab8b7df45e0642d8bed
     permissions:
       contents: read
     with:
@@ -32,7 +32,7 @@ jobs:
           version: latest-known
           python-version: "3.15"
           enable-cache: false
-      - uses: tox-dev/github-workflows/install-locked-tools@6657e5374d3aa63fb5a3890279ada74ea336b97c
+      - uses: tox-dev/github-workflows/install-locked-tools@c549001c2970bdc4e2bb5ab8b7df45e0642d8bed
         with:
           groups: project-runtime
           venv: ${{ runner.temp }}/release-tools
@@ -101,7 +101,7 @@ jobs:
             --group release-notes --group project-runtime pylock.toml
           uv pip install --python "$RUNNER_TEMP/release-tools/bin/python" --no-deps dist/release_creator-*.whl
           echo "$RUNNER_TEMP/release-tools/bin" >>"$GITHUB_PATH"
-      - uses: tox-dev/github-workflows/render-release-notes@6657e5374d3aa63fb5a3890279ada74ea336b97c
+      - uses: tox-dev/github-workflows/render-release-notes@c549001c2970bdc4e2bb5ab8b7df45e0642d8bed
         with:
           tag: ${{ github.ref_name }}
           changelog: docs/changelog.md
@@ -150,7 +150,7 @@ jobs:
         with:
           name: python-package-distributions
           path: dist
-      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@6657e5374d3aa63fb5a3890279ada74ea336b97c
+      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@c549001c2970bdc4e2bb5ab8b7df45e0642d8bed
         with:
           project: release-creator
           version: ${{ github.ref_name }}
@@ -167,7 +167,7 @@ jobs:
         with:
           name: final-github-release-notes
           path: ${{ runner.temp }}
-      - uses: tox-dev/github-workflows/publish-github-release@6657e5374d3aa63fb5a3890279ada74ea336b97c
+      - uses: tox-dev/github-workflows/publish-github-release@c549001c2970bdc4e2bb5ab8b7df45e0642d8bed
         env:
           GH_TOKEN: ${{ github.token }}
         with:
