@@ -21,7 +21,11 @@
 {{ underlines[0] * (name | length) }}
 
 {% for text, values in sections[section][category].items() %}
-{% set missing = values | reject("in", text) | reject("in", text | replace("/pull/", "/issues/") | replace(":pr:", ":issue:")) | list %}
+{% set missing = [] %}
+{% for value in values %}
+{% set reference = namespace(found=false) %}
+{% for tail in (text ~ "\n" ~ (text | replace("/pull/", "/issues/") | replace(":pr:", ":issue:"))).split(value)[1:] if not tail or not tail[0].isdigit() %}{% set reference.found = true %}{% endfor %}
+{% if not reference.found %}{% set _ = missing.append(value) %}{% endif %}{% endfor %}
 - {{ text }}{{ (" (" ~ (missing | join(", ")) ~ ")") if missing else "" }}
 {% endfor %}
 

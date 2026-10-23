@@ -71,6 +71,50 @@ def test_markdown_template_keeps_numbered_and_named_pull_requests(
 
 
 @pytest.mark.parametrize(
+    ("extension", "template", "issue_format", "pull_link"),
+    [
+        pytest.param("md", "template.jinja2", "#{issue}", "pull/123", id="markdown"),
+        pytest.param("rst", "template.rst.jinja2", ":pr:`{issue}`", ":pr:`123`", id="rst"),
+    ],
+)
+def test_template_does_not_confuse_short_issue_with_longer_pull_request(
+    tmp_path: Path, extension: str, template: str, issue_format: str, pull_link: str
+) -> None:
+    (tmp_path / "changelog.d").mkdir()
+    fragment = tmp_path / "changelog.d" / f"12.bugfix.{extension}"
+    fragment.write_text("Fix a numbered bug.\n")
+    changelog = tmp_path / f"CHANGELOG.{extension}"
+    changelog.write_text("Changelog\n=========\n" if extension == "rst" else "# Changelog\n")
+    (tmp_path / "pyproject.toml").write_text(
+        dedent(f"""\
+        [tool.towncrier]
+        name = "example"
+        directory = "changelog.d"
+        filename = "{changelog.name}"
+        template = "release_creator.fragments:{template}"
+        title_format = false
+        issue_format = "{issue_format}"
+        type = [{{ directory = "bugfix", name = "Fixed", showcontent = true }}]
+        """)
+    )
+    add_pull_request_links(
+        tmp_path / "changelog.d",
+        "tox-dev/example",
+        {fragment.name: PullRequest(number="123", author=PullRequestAuthor(handle="alice", is_bot=False))},
+    )
+
+    subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Fixed command and temporary checkout.
+        [str(Path(sys.executable).with_name("towncrier")), "build", "--yes", "--version", "1.2.3"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+
+    assert pull_link in changelog.read_text()
+    assert f"({issue_format.format(issue='12')})" in changelog.read_text()
+
+
+@pytest.mark.parametrize(
     ("underlines", "expected_category"),
     [
         pytest.param("", "Fixed\n-----", id="default"),
