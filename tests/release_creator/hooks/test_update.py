@@ -201,6 +201,35 @@ def test_rejects_direct_url_root(tmp_path: Path) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("output", "message"),
+    [
+        pytest.param(
+            "example==1; python_version < '3.12'\nexample==2; python_version >= '3.12'\n",
+            "multiple versions",
+            id="universal-fork",
+        ),
+        pytest.param("example @ https://example.org/example.whl\n", "exact index pin", id="direct-url"),
+        pytest.param("example>=1\n", "exact index pin", id="range"),
+        pytest.param("other==1\n", "omitted direct packages", id="missing-root"),
+    ],
+)
+def test_rejects_unpinned_hook_resolution(tmp_path: Path, mocker: MockerFixture, output: str, message: str) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    source = 'additional_dependencies: ["example==1"]\n'
+    config.write_text(source, encoding="utf-8")
+    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch(
+        "release_creator.hooks.update.run_text",
+        return_value=subprocess.CompletedProcess([], 0, output, ""),
+    )
+
+    with pytest.raises(ValueError, match=message):
+        update_pins(config, "7 days", "3.15")
+
+    assert config.read_text(encoding="utf-8") == source
+
+
 @pytest.fixture
 def upstream_python_hook(tmp_path: Path) -> tuple[Path, str]:
     upstream = tmp_path / "upstream"
@@ -272,6 +301,31 @@ def test_pins_python_hook_package_dependencies(
 
     update_pins(config, "7 days", "3.15")
 
+    assert config.read_text(encoding="utf-8") == first
+
+
+@pytest.mark.parametrize("style", [pytest.param("|", id="literal"), pytest.param(">+", id="folded")])
+def test_adds_hook_dependencies_after_block_scalar(
+    tmp_path: Path, mocker: MockerFixture, upstream_python_hook: tuple[Path, str], style: str
+) -> None:
+    upstream, revision = upstream_python_hook
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(
+        f"repos:\n  - repo: {upstream.as_uri()}\n    rev: {revision}\n    hooks:\n"
+        f"      - id: lint\n        entry: {style}\n          python -m fixture_lint\n"
+        "      - id: other\n        language: system\n",
+        encoding="utf-8",
+    )
+    _mock_hook_compiler(mocker, "-e file:///checkout\nclick==8.1\n")
+
+    update_pins(config, "7 days", "3.15")
+    first = config.read_text(encoding="utf-8")
+    update_pins(config, "7 days", "3.15")
+
+    assert safe_load(first)["repos"][0]["hooks"] == [
+        {"id": "lint", "entry": "python -m fixture_lint\n", "additional_dependencies": ["click==8.1"]},
+        {"id": "other", "language": "system"},
+    ]
     assert config.read_text(encoding="utf-8") == first
 
 
@@ -484,6 +538,84 @@ def test_replaces_managed_closure_on_rerun(tmp_path: Path, mocker: MockerFixture
     assert config.read_text(encoding="utf-8") == (
         'additional_dependencies:\n  - black==3\n  - "click==9" # release-creator managed\n'
     )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param("additional_dependencies:\n  -   black==1\n", id="spaced-bullet"),
+        pytest.param("additional_dependencies: [\n  black==1,\n]\n", id="multiline-flow"),
+    ],
+)
+def test_preserves_dependency_list_on_rerun(tmp_path: Path, mocker: MockerFixture, source: str) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(source, encoding="utf-8")
+    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch(
+        "release_creator.hooks.update.run_text",
+        return_value=subprocess.CompletedProcess([], 0, "black==2\nclick==8\n", ""),
+    )
+
+    update_pins(config, "7 days", "3.15")
+    first = config.read_text(encoding="utf-8")
+    update_pins(config, "7 days", "3.15")
+
+    assert safe_load(first)["additional_dependencies"] == ["black==2", "click==8"]
+    assert config.read_text(encoding="utf-8") == first
+
+
+def test_flow_mapping_marks_transitive_dependencies(tmp_path: Path, mocker: MockerFixture) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(
+        "repos:\n  - repo: local\n    hooks:\n"
+        "      - {id: format, language: python, additional_dependencies: [black==1]}\n",
+        encoding="utf-8",
+    )
+    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch(
+        "release_creator.hooks.update.run_text",
+        return_value=subprocess.CompletedProcess([], 0, "black==2\nclick==8\n", ""),
+    )
+
+    update_pins(config, "7 days", "3.15")
+    first = config.read_text(encoding="utf-8")
+    update_pins(config, "7 days", "3.15")
+
+    assert safe_load(first)["repos"][0]["hooks"][0]["additional_dependencies"] == ["black==2", "click==8"]
+    assert first.count("# release-creator managed") == 1
+    assert config.read_text(encoding="utf-8") == first
+
+
+def test_flow_mapping_removes_orphaned_managed_dependency(tmp_path: Path) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(
+        "repos:\n  - repo: local\n    hooks:\n"
+        "      - {id: format, language: python, additional_dependencies: [\n"
+        '          "click==8" # release-creator managed\n'
+        "        ]}\n",
+        encoding="utf-8",
+    )
+
+    update_pins(config, "7 days", "3.15")
+
+    assert safe_load(config.read_text(encoding="utf-8"))["repos"][0]["hooks"][0]["additional_dependencies"] == []
+
+
+def test_preserves_crlf_in_hook_config(tmp_path: Path, mocker: MockerFixture) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_bytes(b"additional_dependencies: [black==1]\r\n")
+    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch(
+        "release_creator.hooks.update.run_text",
+        return_value=subprocess.CompletedProcess([], 0, "black==2\nclick==8\n", ""),
+    )
+
+    update_pins(config, "7 days", "3.15")
+
+    result = config.read_bytes()
+    assert b"\r\n" in result
+    assert result.count(b"\n") == result.count(b"\r\n")
+    assert safe_load(result)["additional_dependencies"] == ["black==2", "click==8"]
 
 
 @pytest.mark.parametrize(

@@ -139,6 +139,11 @@ def _has_pull_request_link(content: str, repository: str, number: str) -> bool:
 def _append_pull_request_link(content: str, target: _LinkTarget, author: str | None) -> str:
     link = _pull_request_link(target.repository, target.number, target.fragment.suffix)
     before, after = _split_trailing_code(content, target.fragment.suffix)
+    if not before:
+        suffix = f"{link}"
+        if author is not None:
+            suffix += f" by {_author_credit(author, target.fragment.suffix)}"
+        return f"{after.rstrip()}\n\n{suffix}{'' if target.knope else '.'}"
     content = f"{before.removesuffix('.')} {link}"
     if author is not None:
         content += f" by {_author_credit(author, target.fragment.suffix)}"
@@ -149,22 +154,54 @@ def _split_trailing_code(content: str, suffix: str) -> tuple[str, str]:
     lines = content.splitlines(keepends=True)
     if suffix == ".md" and lines and (closing := lines[-1].strip()).startswith(("```", "~~~")):
         minimum_fence_length: Final = 3
-        fence = closing[0] * minimum_fence_length
         if closing == closing[0] * len(closing) and len(closing) >= minimum_fence_length:
             opening = next(
-                (index for index in range(len(lines) - 2, -1, -1) if lines[index].strip().startswith(fence)),
+                (index for index in range(len(lines) - 2, -1, -1) if lines[index].strip().startswith(closing)),
                 None,
             )
             if opening is not None:
                 position = sum(map(len, lines[:opening]))
                 before = content[:position].rstrip()
                 return before, content[len(before) :]
-    if suffix == ".rst":
+    if suffix == ".md":
         opening = next(
-            (index for index in range(len(lines) - 1, -1, -1) if lines[index].lstrip().startswith(".. code-block::")),
+            (
+                index
+                for index in range(len(lines) - 1, -1, -1)
+                if lines[index].strip() and not lines[index].startswith("    ")
+            ),
             None,
         )
-        if opening is not None and all(not line.strip() or line.startswith(" ") for line in lines[opening + 1 :]):
+        if (
+            opening is None
+            and any(line.strip() for line in lines)
+            and all(not line.strip() or line.startswith("    ") for line in lines)
+        ):
+            return "", content
+        if (
+            opening is not None
+            and opening < len(lines) - 2
+            and not lines[opening + 1].strip()
+            and all(not line.strip() or line.startswith("    ") for line in lines[opening + 2 :])
+        ):
+            position = sum(map(len, lines[: opening + 1]))
+            before = content[:position].rstrip()
+            return before, content[len(before) :]
+    if suffix == ".rst":
+        opening = next(
+            (
+                index
+                for index in range(len(lines) - 1, -1, -1)
+                if lines[index].lstrip().startswith((".. code-block::", ".. code::", ".. sourcecode::"))
+                or lines[index].rstrip().endswith("::")
+            ),
+            None,
+        )
+        if (
+            opening is not None
+            and any(line.startswith(" ") and line.strip() for line in lines[opening + 1 :])
+            and all(not line.strip() or line.startswith(" ") for line in lines[opening + 1 :])
+        ):
             position = sum(map(len, lines[:opening]))
             before = content[:position].rstrip()
             return before, content[len(before) :]

@@ -21,7 +21,9 @@ type _Edit = tuple[int, int, str]
 
 def update_pins(config: Path, exclude_newer: str, python_version: str) -> None:
     """Refresh each hook's complete dependency closure under the selected cutoff."""
-    source = config.read_text(encoding="utf-8")
+    source = config.read_bytes().decode("utf-8")
+    newline = "\r\n" if source.count("\r\n") == source.count("\n") and "\r\n" in source else "\n"
+    source = source.replace("\r\n", "\n")
     root = _config_root(source)
     edits: list[_Edit] = []
     with TemporaryDirectory() as temporary:
@@ -44,7 +46,7 @@ def update_pins(config: Path, exclude_newer: str, python_version: str) -> None:
     for start, end, replacement in sorted(edits, key=operator.itemgetter(0), reverse=True):
         source = f"{source[:start]}{replacement}{source[end:]}"
     if edits:
-        config.write_text(source, encoding="utf-8")
+        config.write_bytes(source.replace("\n", newline).encode("utf-8"))
 
 
 def _config_root(source: str) -> MappingNode:
@@ -113,7 +115,7 @@ def _last_content_end(node: MappingNode | ScalarNode | SequenceNode) -> int:
         return _last_content_end(node.value[-1][1])
     if isinstance(node, SequenceNode) and not node.flow_style:
         return _last_content_end(node.value[-1])
-    return _end(node)
+    return _end(node) - 1 if isinstance(node, ScalarNode) and node.style in {"|", ">"} else _end(node)
 
 
 def _hook_packages(
@@ -242,7 +244,14 @@ def _resolve(
     if result.returncode:
         msg = f"cannot resolve hook dependencies: {result.stderr.strip()}"
         raise ValueError(msg)
-    return [_resolved_line(line) for line in result.stdout.splitlines() if line.strip() and not line.startswith("-e ")]
+    resolved = [
+        _resolved_line(line) for line in result.stdout.splitlines() if line.strip() and not line.startswith("-e ")
+    ]
+    names = [canonicalize_name(requirement.name) for requirement in resolved]
+    if len(names) != len(set(names)):
+        msg = "hook dependency resolution selected multiple versions of one package"
+        raise ValueError(msg)
+    return resolved
 
 
 def _root_input(requirement: Requirement) -> str:
@@ -257,12 +266,18 @@ def _exact_pin(requirement: Requirement) -> bool:
 
 
 def _resolved_line(line: str) -> Requirement:
-    return Requirement(line)
+    requirement = Requirement(line)
+    if requirement.url is not None or not _exact_pin(requirement) or "*" in next(iter(requirement.specifier)).version:
+        msg = f"hook dependency resolution did not return an exact index pin: {line}"
+        raise ValueError(msg)
+    return requirement
 
 
 def _group_edits(source: str, group: _Group, resolved: list[Requirement]) -> list[_Edit]:
     key, sequence, direct, managed, flow_mapping = group
     if managed and not direct and not resolved and len(managed) == len(sequence.value):
+        if flow_mapping:
+            return [(_start(sequence), _end(sequence), "[]")]
         end = source.find("\n", _end(sequence.value[-1]))
         return [(_start(key), end + 1 if end >= 0 else len(source), f"{key.value}: []\n")]
     roots = {canonicalize_name(requirement.name) for _, requirement in direct}
@@ -272,18 +287,43 @@ def _group_edits(source: str, group: _Group, resolved: list[Requirement]) -> lis
         for item in resolved
         if canonicalize_name(item.name) in roots
     }
-    if flow_mapping and transitive:
-        values = [
-            _replace_scalar(node.value, requirement, versions[canonicalize_name(requirement.name)])
-            if _exact_pin(requirement)
-            else node.value
-            for node, requirement in direct
-        ]
-        values.extend(str(item) for item in transitive)
-        return [(_start(sequence), _end(sequence), json.dumps(values))]
-    if cast("Mark", sequence.start_mark).line == cast("Mark", sequence.end_mark).line and transitive:
+    if missing := roots - versions.keys():
+        msg = f"hook dependency resolution omitted direct packages: {', '.join(sorted(missing))}"
+        raise ValueError(msg)
+    if flow_mapping and (transitive or managed):
+        return [_flow_mapping_edit(source, group, versions, transitive)]
+    if sequence.flow_style and not transitive and not managed:
+        return _block_edits(source, group, versions, [])
+    if sequence.flow_style or (
+        cast("Mark", sequence.start_mark).line == cast("Mark", sequence.end_mark).line and transitive
+    ):
         return [_inline_edit(source, group, versions, transitive)]
     return _block_edits(source, group, versions, transitive)
+
+
+def _flow_mapping_edit(
+    source: str, group: _Group, versions: dict[NormalizedName, str], transitive: list[Requirement]
+) -> _Edit:
+    key, sequence, direct, _, _ = group
+    values = [
+        (
+            _replace_scalar(
+                source[_start(node) : _end(node)], requirement, versions[canonicalize_name(requirement.name)]
+            )
+            if _exact_pin(requirement)
+            else source[_start(node) : _end(node)],
+            False,
+        )
+        for node, requirement in direct
+    ]
+    values.extend((json.dumps(str(item)), True) for item in transitive)
+    indent = " " * (cast("Mark", key.start_mark).column + 2)
+    closing = " " * cast("Mark", key.start_mark).column
+    lines = [
+        f"{indent}{value}{',' if index < len(values) - 1 else ''}{' # release-creator managed' if managed else ''}"
+        for index, (value, managed) in enumerate(values)
+    ]
+    return _start(sequence), _end(sequence), f"[\n{'\n'.join(lines)}\n{closing}]"
 
 
 def _inline_edit(
@@ -342,7 +382,8 @@ def _block_edits(
         end = source.find("\n", _end(node))
         edits.append((start, end + 1 if end >= 0 else len(source), ""))
     if transitive:
-        indent = " " * (cast("Mark", sequence.value[0].start_mark).column - 2)
+        first = _start(sequence.value[0])
+        indent = source[source.rfind("\n", 0, first) + 1 : first].partition("-")[0]
         end = source.find("\n", _end(sequence.value[-1]))
         insertion = end + 1 if end >= 0 else len(source)
         prefix = "\n" if end < 0 and not source.endswith("\n") else ""

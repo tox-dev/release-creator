@@ -17,7 +17,9 @@ lazy from release_creator.notes.rst import render_rst_section
 
 _RE_RELEASE_PULL: Final = re.compile(
     r"""
-    https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/(?P<number>\d+)  # PR link
+    \[\#(?P<number>\d+)\]\(  # Visible PR reference
+    https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/(?P=number)  # Matching URL
+    \)
     """,
     re.VERBOSE,
 )
@@ -198,21 +200,23 @@ def _generated_pr_authors(generated_notes: str, repository: str) -> tuple[dict[s
 def _release_entries(notes: str, repository: str) -> dict[str, list[tuple[set[str], bool]]]:
     entries: dict[str, list[tuple[set[str], bool]]] = {}
     for line in notes.splitlines():
-        pull_requests = [
-            match["number"] for match in _RE_RELEASE_PULL.finditer(line) if match["repository"] == repository
-        ]
-        if not pull_requests:
+        references = [match for match in _RE_RELEASE_PULL.finditer(line) if match["repository"] == repository]
+        if not references:
             continue
-        credit_text = _RE_GITHUB_CREDIT.search(line, max(match.end() for match in _RE_RELEASE_PULL.finditer(line)))
+        credit_text = _RE_GITHUB_CREDIT.search(line, references[-1].end()) or _RE_GITHUB_CREDIT.search(
+            line[: references[0].start()]
+        )
         handles = (
             {match["handle"] for match in _RE_GITHUB_HANDLE.finditer(credit_text["credits"])}
             if credit_text is not None
             else set()
         )
-        for number in pull_requests:
+        attributed = bool(handles) or (credit_text is not None and credit_text["credits"].strip(" .()")[:1].isupper())
+        for reference in references:
+            number = reference["number"]
             entries.setdefault(number, []).append((
                 handles,
-                credit_text is not None,
+                attributed,
             ))
     return entries
 

@@ -70,7 +70,11 @@ def _read_members(source: Path | IO[bytes]) -> dict[str, tuple[str, str, int]]:
                         hasher.update(chunk)
                     digest = hasher.hexdigest()
             kind = "directory" if member.is_dir() else "file"
-            members[member.filename] = digest, f"{member.create_system}:{kind}", permissions
+            file_type = stat.S_IFMT(mode) if member.create_system == zip_unix_system else 0
+            members[member.filename] = digest, f"{member.create_system}:{file_type}:{kind}", permissions
+        if not any(kind.endswith(":file") for _, kind, _ in members.values()):
+            msg = "plugin ZIP contains no files"
+            raise ValueError(msg)
     return members
 
 

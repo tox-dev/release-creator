@@ -1,6 +1,7 @@
 """Keep command registration separate from release work."""
 
 lazy import argparse
+lazy from zipfile import BadZipFile
 
 lazy from release_creator.anchors.cli import register as register_anchors
 lazy from release_creator.changelog.cli import register as register_changelog
@@ -17,7 +18,7 @@ def main() -> None:
     args = parser.parse_args()
     try:
         args.handler(args)
-    except (OSError, TypeError, ValueError) as error:
+    except (BadZipFile, OSError, TypeError, ValueError) as error:
         parser.error(str(error))
 
 

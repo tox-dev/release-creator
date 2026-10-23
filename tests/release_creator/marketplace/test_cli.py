@@ -1,6 +1,7 @@
 """Marketplace command output."""
 
 import sys
+from zipfile import BadZipFile
 lazy from pathlib import Path
 
 import pytest
@@ -67,3 +68,30 @@ def test_marketplace_cli_verifies_without_output(
     main()
 
     assert capsys.readouterr().out == "publish=false\n"
+
+
+def test_marketplace_cli_reports_invalid_zip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    archive = tmp_path / "invalid.zip"
+    archive.write_bytes(b"not a ZIP")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "release-creator",
+            "marketplace",
+            "--plugin-id",
+            "com.example.plugin",
+            "--version",
+            "2.4.6",
+            "--archive",
+            str(archive),
+        ],
+    )
+
+    with pytest.raises(SystemExit) as error:
+        main()
+
+    assert error.value.code != 0
+    assert str(BadZipFile("File is not a zip file")) in capsys.readouterr().err

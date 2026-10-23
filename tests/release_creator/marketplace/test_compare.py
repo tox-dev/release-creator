@@ -140,6 +140,25 @@ def test_marketplace_rejects_permission_change(archive: Path, mocker: MockerFixt
         reconcile_marketplace("com.example.plugin", "2.4.6", archive, "stage")
 
 
+def test_marketplace_rejects_symlink_member(archive: Path, mocker: MockerFixture) -> None:
+    _marketplace(
+        mocker,
+        {"plugin/": b"", "plugin/lib/main.jar": b"signed", "plugin/lib/options.jar": b"search"},
+        {"plugin/lib/main.jar": stat.S_IFLNK | 0o777},
+    )
+
+    with pytest.raises(ValueError, match="archive differs"):
+        reconcile_marketplace("com.example.plugin", "2.4.6", archive, "stage")
+
+
+def test_marketplace_rejects_empty_archive(tmp_path: Path) -> None:
+    archive = tmp_path / "empty.zip"
+    _zip(archive, {})
+
+    with pytest.raises(ValueError, match="contains no files"):
+        reconcile_marketplace("com.example.plugin", "2.4.6", archive, "stage")
+
+
 def test_marketplace_rejects_changed_zip_origin(archive: Path, mocker: MockerFixture) -> None:
     content = io.BytesIO()
     with zipfile.ZipFile(content, "w") as output:

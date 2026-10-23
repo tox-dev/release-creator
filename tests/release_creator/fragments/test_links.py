@@ -174,7 +174,11 @@ def test_add_pull_request_links_preserves_shared_credits(tmp_path: Path) -> None
     ("extension", "code"),
     [
         pytest.param("md", "```sh\necho yes\n```", id="markdown-fence"),
+        pytest.param("md", "    echo yes", id="markdown-indented"),
         pytest.param("rst", ".. code-block:: sh\n\n  echo yes", id="rst-directive"),
+        pytest.param("rst", ".. code:: sh\n\n  echo yes", id="rst-code-directive"),
+        pytest.param("rst", ".. sourcecode:: sh\n\n  echo yes", id="rst-sourcecode-directive"),
+        pytest.param("rst", "Example::\n\n  echo yes", id="rst-literal"),
     ],
 )
 def test_add_pull_request_links_before_trailing_code(tmp_path: Path, extension: str, code: str) -> None:
@@ -189,6 +193,43 @@ def test_add_pull_request_links_before_trailing_code(tmp_path: Path, extension: 
         else "(:pr:`42`) by :user:`alice`"
     )
     assert fragment.read_text() == f"Add a feature {link}.\n\n{code}\n"
+
+
+@pytest.mark.parametrize(
+    ("extension", "code"),
+    [
+        pytest.param("md", "```sh\necho yes\n```", id="markdown-fence"),
+        pytest.param("md", "````sh\n```\necho yes\n````", id="markdown-long-fence"),
+        pytest.param("rst", ".. code:: sh\n\n  echo yes", id="rst-directive"),
+        pytest.param("md", "    echo yes", id="markdown-indented"),
+    ],
+)
+def test_add_pull_request_links_after_code_only(tmp_path: Path, extension: str, code: str) -> None:
+    fragment = tmp_path / f"+first.feature.{extension}"
+    fragment.write_text(f"{code}\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    link = (
+        "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice)"
+        if extension == "md"
+        else "(:pr:`42`) by :user:`alice`"
+    )
+    assert fragment.read_text() == f"{code}\n\n{link}.\n"
+
+
+def test_add_pull_request_links_after_bot_code_only(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    fragment.write_text("```sh\necho yes\n```\n")
+
+    _link(
+        tmp_path,
+        "tox-dev/example",
+        {fragment.name: "Add release notes (#42)"},
+        {"42": PullRequestAuthor(handle="dependabot", is_bot=True)},
+    )
+
+    assert fragment.read_text() == ("```sh\necho yes\n```\n\n([#42](https://github.com/tox-dev/example/pull/42)).\n")
 
 
 @pytest.mark.parametrize(
