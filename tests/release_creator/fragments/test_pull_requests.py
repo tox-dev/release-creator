@@ -69,7 +69,7 @@ def test_fragment_pull_requests_reports_missing_gh(monkeypatch: pytest.MonkeyPat
         pytest.param([_pull("b" * 40)], ValueError, "expected one squash-merged pull request", id="other-commit"),
         pytest.param([_pull("a" * 40)] * 2, ValueError, "expected one squash-merged pull request", id="two-pulls"),
         pytest.param([{}], ValueError, "expected one squash-merged pull request", id="missing-merge"),
-        pytest.param([_pull("a" * 40, account_type="Mannequin")], ValueError, "invalid GitHub author", id="type"),
+        pytest.param([_pull("a" * 40, account_type="Organization")], ValueError, "invalid GitHub author", id="type"),
         pytest.param([_pull("a" * 40, number=0)], ValueError, "invalid pull request number", id="number"),
         pytest.param([_pull("a" * 40, number=True)], TypeError, "invalid pull request response", id="boolean"),
     ],
@@ -146,9 +146,15 @@ def test_fragment_pull_requests_rejects_incomplete_graphql_response(
         pull_requests.fragment_pull_requests("tox-dev/example", {"+news.feature.md": "a" * 40})
 
 
-def test_fragment_pull_requests_credits_deleted_author(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    "author",
+    [pytest.param(None, id="deleted"), pytest.param({"login": "old-user", "__typename": "Mannequin"}, id="mannequin")],
+)
+def test_fragment_pull_requests_credits_deleted_author(
+    monkeypatch: pytest.MonkeyPatch, author: dict[str, str] | None
+) -> None:
     pull = _pull("a" * 40)
-    pull["author"] = None
+    pull["author"] = author
     monkeypatch.setattr(process.shutil, "which", create_autospec(process.shutil.which, return_value="gh"))
     monkeypatch.setattr(
         process.subprocess,

@@ -103,14 +103,15 @@ def _link_text(
         msg = f"pull request already linked in {fragment}"
         raise ValueError(msg)
     if (match := _RE_AUTHOR_MARKER.search(content)) is not None:
-        handles = _credited_handles(content[match.end() :], fragment.suffix)
+        handles = {handle.casefold() for handle in _credited_handles(content[match.end() :], fragment.suffix)}
+        handle = target.author.handle.casefold()
         if target.author.handle == "ghost":
             msg = f"cannot verify explicit credit for deleted pull request author in {fragment}"
             raise ValueError(msg)
-        if target.author.is_bot and target.author.handle in handles:
+        if target.author.is_bot and handle in handles:
             msg = f"bot author @{target.author.handle} must not be credited in {fragment}"
             raise ValueError(msg)
-        if not target.author.is_bot and target.author.handle not in handles:
+        if not target.author.is_bot and handle not in handles:
             msg = f"pull request author @{target.author.handle} is missing from the explicit credit in {fragment}"
             raise ValueError(msg)
         if linked:

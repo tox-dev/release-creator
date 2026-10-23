@@ -396,6 +396,22 @@ def test_add_pull_request_links_preserves_numbered_shared_credits(tmp_path: Path
     )
 
 
+def test_add_pull_request_links_matches_credit_case(tmp_path: Path) -> None:
+    fragment = tmp_path / "42.feature.md"
+    fragment.write_text("Add a feature by [@Alice](https://github.com/Alice).\n")
+
+    _link(
+        tmp_path,
+        "tox-dev/example",
+        {fragment.name: "Add a feature (#42)"},
+        {"42": PullRequestAuthor(handle="alice", is_bot=False)},
+    )
+
+    assert fragment.read_text() == (
+        "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) by [@Alice](https://github.com/Alice).\n"
+    )
+
+
 def test_add_pull_request_links_reports_deleted_author_credit(tmp_path: Path) -> None:
     fragment = tmp_path / "42.feature.md"
     fragment.write_text("Add a feature by [@alice](https://github.com/alice).\n")

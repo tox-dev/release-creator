@@ -96,7 +96,11 @@ def _pull_request(response: dict[str, object], source: str) -> PullRequest:
     if number < 1:
         msg = f"invalid pull request number for {source}: {number}"
         raise ValueError(msg)
-    login, account_type = ("ghost", "User") if author is None else (author.get("login"), author.get("__typename"))
+    login, account_type = (
+        ("ghost", "User")
+        if author is None or author.get("__typename") == "Mannequin"
+        else (author.get("login"), author.get("__typename"))
+    )
     if not isinstance(login, str) or account_type not in {"User", "Bot"}:
         msg = f"invalid GitHub author for pull request #{number}"
         raise ValueError(msg)
