@@ -75,6 +75,10 @@ For package tags, add ``--package pyproject-fmt`` and pass either ``2.30.4`` or 
 The output keeps the package prefix, for example ``pyproject-fmt/2.30.3``, ready for ``notes --previous``. The same
 scope applies to ``--require-newer``.
 
+Add ``--stable-only`` to ``--previous`` when the comparison should skip prerelease and development tags. For example,
+given ``1.2.2`` and ``1.2.3rc1``, the predecessor of ``1.2.3`` is ``1.2.2`` with this option. Postreleases remain
+eligible. The option does not apply to version calculation or validation.
+
 Rules and failure cases
 =======================
 

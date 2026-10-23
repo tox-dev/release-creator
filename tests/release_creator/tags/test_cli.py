@@ -135,6 +135,33 @@ def test_tags_previous(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFi
     assert capsys.readouterr().out == "1.2.2\n"
 
 
+def test_tags_previous_stable_only(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setattr(sys, "argv", ["release-creator", "tags", "1.2.3", "--previous", "--stable-only"])
+    monkeypatch.setattr(sys, "stdin", StringIO("1.2.2\n1.2.3rc1\n"))
+
+    main()
+
+    assert capsys.readouterr().out == "1.2.2\n"
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        pytest.param(["tags", "--next", "auto", "--stable-only"], id="next"),
+        pytest.param(["tags", "1.2.3", "--stable-only"], id="validate"),
+    ],
+)
+def test_tags_stable_only_requires_previous(
+    arguments: list[str], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["release-creator", *arguments])
+
+    with pytest.raises(SystemExit, match="2"):
+        main()
+
+    assert "--stable-only requires --previous" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("tag", [pytest.param("2.30.4", id="bare"), pytest.param("pyproject-fmt/2.30.4", id="full")])
 def test_tags_previous_scopes_package(
     tag: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
