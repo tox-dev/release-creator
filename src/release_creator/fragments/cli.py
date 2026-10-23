@@ -18,9 +18,6 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
     fragments.add_argument("--format", choices=("towncrier", "knope"), default="towncrier", help="fragment format")
     fragments.add_argument("--directory", type=Path, help="fragment directory; defaults to changelog.d or .changeset")
     fragments.add_argument("--repository", required=True, help="GitHub owner/repository")
-    fragments.add_argument(
-        "--numbered-prs", action="store_true", help="treat numeric Towncrier fragment stems as PR numbers"
-    )
     fragments.set_defaults(handler=_link)
     news = commands.add_parser("validate-news", help="validate changed pull request fragments")
     news.add_argument("--format", choices=("towncrier", "knope"), default="towncrier", help="fragment format")
@@ -33,14 +30,11 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
 def _link(args: argparse.Namespace) -> None:
     validate_repository(args.repository)
     knope = args.format == "knope"
-    if knope and args.numbered_prs:
-        msg = "--numbered-prs applies only to Towncrier fragments"
-        raise ValueError(msg)
     directory = args.directory or Path(".changeset" if knope else "changelog.d")
     (pending_changesets if knope else pending_fragments)(directory)
     commits = fragment_commits_from_git(directory, knope=knope)
-    pull_requests = fragment_pull_requests(args.repository, commits, numbered_prs=args.numbered_prs)
-    mode = "knope" if knope else "numbered-prs" if args.numbered_prs else "towncrier"
+    pull_requests = fragment_pull_requests(args.repository, commits)
+    mode = "knope" if knope else "towncrier"
     add_pull_request_links(directory, args.repository, pull_requests, mode=mode)
 
 

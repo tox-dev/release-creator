@@ -122,10 +122,5 @@ merged pull request. The linker asks GitHub for the PR associated with the intro
 adds a link to PR #124 and a verified human credit; Towncrier retains the link to issue #123. When both numbers are the
 same, the template shows the link once. Use a named fragment when neither number is known.
 
-If every numeric stem in a repository names its original pull request, pass ``--numbered-prs``. For a historical
-``6.feature.md`` added during a later backfill, this links PR #6 and reads PR #6's author, even if the backfill commit
-belongs to PR #12. Named fragments still use their introducing commits. Leave this option off when numeric stems can
-name issues; it does not apply to Knope changesets.
-
 Use ``--directory`` if the fragments are outside ``changelog.d``. Fetch Git history for every pending fragment before
 running the linker. Shallow checkouts are unsupported even when they contain the introducing commit.

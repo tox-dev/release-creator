@@ -59,7 +59,7 @@ def test_fragments_cli_links_merged_pull_request(
     assert run_text([git, "add", str(directory)]).returncode == 0
     assert run_text([git, "commit", "-qm", "A subject without a PR number"]).returncode == 0
     commit = run_text([git, "rev-parse", "HEAD"]).stdout.strip()
-    query = _mock_github_pull(mocker, commit, numbered=False)
+    query = _mock_github_pull(mocker, commit)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -72,58 +72,22 @@ def test_fragments_cli_links_merged_pull_request(
     assert "c0: object" in next(call.kwargs["input"] for call in query.call_args_list if call.args[0][0] == "gh")
 
 
-def test_fragments_cli_uses_numbered_prs(
-    git_repository: tuple[Path, str], monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture
-) -> None:
-    checkout, git = git_repository
-    directory = checkout / "changelog.d"
-    directory.mkdir()
-    fragment = directory / "3.feature.md"
-    fragment.write_text("Add a feature.\n")
-    assert run_text([git, "add", str(directory)]).returncode == 0
-    assert run_text([git, "commit", "-qm", "Backfill"]).returncode == 0
-    commit = run_text([git, "rev-parse", "HEAD"]).stdout.strip()
-    query = _mock_github_pull(mocker, commit, numbered=True)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["release-creator", "fragments", "--repository", "tox-dev/example", "--numbered-prs"],
-    )
-
-    main()
-
-    assert fragment.read_text() == (
-        "Add a feature ([#3](https://github.com/tox-dev/example/pull/3)) by [@alice](https://github.com/alice).\n"
-    )
-    assert "p0: pullRequest(number: 3)" in next(
-        call.kwargs["input"] for call in query.call_args_list if call.args[0][0] == "gh"
-    )
-
-
-def _mock_github_pull(mocker: MockerFixture, commit: str, *, numbered: bool) -> MagicMock:
+def _mock_github_pull(mocker: MockerFixture, commit: str) -> MagicMock:
     response = {
         "data": {
             "repository": {
-                ("p0" if numbered else "c0"): (
-                    {
-                        "number": 3,
-                        "mergedAt": "2026-10-22T00:00:00Z",
-                        "author": {"login": "alice", "__typename": "User"},
+                "c0": {
+                    "associatedPullRequests": {
+                        "nodes": [
+                            {
+                                "number": 3,
+                                "mergedAt": "2026-10-22T00:00:00Z",
+                                "mergeCommit": {"oid": commit},
+                                "author": {"login": "alice", "__typename": "User"},
+                            }
+                        ]
                     }
-                    if numbered
-                    else {
-                        "associatedPullRequests": {
-                            "nodes": [
-                                {
-                                    "number": 3,
-                                    "mergedAt": "2026-10-22T00:00:00Z",
-                                    "mergeCommit": {"oid": commit},
-                                    "author": {"login": "alice", "__typename": "User"},
-                                }
-                            ]
-                        }
-                    }
-                )
+                }
             }
         }
     }
@@ -151,21 +115,6 @@ def _mock_github_pull(mocker: MockerFixture, commit: str, *, numbered: bool) -> 
         side_effect=lambda name: "gh" if name == "gh" else original_which(name),
     )
     return cast("MagicMock", mocker.patch("release_creator.process.subprocess.run", autospec=True, side_effect=execute))
-
-
-def test_fragments_cli_rejects_numbered_prs_for_knope(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["release-creator", "fragments", "--format", "knope", "--numbered-prs", "--repository", "tox-dev/example"],
-    )
-
-    with pytest.raises(SystemExit, match="2"):
-        main()
-
-    assert "--numbered-prs applies only to Towncrier" in capsys.readouterr().err
 
 
 def test_fragments_cli_rejects_unsupported_name(

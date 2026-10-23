@@ -71,12 +71,11 @@ def _finalizes_prerelease(current: Version, bump: str) -> bool:
     return bump == "patch" or (bump == "minor" and patch == 0) or (bump == "major" and minor == patch == 0)
 
 
-def previous_tag(tag: str, tags: list[str], *, stable_only: bool = False) -> str | None:
+def previous_tag(tag: str, tags: list[str]) -> str | None:
     """Select the greatest numeric release tag before ``tag``.
 
     :param tag: Release tag whose predecessor is needed.
     :param tags: Existing repository tags.
-    :param stable_only: Exclude prerelease and postrelease tags.
     :returns: The preceding tag, or ``None`` when this is the first release.
     """
     target = parse_tag(tag)
@@ -86,7 +85,7 @@ def previous_tag(tag: str, tags: list[str], *, stable_only: bool = False) -> str
             version = parse_tag(candidate)
         except ValueError:
             continue
-        if version < target and (not stable_only or (not version.is_prerelease and not version.is_postrelease)):
+        if version < target:
             candidates.append((version, candidate))
     return max(candidates)[1] if candidates else None
 

@@ -25,10 +25,7 @@ Run each command at the stage it serves:
       - Prints the GitHub Release body from the tagged changelog
     - - :doc:`changelog <how-to/preview-changelog>`
       - Before each pull request documentation build
-      - Writes a copy of released history with pending fragments under Draft
-    - - :doc:`artifacts <how-to/reconcile-artifacts>`
-      - After a PyPI upload
-      - Verifies the published file set
+      - Writes Knope history with pending changesets under Draft
     - - :doc:`marketplace <how-to/check-marketplace>`
       - Before retrying a JetBrains Marketplace plugin upload
       - Compares signed ZIP members with the published version
@@ -55,7 +52,6 @@ The :doc:`changelog <changelog>` includes an ``Unreleased`` section in PR builds
     how-to/link-fragments
     how-to/render-notes
     how-to/preview-changelog
-    how-to/reconcile-artifacts
     how-to/check-marketplace
     how-to/select-release-tag
     how-to/update-hooks

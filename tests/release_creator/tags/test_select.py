@@ -97,10 +97,6 @@ def test_previous_tag_orders_prereleases() -> None:
     assert previous_tag("1.2.3", ["1.2.2", "1.2.3rc1", "1.2.3b1"]) == "1.2.3rc1"
 
 
-def test_previous_tag_stable_only_skips_prereleases_and_postreleases() -> None:
-    assert previous_tag("1.2.3", ["1.2.2", "1.2.3rc1", "1.2.2.post1"], stable_only=True) == "1.2.2"
-
-
 def test_previous_tag_missing() -> None:
     assert previous_tag("1.0.0", ["junk", "1.0.0", "2.0.0"]) is None
 

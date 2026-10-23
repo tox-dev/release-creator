@@ -115,7 +115,6 @@ def test_tags_next_rejects_unsupported_fragment_name(
     [
         pytest.param(["tags"], "provide a tag or --next", id="missing"),
         pytest.param(["tags", "1.2.3", "--next", "auto"], "omit the tag", id="both"),
-        pytest.param(["tags", "1.2.3", "--stable-only"], "--stable-only requires --previous", id="stable-only"),
     ],
 )
 def test_tags_next_rejects_conflicting_input(
@@ -133,15 +132,6 @@ def test_tags_previous(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFi
     monkeypatch.setattr(sys, "argv", ["release-creator", "tags", "1.2.3", "--previous"])
     monkeypatch.setattr(sys, "stdin", StringIO("1.0.0\n1.2.2\n1.2.3\n"))
     main()
-    assert capsys.readouterr().out == "1.2.2\n"
-
-
-def test_tags_previous_stable_only(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
-    monkeypatch.setattr(sys, "argv", ["release-creator", "tags", "1.2.3", "--previous", "--stable-only"])
-    monkeypatch.setattr(sys, "stdin", StringIO("1.2.2\n1.2.3rc1\n1.2.2.post1\n"))
-
-    main()
-
     assert capsys.readouterr().out == "1.2.2\n"
 
 

@@ -7,10 +7,8 @@ lazy import json
 lazy import re
 lazy import shutil
 lazy from dataclasses import dataclass
-lazy from pathlib import Path
 lazy from typing import Final
 
-lazy from release_creator.fragments.names import fragment_number
 lazy from release_creator.github import validate_repository
 lazy from release_creator.process import run_text
 
@@ -22,14 +20,11 @@ _RE_HANDLE: Final = re.compile(
 )
 
 
-def fragment_pull_requests(
-    repository: str, commits: dict[str, str], *, numbered_prs: bool = False
-) -> dict[str, PullRequest]:
+def fragment_pull_requests(repository: str, commits: dict[str, str]) -> dict[str, PullRequest]:
     """Resolve each fragment through GitHub's commit-to-pull-request API.
 
     :param repository: GitHub owner and repository.
     :param commits: Fragment names mapped to introducing commit hashes.
-    :param numbered_prs: Treat numeric fragment stems as original PR numbers.
     :returns: Fragment names mapped to the merged pull request and its author.
     :raises FileNotFoundError: GitHub CLI is not installed.
     """
@@ -37,47 +32,19 @@ def fragment_pull_requests(
     if (gh := shutil.which("gh")) is None:
         msg = "GitHub CLI is required to resolve pull request authors"
         raise FileNotFoundError(msg)
-    by_commit, by_number = _pulls(
-        gh,
-        repository,
-        list(
-            dict.fromkeys(
-                sha for name, sha in commits.items() if not (numbered_prs and fragment_number(Path(name)) is not None)
-            )
-        ),
-        list(
-            dict.fromkeys(
-                number
-                for name in commits
-                if numbered_prs
-                for number in [fragment_number(Path(name))]
-                if number is not None
-            )
-        ),
-    )
-    return {
-        name: by_number[number]
-        if numbered_prs and (number := fragment_number(Path(name))) is not None
-        else by_commit[sha]
-        for name, sha in commits.items()
-    }
+    by_commit = _pulls(gh, repository, list(dict.fromkeys(commits.values())))
+    return {name: by_commit[sha] for name, sha in commits.items()}
 
 
-def _pulls(
-    gh: str, repository: str, shas: list[str], numbers: list[str]
-) -> tuple[dict[str, PullRequest], dict[str, PullRequest]]:
-    if not shas and not numbers:
-        return {}, {}
+def _pulls(gh: str, repository: str, shas: list[str]) -> dict[str, PullRequest]:
+    if not shas:
+        return {}
     sha_length: Final = 40
     if any(len(sha) != sha_length or any(character not in "0123456789abcdef" for character in sha) for sha in shas):
         msg = "fragment commits must be 40-character lowercase Git object IDs"
         raise ValueError(msg)
-    if any(int(number) < 1 for number in numbers):
-        msg = "numbered fragments need a positive pull request number"
-        raise ValueError(msg)
     owner, name = repository.split("/", 1)
     pulls: dict[str, PullRequest] = {}
-    numbered: dict[str, PullRequest] = {}
     aliases = [
         (
             f"c{index}",
@@ -88,13 +55,6 @@ def _pulls(
             ),
         )
         for index, sha in enumerate(shas)
-    ] + [
-        (
-            f"p{index}",
-            number,
-            f"p{index}: pullRequest(number: {int(number)}) {{ number mergedAt author {{ login __typename }} }}",
-        )
-        for index, number in enumerate(numbers)
     ]
     batch_size: Final = 100
     for offset in range(0, len(aliases), batch_size):
@@ -113,8 +73,8 @@ def _pulls(
             msg = "invalid GitHub associated pull requests response"
             raise ValueError(msg) from error
         for alias, identifier, _ in batch:
-            (pulls if alias.startswith("c") else numbered)[identifier] = _read_alias(response, alias, identifier)
-    return pulls, numbered
+            pulls[identifier] = _read_alias(response, alias, identifier)
+    return pulls
 
 
 def _read_alias(response: object, alias: str, identifier: str) -> PullRequest:
@@ -127,20 +87,15 @@ def _read_alias(response: object, alias: str, identifier: str) -> PullRequest:
     if not isinstance(pull, dict):
         msg = f"invalid pull request response for {identifier}"
         raise TypeError(msg)
-    if alias.startswith("c"):
-        associated = pull.get("associatedPullRequests")
-        if not isinstance(associated, dict) or not isinstance(nodes := associated.get("nodes"), list):
-            msg = f"invalid pull request response for commit {identifier}"
-            raise ValueError(msg)
-        merged = [item for item in nodes if _is_squash_pull(item, identifier)]
-        if len(merged) != 1:
-            msg = f"expected one squash-merged pull request for commit {identifier}, found {len(merged)}"
-            raise ValueError(msg)
-        return _pull_request(merged[0], f"commit {identifier}")
-    if pull.get("mergedAt") is None:
-        msg = f"pull request #{identifier} is not merged"
+    associated = pull.get("associatedPullRequests")
+    if not isinstance(associated, dict) or not isinstance(nodes := associated.get("nodes"), list):
+        msg = f"invalid pull request response for commit {identifier}"
+        raise TypeError(msg)
+    merged = [item for item in nodes if _is_squash_pull(item, identifier)]
+    if len(merged) != 1:
+        msg = f"expected one squash-merged pull request for commit {identifier}, found {len(merged)}"
         raise ValueError(msg)
-    return _pull_request(pull, f"pull request #{identifier}")
+    return _pull_request(merged[0], f"commit {identifier}")
 
 
 def _is_squash_pull(pull: object, sha: str) -> bool:
