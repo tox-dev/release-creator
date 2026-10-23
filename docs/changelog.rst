@@ -38,6 +38,18 @@ Fixed
 - Reject GitHub release notes whose pull request credits do not match the merged authors (:pr:`25`) by
   :user:`gaborbernat`.
 
+.. _release-0-6-5-removed:
+
+Removed
+~~~~~~~
+
+- Stop validating surrounding whitespace in Marketplace plugin IDs and versions and content in ZIP directory entries
+  (:pr:`25`) by :user:`gaborbernat`.
+- Stop validating GitHub author handle syntax and 40-character Git commit IDs before querying GitHub (:pr:`25`) by
+  :user:`gaborbernat`.
+- Remove specific missing Git, GitHub CLI, and uv errors from fragment and hook commands; missing executables surface as
+  a type error (:pr:`25`) by :user:`gaborbernat`.
+
 .. _release-0-6-4:
 
 0.6.4 (2026-10-23)

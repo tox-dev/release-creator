@@ -2,7 +2,6 @@
 
 lazy import json
 lazy import operator
-lazy import shutil
 lazy from pathlib import Path
 lazy from tempfile import TemporaryDirectory
 lazy from typing import Final, cast
@@ -13,7 +12,7 @@ lazy from yaml import MappingNode, ScalarNode, SequenceNode, compose, safe_load
 lazy from yaml.error import Mark, YAMLError
 lazy from yaml.nodes import Node
 
-lazy from release_creator.process import run_text
+lazy from release_creator.process import required_executable, run_text
 
 type _Group = tuple[ScalarNode, SequenceNode, list[tuple[ScalarNode, Requirement]], list[ScalarNode], bool]
 type _Edit = tuple[int, int, str]
@@ -198,7 +197,7 @@ def _repository_checkout(repository: MappingNode, checkout: Path, cwd: Path) -> 
 
 
 def _checkout_hook_repository(url: str, revision: str, checkout: Path, cwd: Path) -> None:
-    git = cast("str", shutil.which("git"))
+    git = required_executable("git")
     for command in (
         [git, "clone", "--quiet", "--filter=blob:none", "--no-checkout", "--", url, str(checkout)],
         [git, "-C", str(checkout), "checkout", "--quiet", revision],
@@ -220,7 +219,7 @@ def _start(node: MappingNode | ScalarNode | SequenceNode) -> int:
 def _resolve(
     roots: list[Requirement], config: Path, exclude_newer: str, python_version: str, package: Path | None = None
 ) -> list[Requirement]:
-    uv = cast("str", shutil.which("uv"))
+    uv = required_executable("uv")
     editable = f"-e {package.as_uri()}\n" if package is not None else ""
     root_lines = "".join(f"{_root_input(root)}\n" for root in roots)
     result = run_text(

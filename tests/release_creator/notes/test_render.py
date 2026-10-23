@@ -385,6 +385,25 @@ def test_render_markdown_does_not_share_credit_past_its_reference() -> None:
 
 
 @pytest.mark.parametrize(
+    "separator",
+    [pytest.param(" ", id="space"), pytest.param(", ", id="comma"), pytest.param(", then ", id="prose")],
+)
+def test_render_markdown_does_not_credit_a_prose_pull_reference(separator: str) -> None:
+    changelog = (
+        "## 1.2.3 (today)\n\n### Fixed\n\n"
+        f"- Revert [#10](https://github.com/tox-dev/example/pull/10){separator}"
+        "([#12](https://github.com/tox-dev/example/pull/12)) by @bob.\n"
+    )
+    generated = (
+        "* Original change by @alice in https://github.com/tox-dev/example/pull/10\n"
+        "* Revert by @bob in https://github.com/tox-dev/example/pull/12\n"
+    )
+
+    with pytest.raises(ValueError, match="pull request #10 does not include @alice"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+@pytest.mark.parametrize(
     "reference",
     [
         pytest.param("https://github.com/tox-dev/example/pull/42", id="bare-url"),

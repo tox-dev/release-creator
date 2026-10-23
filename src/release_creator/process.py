@@ -1,6 +1,7 @@
 """Run local tools with captured UTF-8 output."""
 
 lazy import shlex
+lazy import shutil
 lazy import subprocess  # ruff: ignore[suspicious-subprocess-import]  # Callers pass argument lists without a shell.
 lazy from pathlib import Path
 
@@ -33,6 +34,20 @@ def run_text(
         raise ValueError(msg) from error
 
 
+def required_executable(name: str) -> str:
+    """Find a command on PATH.
+
+    :param name: Command name.
+    :returns: The command path.
+    :raises FileNotFoundError: The command is unavailable.
+    """
+    if (path := shutil.which(name)) is None:
+        msg = f"{name} is required"
+        raise FileNotFoundError(msg)
+    return path
+
+
 __all__ = [
+    "required_executable",
     "run_text",
 ]

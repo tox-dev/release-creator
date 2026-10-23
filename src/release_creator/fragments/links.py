@@ -207,7 +207,10 @@ def _indent_width(line: str) -> int:
 
 def _final_fence_opening(lines: list[str]) -> int | None:
     fence: tuple[int, str, int] | None = None
+    max_fence_indent: Final = 3
     for index, line in enumerate(lines):
+        if len(line) - len(line.lstrip(" ")) > max_fence_indent:
+            continue
         stripped = line.strip()
         if not stripped.startswith(("```", "~~~")):
             continue
@@ -218,6 +221,9 @@ def _final_fence_opening(lines: list[str]) -> int | None:
             if index == len(lines) - 1:
                 return fence[0]
             fence = None
+    if fence is not None:
+        msg = "unclosed Markdown code fence in changelog fragment"
+        raise ValueError(msg)
     return None
 
 

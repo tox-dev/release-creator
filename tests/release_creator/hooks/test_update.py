@@ -33,7 +33,7 @@ def test_updates_each_hook_with_its_universal_closure(tmp_path: Path, mocker: Mo
         "          - sphinx==9.0.0 # chosen\n",
         encoding="utf-8",
     )
-    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
     responses = {
         "sphinx\n": "sphinx==9.1.1\ncolorama==0.4.6 ; sys_platform == 'win32'\n",
         "MDFormat_GFM\nsphinx>=9\n": "mdformat-gfm==1.1.0\nsphinx==9.1.1\nmdformat==1.0.0\n",
@@ -113,7 +113,7 @@ def test_block_closure_stays_with_its_hook(tmp_path: Path, mocker: MockerFixture
         """),
         encoding="utf-8",
     )
-    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
     mocker.patch(
         "release_creator.hooks.update.run_text",
         return_value=subprocess.CompletedProcess([], 0, "black==2\nclick==8\n", ""),
@@ -138,7 +138,7 @@ def test_flow_hook_keeps_its_mapping(tmp_path: Path, mocker: MockerFixture) -> N
         "      - {id: second, language: system}\n",
         encoding="utf-8",
     )
-    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
     mocker.patch(
         "release_creator.hooks.update.run_text",
         return_value=subprocess.CompletedProcess([], 0, "black==2\nclick==8\n", ""),
@@ -175,7 +175,7 @@ def test_new_group_stays_with_its_hook(
         "      - id: other\n        language: system\n",
         encoding="utf-8",
     )
-    mocker.patch("release_creator.hooks.update.shutil.which", side_effect=lambda name: name)
+    mocker.patch("release_creator.process.shutil.which", side_effect=lambda name: name)
     _mock_hook_compiler(mocker, "-e file:///checkout\nclick==8.1\n")
 
     update_pins(config, "7 days", "3.15")
@@ -218,7 +218,7 @@ def test_rejects_unpinned_hook_resolution(tmp_path: Path, mocker: MockerFixture,
     config = tmp_path / ".pre-commit-config.yaml"
     source = 'additional_dependencies: ["example==1"]\n'
     config.write_text(source, encoding="utf-8")
-    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
     mocker.patch(
         "release_creator.hooks.update.run_text",
         return_value=subprocess.CompletedProcess([], 0, output, ""),
@@ -281,7 +281,7 @@ def test_pins_python_hook_package_dependencies(
         source if trailing_newline else source.rstrip("\n"),
         encoding="utf-8",
     )
-    mocker.patch("release_creator.hooks.update.shutil.which", side_effect=lambda name: name)
+    mocker.patch("release_creator.process.shutil.which", side_effect=lambda name: name)
     colorama = "colorama==0.4.6\n" if existing else ""
     commands = _mock_hook_compiler(mocker, f"-e file:///checkout\nclick==8.1\n{colorama}")
 
@@ -390,7 +390,7 @@ def test_updates_python_hook_without_adding_dependencies_to_other_local_hook(
         "      - id: python\n        language: python\n        additional_dependencies: [black==1]\n",
         encoding="utf-8",
     )
-    mocker.patch("release_creator.hooks.update.shutil.which", return_value="uv")
+    mocker.patch("release_creator.process.shutil.which", return_value="uv")
     mocker.patch(
         "release_creator.hooks.update.run_text",
         return_value=subprocess.CompletedProcess([], 0, "black==2\n", ""),
@@ -500,7 +500,7 @@ def _mock_hook_compiler(mocker: MockerFixture, output: str) -> MagicMock:
             return subprocess.CompletedProcess(command, 0, output, "")
         return original(command, cwd=cwd, stdin=stdin)
 
-    mocker.patch("release_creator.hooks.update.shutil.which", side_effect=lambda name: name)
+    mocker.patch("release_creator.process.shutil.which", side_effect=lambda name: name)
     patched = mocker.patch("release_creator.hooks.update.run_text", side_effect=resolve)
     assert isinstance(patched, MagicMock)
     return patched
@@ -523,7 +523,7 @@ def _write_wheel(directory: Path, name: str, version: str, requirements: tuple[s
 def test_replaces_managed_closure_on_rerun(tmp_path: Path, mocker: MockerFixture) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_text("additional_dependencies: [black==1]\n", encoding="utf-8")
-    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
     mocker.patch(
         "release_creator.process.subprocess.run",
         side_effect=[
@@ -550,7 +550,7 @@ def test_replaces_managed_closure_on_rerun(tmp_path: Path, mocker: MockerFixture
 def test_preserves_dependency_list_on_rerun(tmp_path: Path, mocker: MockerFixture, source: str) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_text(source, encoding="utf-8")
-    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
     mocker.patch(
         "release_creator.hooks.update.run_text",
         return_value=subprocess.CompletedProcess([], 0, "black==2\nclick==8\n", ""),
@@ -571,7 +571,7 @@ def test_flow_mapping_marks_transitive_dependencies(tmp_path: Path, mocker: Mock
         "      - {id: format, language: python, additional_dependencies: [black==1]}\n",
         encoding="utf-8",
     )
-    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
     mocker.patch(
         "release_creator.hooks.update.run_text",
         return_value=subprocess.CompletedProcess([], 0, "black==2\nclick==8\n", ""),
@@ -604,7 +604,7 @@ def test_flow_mapping_removes_orphaned_managed_dependency(tmp_path: Path) -> Non
 def test_preserves_crlf_in_hook_config(tmp_path: Path, mocker: MockerFixture) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_bytes(b"additional_dependencies: [black==1]\r\n")
-    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
     mocker.patch(
         "release_creator.hooks.update.run_text",
         return_value=subprocess.CompletedProcess([], 0, "black==2\nclick==8\n", ""),
@@ -628,7 +628,7 @@ def test_preserves_crlf_in_hook_config(tmp_path: Path, mocker: MockerFixture) ->
 def test_extends_list_without_final_newline(source: str, tmp_path: Path, mocker: MockerFixture) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_text(source, encoding="utf-8")
-    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
     mocker.patch(
         "release_creator.process.subprocess.run",
         return_value=subprocess.CompletedProcess([], 0, "black==2\nclick==8\n", ""),
@@ -669,7 +669,7 @@ def test_keeps_nonexact_dependency_when_root_is_removed(tmp_path: Path, mocker: 
         'additional_dependencies:\n  - sphinx>=9\n  - "click==9" # release-creator managed\n',
         encoding="utf-8",
     )
-    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
     mocker.patch(
         "release_creator.hooks.update.run_text",
         return_value=subprocess.CompletedProcess([], 0, "sphinx==9.1\n", ""),
@@ -684,7 +684,7 @@ def test_resolves_ranges_and_unpinned_roots(tmp_path: Path, mocker: MockerFixtur
     config = tmp_path / ".pre-commit-config.yaml"
     source = "additional_dependencies: [sphinx>=9, mdformat-gfm]\n"
     config.write_text(source, encoding="utf-8")
-    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
     run = mocker.patch(
         "release_creator.hooks.update.run_text",
         return_value=subprocess.CompletedProcess([], 0, "sphinx==9.1\nmdformat-gfm==1.2\ncolorama==0.4.6\n", ""),
@@ -703,7 +703,7 @@ def test_resolves_ranges_and_unpinned_roots(tmp_path: Path, mocker: MockerFixtur
 def test_rejects_resolver_failure(tmp_path: Path, mocker: MockerFixture) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_text("additional_dependencies: [mdformat-gfm==1.0.0]\n", encoding="utf-8")
-    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
     mocker.patch(
         "release_creator.process.subprocess.run",
         return_value=subprocess.CompletedProcess([], 1, "", "index unavailable"),
@@ -736,7 +736,7 @@ def test_leaves_current_pin_untouched(tmp_path: Path, mocker: MockerFixture) -> 
     config = tmp_path / ".pre-commit-config.yaml"
     source = "additional_dependencies: [mdformat-gfm==1.0.0]\n"
     config.write_text(source, encoding="utf-8")
-    mocker.patch("release_creator.hooks.update.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
     mocker.patch(
         "release_creator.process.subprocess.run",
         return_value=subprocess.CompletedProcess([], 0, "mdformat-gfm==1.0.0\n", ""),

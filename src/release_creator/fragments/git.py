@@ -1,11 +1,9 @@
 """Find the commits that introduced pending fragments."""
 
-lazy import shutil
 lazy from pathlib import Path
-lazy from typing import cast
 
 lazy from release_creator.fragments.names import pending_changesets, pending_fragments
-lazy from release_creator.process import run_text
+lazy from release_creator.process import required_executable, run_text
 
 
 def fragment_commits_from_git(directory: Path, *, knope: bool = False) -> dict[str, str]:
@@ -16,7 +14,7 @@ def fragment_commits_from_git(directory: Path, *, knope: bool = False) -> dict[s
     :returns: Fragment filenames mapped to introducing commit hashes.
     :raises ValueError: Git cannot read the checkout history or a fragment has no introducing commit.
     """
-    git = cast("str", shutil.which("git"))
+    git = required_executable("git")
     shallow = run_text([git, "rev-parse", "--is-shallow-repository"])
     if shallow.returncode:
         msg = shallow.stderr.strip() or f"could not read Git history for {directory}"

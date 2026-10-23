@@ -110,7 +110,7 @@ def _mock_github_pull(mocker: MockerFixture, commit: str) -> MagicMock:
         )
 
     mocker.patch(
-        "release_creator.fragments.pull_requests.shutil.which",
+        "release_creator.process.shutil.which",
         autospec=True,
         side_effect=lambda name: "gh" if name == "gh" else original_which(name),
     )

@@ -10,7 +10,7 @@ lazy from typing import IO, Final, Literal
 lazy from urllib.error import HTTPError
 lazy from urllib.parse import urlencode
 lazy from urllib.request import Request, urlopen
-lazy from zipfile import ZipFile
+lazy from zipfile import BadZipFile, ZipFile
 
 
 def reconcile_marketplace(plugin_id: str, version: str, archive: Path, mode: Literal["stage", "verify"]) -> bool:
@@ -21,10 +21,15 @@ def reconcile_marketplace(plugin_id: str, version: str, archive: Path, mode: Lit
     :param archive: Signed plugin ZIP to compare.
     :param mode: Whether to stage or verify the Marketplace version.
     :returns: Whether a version absent from Marketplace needs publishing.
-    :raises ValueError: The archive differs from Marketplace or is absent during verification.
+    :raises ValueError: The archive has duplicate members or no files, differs from Marketplace, or is absent.
+    :raises BadZipFile: The local or downloaded archive is not a ZIP file.
     :raises HTTPError: Marketplace returned an HTTP error other than 404.
     """
-    local = _read_members(archive)
+    try:
+        local = _read_members(archive)
+    except BadZipFile as error:
+        msg = f"{error}: {archive}"
+        raise BadZipFile(msg) from error
     request = Request(
         f"https://plugins.jetbrains.com/plugin/download?{urlencode({'pluginId': plugin_id, 'version': version})}",
         headers={"Accept": "application/zip", "Cache-Control": "no-cache"},

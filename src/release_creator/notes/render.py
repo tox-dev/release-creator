@@ -218,7 +218,10 @@ def _release_entries(notes: str, repository: str) -> dict[str, list[tuple[set[st
                 for item in pending:
                     entries.setdefault(item["number"], []).append(credit)
                 pending.clear()
-            elif index + 1 < len(references) and ";" in following:
+            elif index + 1 < len(references) and (
+                following.partition("[")[0].strip(" ()") not in {",", "and", ", and"}
+                or _parenthetical_pull_link(line, reference) != _parenthetical_pull_link(line, references[index + 1])
+            ):
                 for item in pending:
                     entries.setdefault(item["number"], []).append(initial_credit or (set(), False))
                 pending.clear()
@@ -227,6 +230,10 @@ def _release_entries(notes: str, repository: str) -> dict[str, list[tuple[set[st
                 initial_credit if len(pending) == len(references) and initial_credit is not None else (set(), False)
             )
     return entries
+
+
+def _parenthetical_pull_link(line: str, reference: re.Match[str]) -> bool:
+    return line[: reference.start()].endswith(f"([#{reference['number']}](")
 
 
 def _pull_references(line: str, repository: str) -> list[re.Match[str]]:
