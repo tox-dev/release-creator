@@ -30,6 +30,8 @@ lazy from release_creator.tags.select import next_tag, parse_tag, previous_tag, 
         pytest.param("patch", ["1.2.3"], ["+one.feature.md"], "1.2.4", id="patch"),
         pytest.param("calver", ["2026.9.4"], ["+one.bugfix.md"], "2026.10.0", id="new-month"),
         pytest.param("calver", ["2026.10.4"], ["+one.bugfix.md"], "2026.10.5", id="same-month"),
+        pytest.param("calver", ["2026.10.0rc1"], ["+one.bugfix.md"], "2026.10.0", id="calver-finalizes"),
+        pytest.param("calver", ["2026.9.0rc1"], ["+one.bugfix.md"], "2026.10.0", id="calver-new-month"),
     ],
 )
 def test_next_tag(bump: str, tags: list[str], fragments: list[str], expected: str) -> None:

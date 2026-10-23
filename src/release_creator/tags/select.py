@@ -33,7 +33,7 @@ def next_tag(bump: str, tags: list[str], fragments: list[str], release_date: dat
     current = max(versions, default=Version("0.0.0"))
     if bump == "auto":
         bump = _auto_bump(fragments)
-    if _finalizes_prerelease(current, bump):
+    if _finalizes_prerelease(current, bump, release_date):
         return f"{prefix}{current.base_version}"
     version = _bumped_release(current, bump, release_date)
     if Version(".".join(map(str, version))) <= current:
@@ -59,11 +59,16 @@ def _auto_bump(fragments: list[str]) -> str:
     return "major" if "breaking" in categories else "minor" if "feature" in categories else "patch"
 
 
-def _finalizes_prerelease(current: Version, bump: str) -> bool:
+def _finalizes_prerelease(current: Version, bump: str, release_date: date) -> bool:
     if not current.is_prerelease:
         return False
-    _, minor, patch = current.release
-    return bump == "patch" or (bump == "minor" and patch == 0) or (bump == "major" and minor == patch == 0)
+    major, minor, patch = current.release
+    return (
+        bump == "patch"
+        or (bump == "minor" and patch == 0)
+        or (bump == "major" and minor == patch == 0)
+        or (bump == "calver" and (major, minor) == (release_date.year, release_date.month))
+    )
 
 
 def previous_tag(tag: str, tags: list[str]) -> str | None:
