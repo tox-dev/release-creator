@@ -4,6 +4,7 @@ from __future__ import annotations
 
 lazy from io import StringIO
 lazy from typing import cast
+lazy from urllib.parse import quote
 
 lazy from docutils import nodes
 lazy from docutils.core import publish_doctree
@@ -194,7 +195,7 @@ def _render_inline(node: nodes.Node) -> str:
         label = node.astext()
         url = node.get("refuri")
         is_profile = label.startswith("@") and url == f"https://github.com/{label.removeprefix('@')}"
-        value = label if is_profile or url is None or url == label else f"[{_escape_text(label)}]({url})"
+        value = label if is_profile or url is None or url == label else f"[{_escape_text(label)}]({_escape_url(url)})"
     elif isinstance(node, nodes.target):
         value = ""
     elif isinstance(node, nodes.emphasis):
@@ -210,6 +211,10 @@ def _escape_text(value: str) -> str:
     for character in ("\\", "`", "*", "_", "[", "]", "<", ">"):
         value = value.replace(character, f"\\{character}")
     return value
+
+
+def _escape_url(value: str) -> str:
+    return quote(value, safe="/:#?&=@%+,-._").replace("~", "%7E")
 
 
 def _code_span(value: str) -> str:

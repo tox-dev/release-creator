@@ -1393,6 +1393,14 @@ def test_render_rst_keeps_duplicate_reference_labels() -> None:
     )
 
 
+def test_render_rst_escapes_link_destinations() -> None:
+    changelog = "1.2.3 (today)\n==============\n\nAdded\n-----\n\n- Read `the guide <https://example.org/a)b~c>`_.\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert "[the guide](https://example.org/a%29b%7Ec)" in result
+
+
 def test_render_rst_rejects_nested_warning() -> None:
     changelog = (
         "1.2.3 (today)\n==============\n\nAdded\n-----\n\n- Add a feature.\n\n  .. warning::\n\n     A caveat.\n"
