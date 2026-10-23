@@ -12,22 +12,17 @@ if TYPE_CHECKING:
     from pytest_mock import MockerFixture
 
 
-def test_hooks_command_passes_options(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture) -> None:
+def test_hooks_command_uses_reviewed_cutoff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture
+) -> None:
     monkeypatch.chdir(tmp_path)
     update = mocker.patch("release_creator.hooks.cli.update_pins")
     monkeypatch.setattr(
         sys,
         "argv",
-        [
-            "release-creator",
-            "hooks",
-            "--exclude-newer",
-            "2026-10-14",
-            "--python-version",
-            "3.15",
-        ],
+        ["release-creator", "hooks"],
     )
 
     main()
 
-    update.assert_called_once_with(Path(".pre-commit-config.yaml"), "2026-10-14", "3.15")
+    update.assert_called_once_with(Path(".pre-commit-config.yaml"), "7 days", "3.15")
