@@ -222,6 +222,35 @@ def test_render_markdown_selects_package_history() -> None:
     )
 
 
+def test_render_markdown_stops_at_next_package_release_anchor() -> None:
+    changelog = dedent("""\
+        ## pyproject-fmt
+
+        ### 2.30.4 (today)
+
+        #### Fixed
+
+        - Preserve formatted input.
+
+        <a name="release-other-2-0-0"></a>
+
+        - Preserve package-local history.
+
+        <a name="release-pyproject-fmt-2-30-5"></a>
+
+        Draft text for the next release.
+        """)
+
+    result = render_markdown(
+        changelog,
+        ReleaseContext(tag="pyproject-fmt/2.30.4", repository="tox-dev/toml-fmt", package="pyproject-fmt"),
+    )
+
+    assert "- Preserve formatted input." in result
+    assert "- Preserve package-local history." in result
+    assert "Draft text for the next release." not in result
+
+
 def test_render_markdown_package_contributor_anchor() -> None:
     changelog = dedent("""\
         ## pyproject-fmt

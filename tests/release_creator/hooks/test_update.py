@@ -68,6 +68,9 @@ def test_updates_each_hook_with_its_universal_closure(tmp_path: Path, mocker: Mo
     assert all("--universal" in call.args[0] for call in run.call_args_list)
     assert all("--no-config" in call.args[0] for call in run.call_args_list)
     assert all("--no-sources" in call.args[0] for call in run.call_args_list)
+    assert all(
+        call.args[0][call.args[0].index("--exclude-newer") + 1] == "2026-10-14T00:00:00Z" for call in run.call_args_list
+    )
     assert all("--no-deps" not in call.args[0] for call in run.call_args_list)
 
 

@@ -465,13 +465,22 @@ def _extract_body(changelog: str, context: ReleaseContext) -> str:
             (match := _RE_MARKDOWN_VERSION.fullmatch(source_line)) is not None
             and _is_version(match["tag"])
             and match["level"] == heading_level
-        ) or (
-            (match := _RE_MARKDOWN_VERSION_ANCHOR.fullmatch(source_line)) is not None
-            and _is_version(match["version"].replace("-", "."))
-        ):
+        ) or _is_version_anchor(source_line, context.package):
             break
         body.append(source_line)
     return _convert_markdown_body(body, "#### " if context.package is not None else "### ")
+
+
+def _is_version_anchor(line: str, package: str | None) -> bool:
+    if (match := _RE_MARKDOWN_VERSION_ANCHOR.fullmatch(line)) is None:
+        return False
+    version = match["version"]
+    if package is not None:
+        prefix = f"{package.replace('.', '-')}-"
+        if not version.startswith(prefix):
+            return False
+        version = version.removeprefix(prefix)
+    return _is_version(version.replace("-", "."))
 
 
 def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
