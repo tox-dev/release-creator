@@ -89,5 +89,5 @@ def include_unreleased(app: Sphinx, docname: str, source: list[str]) -> None:
         draft = "\n".join(sections)
         source[0] = source[0].replace(
             ".. towncrier release notes start",
-            f".. _release-unreleased:\n\nUnreleased\n----------\n\n{draft}.. towncrier release notes start",
+            f".. _release-unreleased:\n\nUnreleased\n----------\n\n{draft}\n.. towncrier release notes start",
         )
