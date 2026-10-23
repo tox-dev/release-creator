@@ -52,6 +52,90 @@ def test_changelog_cli_writes_knope_page(
     assert "### Security\n\n- Remove a bad root" in output.read_text(encoding="utf-8")
 
 
+def test_changelog_cli_writes_package_page(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        '# Changelog\n\n## pyproject-fmt\n\n### 2.30.3\n\n<a name="release-pyproject-fmt-2-30-3"></a>\n\n'
+        "## tox-toml-fmt\n\n### 1.11.1\n",
+        encoding="utf-8",
+    )
+    fragments = tmp_path / "changelog.d" / "pyproject-fmt"
+    fragments.mkdir(parents=True)
+    (fragments / "+next.feature.md").write_text("Support Python 3.15.\n", encoding="utf-8")
+    output = tmp_path / "page.md"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "release-creator",
+            "changelog",
+            "--format",
+            "package",
+            "--package",
+            "pyproject-fmt",
+            "--changelog",
+            str(changelog),
+            "--fragments",
+            str(fragments),
+            "--output",
+            str(output),
+        ],
+    )
+
+    main()
+
+    assert output.read_text(encoding="utf-8") == (
+        '# Changelog\n\n## pyproject-fmt\n\n<a name="draft-pyproject-fmt"></a>\n\n### Draft\n\n'
+        '<a name="draft-pyproject-fmt-added"></a>\n\n#### Added\n\n- Support Python 3.15.\n\n'
+        '### 2.30.3\n\n<a name="release-pyproject-fmt-2-30-3"></a>\n'
+    )
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param((["--format", "package"], "package format requires --package"), id="package-without-name"),
+        pytest.param(
+            (
+                ["--format", "package", "--package", "example", "--config", "config.toml"],
+                "package format requires --package",
+            ),
+            id="package-with-config",
+        ),
+        pytest.param((["--package", "example"], "knope format requires --config"), id="knope-with-package"),
+    ],
+)
+def test_changelog_cli_rejects_mismatched_options(
+    preview_input: tuple[Path, Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    case: tuple[list[str], str],
+) -> None:
+    options, error = case
+    changelog, _, fragments = preview_input
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "release-creator",
+            "changelog",
+            *options,
+            "--changelog",
+            str(changelog),
+            "--fragments",
+            str(fragments),
+            "--output",
+            str(tmp_path / "page.md"),
+        ],
+    )
+
+    with pytest.raises(SystemExit, match="2"):
+        main()
+
+    assert error in capsys.readouterr().err
+
+
 @pytest.mark.parametrize("alias", [False, True], ids=["same-path", "symlink"])
 def test_changelog_cli_rejects_source_output_alias(
     preview_input: tuple[Path, Path, Path],
