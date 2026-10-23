@@ -121,10 +121,9 @@ def _mock_github_pull(mocker: MockerFixture, commit: str, *, numbered: bool) -> 
             }
         }
     }
-    return mocker.patch(
-        "release_creator.fragments.pull_requests.run_text",
-        return_value=MagicMock(returncode=0, stdout=json.dumps(response), stderr=""),
-    )
+    query = MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(response), stderr=""))
+    mocker.patch("release_creator.fragments.pull_requests.run_text", new=query)
+    return query
 
 
 def test_fragments_cli_rejects_numbered_prs_for_knope(
