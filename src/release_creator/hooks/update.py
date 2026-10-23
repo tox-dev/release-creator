@@ -15,7 +15,7 @@ lazy from yaml.nodes import Node
 
 lazy from release_creator.process import run_text
 
-type _Group = tuple[ScalarNode, SequenceNode, list[tuple[ScalarNode, Requirement]], list[ScalarNode]]
+type _Group = tuple[ScalarNode, SequenceNode, list[tuple[ScalarNode, Requirement]], list[ScalarNode], bool]
 type _Edit = tuple[int, int, str]
 
 
@@ -71,7 +71,7 @@ def _groups(source: str, root: MappingNode, python_groups: set[int]) -> list[_Gr
                     and key.value == "additional_dependencies"
                     and (_start(key) in python_groups or _mapping_value(root, "repos") is None)
                 ):
-                    groups.append(_parse_group(source, key, value))
+                    groups.append(_parse_group(source, key, value, flow_mapping=node.flow_style is True))
                 else:
                     pending.append(value)
         elif isinstance(node, SequenceNode):
@@ -79,7 +79,9 @@ def _groups(source: str, root: MappingNode, python_groups: set[int]) -> list[_Gr
     return groups
 
 
-def _parse_group(source: str, key: ScalarNode, value: MappingNode | SequenceNode | ScalarNode) -> _Group:
+def _parse_group(
+    source: str, key: ScalarNode, value: MappingNode | SequenceNode | ScalarNode, *, flow_mapping: bool
+) -> _Group:
     if not isinstance(value, SequenceNode) or not all(isinstance(item, ScalarNode) for item in value.value):
         msg = "additional_dependencies must be a list of package strings"
         raise TypeError(msg)
@@ -95,13 +97,23 @@ def _parse_group(source: str, key: ScalarNode, value: MappingNode | SequenceNode
         except InvalidRequirement as error:
             msg = f"invalid hook dependency {item.value!r}"
             raise ValueError(msg) from error
-        if len(requirement.specifier) == 1 and next(iter(requirement.specifier)).operator == "==":
-            direct.append((item, requirement))
-    return key, value, direct, managed
+        if requirement.url is not None:
+            msg = f"direct URL hook dependency bypasses the package cooldown: {item.value!r}"
+            raise ValueError(msg)
+        direct.append((item, requirement))
+    return key, value, direct, managed, flow_mapping
 
 
 def _end(node: MappingNode | ScalarNode | SequenceNode) -> int:
     return int(cast("Mark", node.end_mark).index)
+
+
+def _last_content_end(node: MappingNode | ScalarNode | SequenceNode) -> int:
+    if isinstance(node, MappingNode) and not node.flow_style:
+        return _last_content_end(node.value[-1][1])
+    if isinstance(node, SequenceNode) and not node.flow_style:
+        return _last_content_end(node.value[-1])
+    return _end(node)
 
 
 def _hook_packages(
@@ -201,7 +213,7 @@ def _mapping_key(node: MappingNode, name: str) -> ScalarNode | None:
     return next((key for key, _ in node.value if isinstance(key, ScalarNode) and key.value == name), None)
 
 
-def _start(node: MappingNode | ScalarNode) -> int:
+def _start(node: MappingNode | ScalarNode | SequenceNode) -> int:
     return int(cast("Mark", node.start_mark).index)
 
 
@@ -251,7 +263,12 @@ def _resolve(
 def _root_input(requirement: Requirement) -> str:
     extras = f"[{','.join(sorted(requirement.extras))}]" if requirement.extras else ""
     marker = f"; {requirement.marker}" if requirement.marker else ""
-    return f"{requirement.name}{extras}{marker}"
+    specifier = "" if _exact_pin(requirement) else str(requirement.specifier)
+    return f"{requirement.name}{extras}{specifier}{marker}"
+
+
+def _exact_pin(requirement: Requirement) -> bool:
+    return len(requirement.specifier) == 1 and next(iter(requirement.specifier)).operator == "=="
 
 
 def _resolved_line(line: str) -> Requirement:
@@ -267,9 +284,9 @@ def _resolved_line(line: str) -> Requirement:
 
 
 def _group_edits(source: str, group: _Group, resolved: list[Requirement]) -> list[_Edit]:
-    key, sequence, direct, managed = group
+    key, sequence, direct, managed, flow_mapping = group
     if managed and not direct and not resolved and len(managed) == len(sequence.value):
-        end = source.find("\n", _end(sequence))
+        end = source.find("\n", _end(sequence.value[-1]))
         return [(_start(key), end + 1 if end >= 0 else len(source), f"{key.value}: []\n")]
     roots = {canonicalize_name(requirement.name) for _, requirement in direct}
     transitive = [item for item in resolved if canonicalize_name(item.name) not in roots]
@@ -278,6 +295,15 @@ def _group_edits(source: str, group: _Group, resolved: list[Requirement]) -> lis
         for item in resolved
         if canonicalize_name(item.name) in roots
     }
+    if flow_mapping and transitive:
+        values = [
+            _replace_scalar(node.value, requirement, versions[canonicalize_name(requirement.name)])
+            if _exact_pin(requirement)
+            else node.value
+            for node, requirement in direct
+        ]
+        values.extend(str(item) for item in transitive)
+        return [(_start(sequence), _end(sequence), json.dumps(values))]
     if cast("Mark", sequence.start_mark).line == cast("Mark", sequence.end_mark).line and transitive:
         return [_inline_edit(source, group, versions, transitive)]
     return _block_edits(source, group, versions, transitive)
@@ -289,14 +315,14 @@ def _inline_edit(
     versions: dict[NormalizedName, str],
     transitive: list[Requirement],
 ) -> _Edit:
-    key, sequence, direct, _ = group
+    key, sequence, direct, _, _ = group
     indent = " " * cast("Mark", key.start_mark).column
     existing = []
     for item in sequence.value:
         item = cast("ScalarNode", item)
         scalar = source[_start(item) : _end(item)]
         match = next(((node, requirement) for node, requirement in direct if node is item), None)
-        if match:
+        if match and _exact_pin(match[1]):
             scalar = _replace_scalar(scalar, match[1], versions[canonicalize_name(match[1].name)])
         existing.append(f"{indent}  - {scalar}\n")
     generated = [f"{indent}  - {json.dumps(str(item))} # release-creator managed\n" for item in transitive]
@@ -323,11 +349,15 @@ def _block_edits(
     versions: dict[NormalizedName, str],
     transitive: list[Requirement],
 ) -> list[_Edit]:
-    _, sequence, direct, managed = group
+    _, sequence, direct, managed, _ = group
     edits: list[_Edit] = []
     for node, requirement in direct:
         scalar = source[_start(node) : _end(node)]
-        updated = _replace_scalar(scalar, requirement, versions[canonicalize_name(requirement.name)])
+        updated = (
+            _replace_scalar(scalar, requirement, versions[canonicalize_name(requirement.name)])
+            if _exact_pin(requirement)
+            else scalar
+        )
         if scalar != updated:
             edits.append((_start(node), _end(node), updated))
     for node in managed:
@@ -336,7 +366,7 @@ def _block_edits(
         edits.append((start, end + 1 if end >= 0 else len(source), ""))
     if transitive:
         indent = " " * (cast("Mark", sequence.value[0].start_mark).column - 2)
-        end = source.find("\n", _end(sequence))
+        end = source.find("\n", _end(sequence.value[-1]))
         insertion = end + 1 if end >= 0 else len(source)
         prefix = "\n" if end < 0 and not source.endswith("\n") else ""
         lines = (f"{indent}- {json.dumps(str(item))} # release-creator managed\n" for item in transitive)
@@ -349,7 +379,7 @@ def _new_group_edit(source: str, hook: MappingNode, resolved: list[Requirement])
     if source[_start(hook)] == "{":
         msg = "cannot add managed dependencies to a flow-style hook"
         raise ValueError(msg)
-    end = source.find("\n", _end(hook))
+    end = source.find("\n", _last_content_end(hook.value[-1][1]))
     position = end + 1 if end >= 0 else len(source)
     indent = " " * cast("Mark", hook.value[0][0].start_mark).column
     generated = "".join(f"{indent}  - {json.dumps(str(item))} # release-creator managed\n" for item in resolved)
