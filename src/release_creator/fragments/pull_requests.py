@@ -13,6 +13,8 @@ lazy from release_creator.process import required_executable, run_text
 def fragment_pull_requests(repository: str, commits: dict[str, str]) -> dict[str, PullRequest]:
     """Resolve each fragment through GitHub's commit-to-pull-request API.
 
+    A missing GitHub CLI executable raises :exc:`FileNotFoundError`.
+
     :param repository: GitHub owner and repository.
     :param commits: Fragment names mapped to introducing commit hashes.
     :returns: Fragment names mapped to the merged pull request and its author.

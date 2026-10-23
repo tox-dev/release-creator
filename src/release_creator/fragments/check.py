@@ -13,6 +13,8 @@ lazy from release_creator.process import required_executable, run_text
 def changed_fragments(config: Path, base: str) -> int:
     """Count valid added or modified fragments relative to the PR base.
 
+    A missing Git executable raises :exc:`FileNotFoundError`.
+
     :param config: Towncrier configuration file.
     :param base: Target branch name for the pull request diff.
     :returns: Number of changed fragments.
@@ -70,6 +72,8 @@ def _validate_changed_fragment(
 def validate_fragment_deletions(config: Path) -> None:
     """Reject staged deletions that Towncrier could not have consumed.
 
+    A missing Git executable raises :exc:`FileNotFoundError`.
+
     :param config: Towncrier configuration file.
     :raises ValueError: A deleted path is not a configured fragment.
     """
@@ -82,6 +86,8 @@ def validate_fragment_deletions(config: Path) -> None:
 
 def changed_changesets(config: Path, base: str) -> int:
     """Count and validate changed Knope changesets.
+
+    A missing Git executable raises :exc:`FileNotFoundError`.
 
     :param config: Knope configuration file.
     :param base: Target branch name for the pull request diff.

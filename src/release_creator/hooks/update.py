@@ -19,7 +19,14 @@ type _Edit = tuple[int, int, str]
 
 
 def update_pins(config: Path, exclude_newer: str, python_version: str) -> None:
-    """Refresh each hook's complete dependency closure under the selected cutoff."""
+    """Refresh each hook's complete dependency closure under the selected cutoff.
+
+    A missing configuration file, Git, or uv raises :exc:`FileNotFoundError`.
+
+    :param config: Pre-commit configuration file.
+    :param exclude_newer: Cutoff for eligible package releases.
+    :param python_version: Python version used for dependency resolution.
+    """
     source = config.read_bytes().decode("utf-8")
     newline = "\r\n" if source.count("\r\n") == source.count("\n") and "\r\n" in source else "\n"
     source = source.replace("\r\n", "\n")

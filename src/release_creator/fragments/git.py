@@ -9,6 +9,8 @@ lazy from release_creator.process import required_executable, run_text
 def fragment_commits_from_git(directory: Path, *, knope: bool = False) -> dict[str, str]:
     """Read pending fragment origins in one Git history query.
 
+    A missing Git executable raises :exc:`FileNotFoundError`.
+
     :param directory: Fragment directory in the checkout.
     :param knope: Use Knope changesets instead of Towncrier fragments.
     :returns: Fragment filenames mapped to introducing commit hashes.
