@@ -11,6 +11,9 @@ jobs:
     uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@801969505384f96d16882e224e98a74bffd09d21 # v0.4.1
     permissions:
       contents: read
+    with:
+      changelog: docs/changelog.rst
+      artifact-base-url: https://pypi.org/project/release-creator/
   previous:
     runs-on: ubuntu-26.04
     permissions:
