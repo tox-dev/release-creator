@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final, Literal
 lazy from pathlib import Path
+lazy from typing import Final, Literal
 
-from release_creator.fragments.knope import changeset_parts
-from release_creator.fragments.names import fragment_number, pending_changesets, pending_fragments
-from release_creator.github import MARKDOWN_AUTHOR, validate_repository
-
-if TYPE_CHECKING:
-    from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor
+lazy from release_creator.fragments.knope import changeset_parts
+lazy from release_creator.fragments.names import fragment_number, pending_changesets, pending_fragments
+lazy from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor
+lazy from release_creator.github import MARKDOWN_AUTHOR, validate_repository
 
 _RE_PULL_REQUEST_LINK: Final = re.compile(
     r"""

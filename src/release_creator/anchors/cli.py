@@ -1,7 +1,7 @@
 """Keep anchor options beside the anchor command."""
 
-from pathlib import Path
 lazy import argparse
+lazy from pathlib import Path
 
 lazy from release_creator.anchors.markdown import add_release_anchors
 

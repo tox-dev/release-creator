@@ -2,12 +2,10 @@
 
 import sys
 from runpy import run_module
-from typing import TYPE_CHECKING
+lazy import ast
+lazy from pathlib import Path
 
 lazy import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def test_module_entrypoint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
@@ -29,3 +27,19 @@ def test_module_entrypoint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caps
     )
     run_module("release_creator", run_name="__main__")
     assert "https://github.com/tox-dev/example/commits/1.2.3" in capsys.readouterr().out
+
+
+def test_source_imports_are_lazy_unless_used_at_import_time() -> None:
+    source = Path(__file__).resolve().parents[2] / "src"
+    for path in source.rglob("*.py"):
+        imports = (
+            node
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+            if isinstance(node, (ast.Import, ast.ImportFrom))
+        )
+        assert all(
+            node.is_lazy
+            or (isinstance(node, ast.ImportFrom) and node.module in {"__future__", "dataclasses"})
+            or (isinstance(node, ast.Import) and all(alias.name == "re" for alias in node.names))
+            for node in imports
+        ), path

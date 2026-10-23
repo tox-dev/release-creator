@@ -1,7 +1,7 @@
 """Validate repository names used in GitHub URLs and API paths."""
 
 import re
-from typing import Final
+lazy from typing import Final
 
 MARKDOWN_AUTHOR: Final = re.compile(
     r"""

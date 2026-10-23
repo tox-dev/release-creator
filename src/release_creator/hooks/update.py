@@ -1,10 +1,10 @@
 """Refresh hook dependencies while preserving unrelated pre-commit YAML."""
 
-import json
-import operator
-import shutil
-from tempfile import TemporaryDirectory
+lazy import json
+lazy import operator
+lazy import shutil
 lazy from pathlib import Path
+lazy from tempfile import TemporaryDirectory
 lazy from typing import Final, cast
 
 lazy from packaging.requirements import InvalidRequirement, Requirement
@@ -13,7 +13,7 @@ lazy from yaml import MappingNode, ScalarNode, SequenceNode, compose, safe_load
 lazy from yaml.error import Mark, YAMLError
 lazy from yaml.nodes import Node
 
-from release_creator.process import run_text
+lazy from release_creator.process import run_text
 
 type _Group = tuple[ScalarNode, SequenceNode, list[tuple[ScalarNode, Requirement]], list[ScalarNode]]
 type _Edit = tuple[int, int, str]
@@ -22,10 +22,11 @@ type _Edit = tuple[int, int, str]
 def update_pins(config: Path, exclude_newer: str, python_version: str) -> None:
     """Refresh each hook's complete dependency closure under the selected cutoff."""
     source = config.read_text(encoding="utf-8")
-    groups = _groups(source)
+    root = _config_root(source)
     edits: list[_Edit] = []
     with TemporaryDirectory() as temporary:
-        packages, missing = _hook_packages(source, Path(temporary), config.parent)
+        packages, missing, python_groups = _hook_packages(root, Path(temporary), config.parent)
+        groups = _groups(source, root, python_groups)
         for group in groups:
             direct = group[2]
             package = packages.get(_start(group[0]))
@@ -46,7 +47,7 @@ def update_pins(config: Path, exclude_newer: str, python_version: str) -> None:
         config.write_text(source, encoding="utf-8")
 
 
-def _groups(source: str) -> list[_Group]:
+def _config_root(source: str) -> MappingNode:
     try:
         root = compose(source)
     except YAMLError as error:
@@ -55,13 +56,21 @@ def _groups(source: str) -> list[_Group]:
     if not isinstance(root, MappingNode):
         msg = "pre-commit configuration must be a YAML mapping"
         raise TypeError(msg)
+    return root
+
+
+def _groups(source: str, root: MappingNode, python_groups: set[int]) -> list[_Group]:
     groups: list[_Group] = []
     pending: list[MappingNode | SequenceNode | ScalarNode] = [root]
     while pending:
         node = pending.pop()
         if isinstance(node, MappingNode):
             for key, value in node.value:
-                if isinstance(key, ScalarNode) and key.value == "additional_dependencies":
+                if (
+                    isinstance(key, ScalarNode)
+                    and key.value == "additional_dependencies"
+                    and (_start(key) in python_groups or _mapping_value(root, "repos") is None)
+                ):
                     groups.append(_parse_group(source, key, value))
                 else:
                     pending.append(value)
@@ -95,37 +104,58 @@ def _end(node: MappingNode | ScalarNode | SequenceNode) -> int:
     return int(cast("Mark", node.end_mark).index)
 
 
-def _hook_packages(source: str, temporary: Path, cwd: Path) -> tuple[dict[int, Path], list[tuple[MappingNode, Path]]]:
-    root = cast("MappingNode", compose(source))
+def _hook_packages(
+    root: MappingNode, temporary: Path, cwd: Path
+) -> tuple[dict[int, Path], list[tuple[MappingNode, Path]], set[int]]:
     packages: dict[int, Path] = {}
     missing: list[tuple[MappingNode, Path]] = []
+    python_groups: set[int] = set()
     repositories = _mapping_value(root, "repos")
     if not isinstance(repositories, SequenceNode):
-        return packages, missing
+        return packages, missing, python_groups
     for index, repository in enumerate(repositories.value):
-        if (
-            not isinstance(repository, MappingNode)
-            or (checkout_and_hooks := _repository_checkout(repository, temporary / str(index), cwd)) is None
-        ):
-            continue
-        checkout, hooks = checkout_and_hooks
-        manifest = safe_load((checkout / ".pre-commit-hooks.yaml").read_text(encoding="utf-8"))
-        languages = {entry["id"]: entry["language"] for entry in manifest}
+        if not isinstance(repository, MappingNode):
+            msg = "hook repository must be a mapping"
+            raise TypeError(msg)
+        hooks = _mapping_value(repository, "hooks")
+        if not isinstance(hooks, SequenceNode):
+            msg = "hook repository must include hooks"
+            raise TypeError(msg)
+        checkout_and_hooks = _repository_checkout(repository, temporary / str(index), cwd)
+        checkout = checkout_and_hooks[0] if checkout_and_hooks is not None else None
+        languages = (
+            {
+                entry["id"]: entry["language"]
+                for entry in safe_load((checkout / ".pre-commit-hooks.yaml").read_text(encoding="utf-8"))
+            }
+            if checkout is not None
+            else {}
+        )
         for hook in hooks.value:
-            if not isinstance(hook, MappingNode) or not isinstance(
-                identifier := _mapping_value(hook, "id"), ScalarNode
-            ):
-                msg = "selected hook must be a mapping with an id"
-                raise TypeError(msg)
-            override = _mapping_value(hook, "language")
-            language = override.value if isinstance(override, ScalarNode) else languages.get(identifier.value)
-            if language != "python":
+            if _hook_language(hook, languages, require_id=checkout is not None) not in {None, "python"}:
                 continue
+            hook = cast("MappingNode", hook)
             if isinstance(dependencies := _mapping_key(hook, "additional_dependencies"), ScalarNode):
-                packages[_start(dependencies)] = checkout
-            else:
+                python_groups.add(_start(dependencies))
+                if checkout is not None:
+                    packages[_start(dependencies)] = checkout
+            elif checkout is not None:
                 missing.append((hook, checkout))
-    return packages, missing
+    return packages, missing, python_groups
+
+
+def _hook_language(hook: Node, languages: dict[str, str], *, require_id: bool) -> str | None:
+    if not isinstance(hook, MappingNode):
+        msg = "selected hook must be a mapping with an id"
+        raise TypeError(msg)
+    identifier = _mapping_value(hook, "id")
+    if require_id and not isinstance(identifier, ScalarNode):
+        msg = "selected hook must be a mapping with an id"
+        raise TypeError(msg)
+    override = _mapping_value(hook, "language")
+    if isinstance(override, ScalarNode):
+        return str(override.value)
+    return languages.get(identifier.value) if isinstance(identifier, ScalarNode) else None
 
 
 def _mapping_value(node: MappingNode, name: str) -> Node | None:
@@ -158,7 +188,7 @@ def _checkout_hook_repository(url: str, revision: str, checkout: Path, cwd: Path
         msg = "git is required to resolve hook repository dependencies"
         raise FileNotFoundError(msg)
     for command in (
-        [git, "clone", "--quiet", "--filter=blob:none", "--no-checkout", url, str(checkout)],
+        [git, "clone", "--quiet", "--filter=blob:none", "--no-checkout", "--", url, str(checkout)],
         [git, "-C", str(checkout), "checkout", "--quiet", revision],
     ):
         result = run_text(command, cwd=cwd)

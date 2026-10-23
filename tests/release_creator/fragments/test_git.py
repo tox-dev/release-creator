@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess  # ruff: ignore[suspicious-subprocess-import]  # Model a failed Git history command.
 lazy from pathlib import Path
 
 import pytest
@@ -54,8 +55,42 @@ def test_fragment_commits_from_git_reports_missing_history(tmp_path: Path, monke
         fragment_git.fragment_commits_from_git(directory)
 
 
+def test_fragment_commits_from_git_reports_log_failure(tmp_path: Path, mocker: MockerFixture) -> None:
+    directory = tmp_path / "changelog.d"
+    directory.mkdir()
+    (directory / "+news.feature.md").write_text("News.\n", encoding="utf-8")
+    mocker.patch("release_creator.fragments.git.shutil.which", return_value="git")
+    mocker.patch(
+        "release_creator.fragments.git.run_text",
+        side_effect=[
+            subprocess.CompletedProcess([], 0, "false\n", ""),
+            subprocess.CompletedProcess([], 1, "", "history unavailable"),
+        ],
+    )
+
+    with pytest.raises(ValueError, match="history unavailable"):
+        fragment_git.fragment_commits_from_git(directory)
+
+
 def test_fragment_commits_from_git_requires_git(tmp_path: Path, mocker: MockerFixture) -> None:
     mocker.patch("release_creator.fragments.git.shutil.which", autospec=True, return_value=None)
 
     with pytest.raises(FileNotFoundError, match="Git is required"):
         fragment_git.fragment_commits_from_git(tmp_path)
+
+
+def test_fragment_commits_from_git_rejects_shallow_clone(
+    git_repository: tuple[Path, str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repository, git = git_repository
+    directory = repository / "changelog.d"
+    directory.mkdir()
+    (directory / "+news.feature.md").write_text("News.\n", encoding="utf-8")
+    assert run_text([git, "-C", str(repository), "add", "."]).returncode == 0
+    assert run_text([git, "-C", str(repository), "commit", "-qm", "News"]).returncode == 0
+    checkout = tmp_path / "shallow"
+    assert run_text([git, "clone", "--depth", "1", f"file://{repository}", str(checkout)]).returncode == 0
+    monkeypatch.chdir(checkout)
+
+    with pytest.raises(ValueError, match="full Git history is required"):
+        fragment_git.fragment_commits_from_git(Path("changelog.d"))

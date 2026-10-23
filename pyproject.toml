@@ -48,6 +48,7 @@ test = [
   "pytest>=9",
   "pytest-cov>=7",
   "pytest-mock>=3.17",
+  "pytest-xdist>=3",
   { include-group = "release-prepare" },
 ]
 type = [ "ty>=0.0.84", { include-group = "test" }, { include-group = "docs" } ]

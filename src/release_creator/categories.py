@@ -1,6 +1,6 @@
 """Names shared by changelog previews and GitHub Release notes."""
 
-from typing import Final
+lazy from typing import Final
 
 CHANGELOG_CATEGORIES: Final = {
     "feature": ("Added", "Features"),

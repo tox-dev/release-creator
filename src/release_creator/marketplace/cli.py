@@ -4,7 +4,7 @@ lazy import argparse
 lazy import sys
 lazy from pathlib import Path
 
-from release_creator.marketplace.compare import reconcile_marketplace
+lazy from release_creator.marketplace.compare import reconcile_marketplace
 
 
 def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:

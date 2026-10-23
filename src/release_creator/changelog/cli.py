@@ -3,8 +3,8 @@
 lazy import argparse
 lazy from pathlib import Path
 
-from release_creator.changelog.knope import render_knope_preview
-from release_creator.changelog.preview import render_preview
+lazy from release_creator.changelog.knope import render_knope_preview
+lazy from release_creator.changelog.preview import render_preview
 
 
 def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:

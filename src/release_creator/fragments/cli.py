@@ -1,8 +1,8 @@
 """Keep fragment options beside PR link insertion."""
 
-from pathlib import Path
 lazy import argparse
 lazy import sys
+lazy from pathlib import Path
 
 lazy from release_creator.fragments.check import changed_changesets, changed_fragments, validate_fragment_deletions
 lazy from release_creator.fragments.git import fragment_commits_from_git

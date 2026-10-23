@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-import subprocess  # ruff: ignore[suspicious-subprocess-import]  # Mock the GitHub CLI process boundary.
+import subprocess  # ruff: ignore[suspicious-subprocess-import]  # Model the GitHub CLI boundary.
 from typing import cast
 from unittest.mock import MagicMock, create_autospec
 
@@ -14,15 +14,22 @@ from release_creator.fragments import pull_requests
 from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor
 
 
-def test_fragment_pull_requests_deduplicates_commits_and_reads_numbered_stems(monkeypatch: pytest.MonkeyPatch) -> None:
+def _graph_response(nodes: list[dict[str, object]]) -> dict[str, object]:
+    return {"data": {"repository": {"c0": {"associatedPullRequests": {"nodes": nodes}}}}}
+
+
+def _pull(sha: str, *, number: int = 42, login: str = "alice", account_type: str = "User") -> dict[str, object]:
+    return {
+        "number": number,
+        "mergedAt": "2026-10-22T00:00:00Z",
+        "mergeCommit": {"oid": sha},
+        "author": {"login": login, "__typename": account_type},
+    }
+
+
+def test_fragment_pull_requests_batches_commits_and_reads_numbered_stems(monkeypatch: pytest.MonkeyPatch) -> None:
     responses = [
-        [
-            {
-                "number": 42,
-                "merge_commit_sha": "a" * 40,
-                "user": {"login": "alice", "type": "User"},
-            }
-        ],
+        _graph_response([_pull("a" * 40)]),
         {"number": 6, "user": {"login": "dependabot[bot]", "type": "Bot"}},
     ]
     run: MagicMock = cast(
@@ -46,70 +53,34 @@ def test_fragment_pull_requests_deduplicates_commits_and_reads_numbered_stems(mo
         "+second.doc.md": PullRequest(number="42", author=PullRequestAuthor(handle="alice", is_bot=False)),
         "6.bugfix.md": PullRequest(number="6", author=PullRequestAuthor(handle="dependabot", is_bot=True)),
     }
-    assert [call.args[0][2] for call in run.call_args_list] == [
-        f"repos/tox-dev/example/commits/{'a' * 40}/pulls?per_page=100",
-        "repos/tox-dev/example/pulls/6",
+    assert [call.args[0][:3] for call in run.call_args_list] == [
+        ["gh", "api", "graphql"],
+        ["gh", "api", "repos/tox-dev/example/pulls/6"],
     ]
 
 
 @pytest.mark.parametrize(
-    ("response", "error", "message"),
+    ("nodes", "error", "message"),
     [
-        pytest.param([], ValueError, "expected one merged pull request", id="no-pull"),
-        pytest.param(
-            [{"number": 42, "merge_commit_sha": "b" * 40}],
-            ValueError,
-            "expected one merged pull request",
-            id="other-commit",
-        ),
-        pytest.param(
-            [{"number": 42, "merge_commit_sha": "a" * 40}] * 2,
-            ValueError,
-            "expected one merged pull request",
-            id="two-pulls",
-        ),
-        pytest.param({}, TypeError, "invalid pull request response", id="not-an-array"),
-        pytest.param(
-            [{"number": 42, "merge_commit_sha": "a" * 40}],
-            TypeError,
-            "invalid pull request response",
-            id="missing-user",
-        ),
-        pytest.param(
-            [{"number": 42, "merge_commit_sha": "a" * 40, "user": {"login": "alice", "type": "Mannequin"}}],
-            ValueError,
-            "invalid GitHub author",
-            id="unknown-account-type",
-        ),
-        pytest.param(
-            [{"number": 42, "merge_commit_sha": "a" * 40, "user": {"login": "bad handle", "type": "User"}}],
-            ValueError,
-            "invalid GitHub author",
-            id="bad-handle",
-        ),
-        pytest.param(
-            [{"number": 0, "merge_commit_sha": "a" * 40, "user": {"login": "alice", "type": "User"}}],
-            ValueError,
-            "invalid pull request number",
-            id="bad-number",
-        ),
-        pytest.param(
-            [{"number": True, "merge_commit_sha": "a" * 40, "user": {"login": "alice", "type": "User"}}],
-            TypeError,
-            "invalid pull request response",
-            id="boolean-number",
-        ),
+        pytest.param([], ValueError, "expected one squash-merged pull request", id="no-pull"),
+        pytest.param([_pull("b" * 40)], ValueError, "expected one squash-merged pull request", id="other-commit"),
+        pytest.param([_pull("a" * 40)] * 2, ValueError, "expected one squash-merged pull request", id="two-pulls"),
+        pytest.param([_pull("a" * 40, account_type="Mannequin")], ValueError, "invalid GitHub author", id="type"),
+        pytest.param([_pull("a" * 40, login="bad handle")], ValueError, "invalid GitHub author", id="handle"),
+        pytest.param([_pull("a" * 40, number=0)], ValueError, "invalid pull request number", id="number"),
+        pytest.param([_pull("a" * 40, number=True)], TypeError, "invalid pull request response", id="boolean"),
     ],
 )
 def test_fragment_pull_requests_rejects_bad_responses(
-    monkeypatch: pytest.MonkeyPatch, response: object, error: type[Exception], message: str
+    monkeypatch: pytest.MonkeyPatch, nodes: list[dict[str, object]], error: type[Exception], message: str
 ) -> None:
     monkeypatch.setattr(pull_requests.shutil, "which", create_autospec(pull_requests.shutil.which, return_value="gh"))
     monkeypatch.setattr(
         process.subprocess,
         "run",
         create_autospec(
-            process.subprocess.run, return_value=subprocess.CompletedProcess([], 0, json.dumps(response), "")
+            process.subprocess.run,
+            return_value=subprocess.CompletedProcess([], 0, json.dumps(_graph_response(nodes)), ""),
         ),
     )
 
@@ -120,7 +91,7 @@ def test_fragment_pull_requests_rejects_bad_responses(
 @pytest.mark.parametrize(
     ("stdout", "stderr", "status", "message"),
     [
-        pytest.param("not json", "", 0, "invalid GitHub response", id="invalid-json"),
+        pytest.param("not json", "", 0, "invalid GitHub associated pull requests response", id="invalid-json"),
         pytest.param("", "API failed", 1, "API failed", id="api-failure"),
     ],
 )
@@ -136,6 +107,79 @@ def test_fragment_pull_requests_reports_api_failures(
 
     with pytest.raises(ValueError, match=message):
         pull_requests.fragment_pull_requests("tox-dev/example", {"+news.feature.md": "a" * 40})
+
+
+@pytest.mark.parametrize(
+    ("sha", "message"),
+    [
+        pytest.param("short", "40-character lowercase", id="short"),
+        pytest.param("A" * 40, "40-character lowercase", id="uppercase"),
+    ],
+)
+def test_fragment_pull_requests_rejects_invalid_commit(monkeypatch: pytest.MonkeyPatch, sha: str, message: str) -> None:
+    monkeypatch.setattr(pull_requests.shutil, "which", create_autospec(pull_requests.shutil.which, return_value="gh"))
+
+    with pytest.raises(ValueError, match=message):
+        pull_requests.fragment_pull_requests("tox-dev/example", {"+news.feature.md": sha})
+
+
+@pytest.mark.parametrize(
+    ("response", "message"),
+    [
+        pytest.param({"data": {}}, "invalid GitHub associated", id="missing-repository"),
+        pytest.param({"data": {"repository": {}}}, "invalid pull request response", id="missing-commit"),
+    ],
+)
+def test_fragment_pull_requests_rejects_incomplete_graphql_response(
+    monkeypatch: pytest.MonkeyPatch, response: dict[str, object], message: str
+) -> None:
+    monkeypatch.setattr(pull_requests.shutil, "which", create_autospec(pull_requests.shutil.which, return_value="gh"))
+    monkeypatch.setattr(
+        process.subprocess,
+        "run",
+        create_autospec(
+            process.subprocess.run,
+            return_value=subprocess.CompletedProcess([], 0, json.dumps(response), ""),
+        ),
+    )
+
+    with pytest.raises(ValueError, match=message):
+        pull_requests.fragment_pull_requests("tox-dev/example", {"+news.feature.md": "a" * 40})
+
+
+@pytest.mark.parametrize(
+    ("response", "error", "message"),
+    [
+        pytest.param(("", "API failed", 1), ValueError, "API failed", id="api-error"),
+        pytest.param(("not json", "", 0), ValueError, "invalid GitHub response", id="invalid-json"),
+        pytest.param(("{}", "", 0), TypeError, "invalid pull request response", id="missing-user"),
+    ],
+)
+def test_fragment_pull_requests_rejects_bad_numbered_api_response(
+    monkeypatch: pytest.MonkeyPatch,
+    response: tuple[str, str, int],
+    error: type[Exception],
+    message: str,
+) -> None:
+    stdout, stderr, status = response
+    monkeypatch.setattr(pull_requests.shutil, "which", create_autospec(pull_requests.shutil.which, return_value="gh"))
+    monkeypatch.setattr(
+        process.subprocess,
+        "run",
+        create_autospec(
+            process.subprocess.run,
+            return_value=subprocess.CompletedProcess([], status, stdout, stderr),
+        ),
+    )
+
+    with pytest.raises(error, match=message):
+        pull_requests.fragment_pull_requests("tox-dev/example", {"6.bugfix.md": "a" * 40}, numbered_prs=True)
+
+
+def test_fragment_pull_requests_accepts_empty_commit_map(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pull_requests.shutil, "which", create_autospec(pull_requests.shutil.which, return_value="gh"))
+
+    assert pull_requests.fragment_pull_requests("tox-dev/example", {}) == {}
 
 
 def test_fragment_pull_requests_requires_gh(monkeypatch: pytest.MonkeyPatch) -> None:

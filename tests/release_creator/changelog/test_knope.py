@@ -89,3 +89,15 @@ def test_render_knope_preview_handles_first_release(knope_files: tuple[Path, Pat
         '# Changelog\n\nIntro.\n\n<a name="draft"></a>\n\n## Draft\n\n'
         '<a name="draft-added"></a>\n\n### Added\n\n- First release\n'
     )
+
+
+def test_render_knope_preview_accepts_standard_types_without_custom_sections(
+    knope_files: tuple[Path, Path, Path],
+) -> None:
+    changelog, config, fragments = knope_files
+    config.write_text("[package]\n", encoding="utf-8")
+    (fragments / "fix.md").write_text("---\ndefault: patch\n---\n\n# Fix command output\n", encoding="utf-8")
+
+    result = render_knope_preview(changelog, config, fragments)
+
+    assert '<a name="draft-fixed"></a>\n\n### Fixed\n\n- Fix command output\n' in result

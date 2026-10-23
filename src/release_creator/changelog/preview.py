@@ -2,10 +2,10 @@
 
 lazy from pathlib import Path
 
-from release_creator.anchors.names import draft_anchor
-from release_creator.categories import CHANGELOG_CATEGORIES
-from release_creator.fragments.names import fragment_category
-from release_creator.package_name import valid_package_name
+lazy from release_creator.anchors.names import draft_anchor
+lazy from release_creator.categories import CHANGELOG_CATEGORIES
+lazy from release_creator.fragments.names import fragment_category
+lazy from release_creator.package_name import valid_package_name
 
 
 def render_preview(changelog: Path, package: str, fragments: Path) -> str:

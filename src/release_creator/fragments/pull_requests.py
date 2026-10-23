@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import json
 import re
-import shutil
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Final
+lazy import json
+lazy import shutil
+lazy from pathlib import Path
+lazy from typing import Final
 
-from release_creator.fragments.names import fragment_number
-from release_creator.github import validate_repository
-from release_creator.process import run_text
+lazy from release_creator.fragments.names import fragment_number
+lazy from release_creator.github import validate_repository
+lazy from release_creator.process import run_text
 
 _RE_HANDLE: Final = re.compile(
     r"""
@@ -36,12 +36,15 @@ def fragment_pull_requests(
     if (gh := shutil.which("gh")) is None:
         msg = "GitHub CLI is required to resolve pull request authors"
         raise FileNotFoundError(msg)
-    by_commit = {
-        sha: _pull_for_commit(gh, repository, sha)
-        for sha in dict.fromkeys(
-            sha for name, sha in commits.items() if not (numbered_prs and fragment_number(Path(name)) is not None)
-        )
-    }
+    by_commit = _pulls_for_commits(
+        gh,
+        repository,
+        list(
+            dict.fromkeys(
+                sha for name, sha in commits.items() if not (numbered_prs and fragment_number(Path(name)) is not None)
+            )
+        ),
+    )
     numbers = (
         number for name in commits if numbered_prs for number in [fragment_number(Path(name))] if number is not None
     )
@@ -57,16 +60,58 @@ def fragment_pull_requests(
     }
 
 
-def _pull_for_commit(gh: str, repository: str, sha: str) -> PullRequest:
-    response = _api(gh, f"repos/{repository}/commits/{sha}/pulls?per_page=100")
-    if not isinstance(response, list):
-        msg = f"invalid pull request response for commit {sha}"
-        raise TypeError(msg)
-    merged = [item for item in response if isinstance(item, dict) and item.get("merge_commit_sha") == sha]
-    if len(merged) != 1:
-        msg = f"expected one merged pull request for commit {sha}, found {len(merged)}"
+def _pulls_for_commits(gh: str, repository: str, shas: list[str]) -> dict[str, PullRequest]:
+    if not shas:
+        return {}
+    sha_length: Final = 40
+    if any(len(sha) != sha_length or any(character not in "0123456789abcdef" for character in sha) for sha in shas):
+        msg = "fragment commits must be 40-character lowercase Git object IDs"
         raise ValueError(msg)
-    return _pull_request(merged[0], f"commit {sha}")
+    owner, name = repository.split("/", 1)
+    objects = " ".join(
+        f'c{index}: object(oid: "{sha}") {{ ... on Commit {{ associatedPullRequests(first: 100) '
+        "{ nodes { number mergedAt author { login __typename } mergeCommit { oid } } } } } }"
+        for index, sha in enumerate(shas)
+    )
+    result = run_text([
+        gh,
+        "api",
+        "graphql",
+        "-f",
+        f"query=query {{ repository(owner: {json.dumps(owner)}, name: {json.dumps(name)}) {{ {objects} }} }}",
+    ])
+    if result.returncode:
+        msg = result.stderr.strip() or "could not read GitHub pull requests"
+        raise ValueError(msg)
+    try:
+        response = json.loads(result.stdout)["data"]["repository"]
+    except (KeyError, TypeError, json.JSONDecodeError) as error:
+        msg = "invalid GitHub associated pull requests response"
+        raise ValueError(msg) from error
+    pulls: dict[str, PullRequest] = {}
+    for index, sha in enumerate(shas):
+        try:
+            nodes = response[f"c{index}"]["associatedPullRequests"]["nodes"]
+        except (KeyError, TypeError) as error:
+            msg = f"invalid pull request response for commit {sha}"
+            raise ValueError(msg) from error
+        merged = [
+            item
+            for item in nodes
+            if item["mergedAt"] is not None and item["mergeCommit"] is not None and item["mergeCommit"]["oid"] == sha
+        ]
+        if len(merged) != 1:
+            msg = f"expected one squash-merged pull request for commit {sha}, found {len(merged)}"
+            raise ValueError(msg)
+        pull = merged[0]
+        pulls[sha] = _pull_request(
+            {
+                "number": pull["number"],
+                "user": {"login": pull["author"]["login"], "type": pull["author"]["__typename"]},
+            },
+            f"commit {sha}",
+        )
+    return pulls
 
 
 def _api(gh: str, path: str) -> object:

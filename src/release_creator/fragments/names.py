@@ -1,8 +1,8 @@
 """Keep unlinked fragments out of release output."""
 
-from typing import Final
 lazy from collections.abc import Collection
 lazy from pathlib import Path
+lazy from typing import Final
 
 
 def pending_fragments(directory: Path) -> list[Path]:

@@ -4,7 +4,7 @@ lazy import argparse
 lazy import sys
 lazy from pathlib import Path
 
-from release_creator.artifacts.reconcile import verify_artifacts
+lazy from release_creator.artifacts.reconcile import verify_artifacts
 
 
 def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:

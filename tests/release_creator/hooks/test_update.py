@@ -24,8 +24,10 @@ def test_updates_each_hook_with_its_universal_closure(tmp_path: Path, mocker: Mo
         "  - repo: local\n"
         "    hooks:\n"
         "      - id: format\n"
+        "        language: python\n"
         "        additional_dependencies: ['MDFormat_GFM==1.0.0', sphinx>=9] # keep\n"
         "      - id: docs\n"
+        "        language: python\n"
         "        additional_dependencies:\n"
         "          - sphinx==9.0.0 # chosen\n",
         encoding="utf-8",
@@ -49,11 +51,13 @@ def test_updates_each_hook_with_its_universal_closure(tmp_path: Path, mocker: Mo
         "  - repo: local\n"
         "    hooks:\n"
         "      - id: format\n"
+        "        language: python\n"
         "        additional_dependencies: # keep\n"
         "          - 'MDFormat_GFM==1.1.0'\n"
         "          - sphinx>=9\n"
         '          - "mdformat==1.0.0" # release-creator managed\n'
         "      - id: docs\n"
+        "        language: python\n"
         "        additional_dependencies:\n"
         "          - sphinx==9.1.1 # chosen\n"
         '          - "colorama==0.4.6; sys_platform == \\"win32\\"" # release-creator managed\n'
@@ -77,11 +81,15 @@ def test_resolves_real_universal_closure(tmp_path: Path, monkeypatch: pytest.Mon
     monkeypatch.setenv("UV_FIND_LINKS", str(wheels))
     monkeypatch.setenv("UV_OFFLINE", "1")
     config = tmp_path / ".pre-commit-config.yaml"
-    config.write_text("additional_dependencies: [closure-root==0.1.0]\n", encoding="utf-8")
+    config.write_text(
+        "repos:\n  - repo: local\n    hooks:\n      - id: closure\n"
+        "        language: python\n        additional_dependencies: [closure-root==0.1.0]\n",
+        encoding="utf-8",
+    )
 
     update_pins(config, "2099-01-01T00:00:00Z", "3.15")
 
-    assert safe_load(config.read_text(encoding="utf-8"))["additional_dependencies"] == [
+    assert safe_load(config.read_text(encoding="utf-8"))["repos"][0]["hooks"][0]["additional_dependencies"] == [
         "closure-root==1.0.0",
         "closure-child==2.0.0",
         'closure-color==0.4.6; sys_platform == "win32"',
@@ -161,7 +169,7 @@ def test_pins_python_hook_package_dependencies(
     assert config.read_text(encoding="utf-8") == first
 
 
-def test_drops_managed_dependencies_from_system_hook(
+def test_preserves_system_hook_dependencies(
     tmp_path: Path, mocker: MockerFixture, upstream_python_hook: tuple[Path, str]
 ) -> None:
     upstream, _ = upstream_python_hook
@@ -195,8 +203,47 @@ def test_drops_managed_dependencies_from_system_hook(
 
     update_pins(config, "7 days", "3.15")
 
-    assert safe_load(config.read_text(encoding="utf-8"))["repos"][0]["hooks"][0]["additional_dependencies"] == []
+    assert config.read_text(encoding="utf-8") == source
     assert all(call.args[0][0] != "uv" for call in command.call_args_list)
+
+
+def test_ignores_non_python_hook_dependencies(tmp_path: Path) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    source = (
+        "repos:\n  - repo: local\n    hooks:\n      - id: xml\n"
+        "        language: node\n        additional_dependencies: ['@prettier/plugin-xml@3.4.1']\n"
+    )
+    config.write_text(source, encoding="utf-8")
+
+    update_pins(config, "7 days", "3.15")
+
+    assert config.read_text(encoding="utf-8") == source
+
+
+def test_updates_python_hook_without_adding_dependencies_to_other_local_hook(
+    tmp_path: Path, mocker: MockerFixture
+) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(
+        "repos:\n  - repo: local\n    hooks:\n      - id: shell\n        language: system\n"
+        "      - id: python-empty\n        language: python\n"
+        "      - id: python\n        language: python\n        additional_dependencies: [black==1]\n",
+        encoding="utf-8",
+    )
+    mocker.patch("release_creator.hooks.update.shutil.which", return_value="uv")
+    mocker.patch(
+        "release_creator.hooks.update.run_text",
+        return_value=subprocess.CompletedProcess([], 0, "black==2\n", ""),
+    )
+
+    update_pins(config, "2026-10-14T00:00:00Z", "3.15")
+
+    hooks = safe_load(config.read_text(encoding="utf-8"))["repos"][0]["hooks"]
+    assert hooks == [
+        {"id": "shell", "language": "system"},
+        {"id": "python-empty", "language": "python"},
+        {"id": "python", "language": "python", "additional_dependencies": ["black==2"]},
+    ]
 
 
 @pytest.mark.parametrize(
@@ -465,6 +512,8 @@ def test_reports_missing_uv(tmp_path: Path, mocker: MockerFixture) -> None:
     [
         pytest.param("repos: [\n", ValueError, id="invalid-yaml"),
         pytest.param("[]\n", TypeError, id="not-mapping"),
+        pytest.param("repos: [invalid]\n", TypeError, id="invalid-repository"),
+        pytest.param("repos: [{repo: local}]\n", TypeError, id="missing-hooks"),
         pytest.param("additional_dependencies: invalid\n", TypeError, id="not-list"),
         pytest.param("additional_dependencies: [not a requirement!]\n", ValueError, id="invalid-package"),
     ],

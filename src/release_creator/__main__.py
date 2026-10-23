@@ -1,6 +1,6 @@
 """Run release-creator as a module."""
 
-from release_creator.cli import main
+lazy from release_creator.cli import main
 
 if __name__ == "__main__":
     main()

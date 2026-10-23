@@ -16,6 +16,7 @@ commands = [
     "--cov-config", "{tox_root}{/}pyproject.toml",
     "--cov-report", "term-missing:skip-covered",
     "--cov-report", "xml:{work_dir}{/}coverage.{env_name}.xml",
+    "-n", "auto",
     "tests",
   ], extend = true }],
   ["diff-cover", "--compare-branch", { replace = "env", name = "DIFF_AGAINST", default = "origin/main" }, "{work_dir}{/}coverage.{env_name}.xml", "--fail-under", "100"],

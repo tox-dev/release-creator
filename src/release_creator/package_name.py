@@ -1,6 +1,6 @@
 """Validate package names used in release headings and scoped tags."""
 
-import re
+lazy import re
 
 
 def valid_package_name(package: str) -> bool:

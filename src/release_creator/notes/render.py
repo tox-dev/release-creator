@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Final
+lazy from typing import Final
 
-from packaging.version import InvalidVersion, Version
 lazy import mdformat
+lazy from packaging.version import InvalidVersion, Version
 
-from release_creator.anchors.names import release_anchor
-from release_creator.categories import RELEASE_CATEGORIES
-from release_creator.github import MARKDOWN_AUTHOR, validate_repository
-from release_creator.notes.rst import render_rst_section
-from release_creator.package_name import valid_package_name
+lazy from release_creator.anchors.names import release_anchor
+lazy from release_creator.categories import RELEASE_CATEGORIES
+lazy from release_creator.github import MARKDOWN_AUTHOR, validate_repository
+lazy from release_creator.notes.rst import render_rst_section
+lazy from release_creator.package_name import valid_package_name
 
 _RE_RELEASE_PULL: Final = re.compile(
     r"""

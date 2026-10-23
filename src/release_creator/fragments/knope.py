@@ -1,6 +1,19 @@
 """Read Knope changesets without rewriting their YAML front matter."""
 
 lazy from pathlib import Path
+lazy from typing import cast
+
+
+def knope_kinds(config: dict[str, object]) -> set[str]:
+    """Return types accepted by Knope's standard and extra sections.
+
+    :param config: Knope package configuration.
+    :returns: Accepted changeset types.
+    """
+    sections = cast("list[dict[str, object]]", config.get("extra_changelog_sections", []))
+    return {"major", "minor", "patch"} | {
+        str(kind) for section in sections for kind in cast("list[str]", section["types"])
+    }
 
 
 def changeset_parts(fragment: Path, content: str) -> tuple[str, str, str]:
@@ -28,4 +41,5 @@ def changeset_parts(fragment: Path, content: str) -> tuple[str, str, str]:
 
 __all__ = [
     "changeset_parts",
+    "knope_kinds",
 ]

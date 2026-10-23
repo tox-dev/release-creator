@@ -1,11 +1,11 @@
 """Repair anchors after a changelog generator inserts a release section."""
 
 import re
-from typing import Final, cast
+lazy from typing import Final, cast
 
-from packaging.version import InvalidVersion, Version
+lazy from packaging.version import InvalidVersion, Version
 
-from release_creator.anchors.names import release_anchor
+lazy from release_creator.anchors.names import release_anchor
 
 _RE_VERSION: Final = re.compile(
     r"""

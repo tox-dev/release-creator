@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TYPE_CHECKING
+lazy from datetime import date
+lazy from pathlib import Path
 
-from packaging.version import InvalidVersion, Version
+lazy from packaging.version import InvalidVersion, Version
 
-from release_creator.fragments.names import fragment_category
-
-if TYPE_CHECKING:
-    from datetime import date
+lazy from release_creator.fragments.names import fragment_category
 
 
 def next_tag(bump: str, tags: list[str], fragments: list[str], release_date: date, prefix: str = "") -> str:
@@ -34,27 +31,44 @@ def next_tag(bump: str, tags: list[str], fragments: list[str], release_date: dat
         except ValueError:
             continue
     current = max(versions, default=Version("0.0.0"))
-    major, minor, patch = current.release
     if bump == "auto":
-        categories = {fragment_category(Path(fragment)) for fragment in fragments}
-        bump = "major" if "breaking" in categories else "minor" if "feature" in categories else "patch"
-    match bump:
-        case "major":
-            version = (major + 1, 0, 0)
-        case "minor":
-            version = (major, minor + 1, 0)
-        case "patch":
-            version = (major, minor, patch + 1)
-        case "calver":
-            year_month = release_date.year, release_date.month
-            version = (*year_month, patch + 1 if (major, minor) == year_month else 0)
-        case _:
-            msg = f"unknown version bump: {bump}"
-            raise ValueError(msg)
+        bump = _auto_bump(fragments)
+    if _finalizes_prerelease(current, bump):
+        return f"{prefix}{current.base_version}"
+    version = _bumped_release(current, bump, release_date)
     if Version(".".join(map(str, version))) <= current:
         msg = f"calculated version must be newer than {current}"
         raise ValueError(msg)
     return f"{prefix}{'.'.join(map(str, version))}"
+
+
+def _bumped_release(current: Version, bump: str, release_date: date) -> tuple[int, int, int]:
+    major, minor, patch = current.release
+    match bump:
+        case "major":
+            return major + 1, 0, 0
+        case "minor":
+            return major, minor + 1, 0
+        case "patch":
+            return major, minor, patch + 1
+        case "calver":
+            year_month = release_date.year, release_date.month
+            return *year_month, patch + 1 if (major, minor) == year_month else 0
+        case _:
+            msg = f"unknown version bump: {bump}"
+            raise ValueError(msg)
+
+
+def _auto_bump(fragments: list[str]) -> str:
+    categories = {fragment_category(Path(fragment)) for fragment in fragments}
+    return "major" if "breaking" in categories else "minor" if "feature" in categories else "patch"
+
+
+def _finalizes_prerelease(current: Version, bump: str) -> bool:
+    if not current.is_prerelease:
+        return False
+    _, minor, patch = current.release
+    return bump == "patch" or (bump == "minor" and patch == 0) or (bump == "major" and minor == patch == 0)
 
 
 def previous_tag(tag: str, tags: list[str], *, stable_only: bool = False) -> str | None:

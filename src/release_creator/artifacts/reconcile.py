@@ -34,28 +34,6 @@ def verify_artifacts(project: str, version: str, dist: Path, wait_seconds: int) 
     if wait_seconds < 0:
         msg = "wait_seconds must be nonnegative"
         raise ValueError(msg)
-    deadline = time.monotonic() + wait_seconds
-    while True:
-        try:
-            urls = _verify_files(project, version, dist)
-        except _IncompleteReleaseError:
-            if (remaining := deadline - time.monotonic()) <= 0:
-                raise
-            time.sleep(min(2, remaining))
-        else:
-            return urls
-
-
-def _verify_files(project: str, version: str, dist: Path) -> list[str]:
-    """Require PyPI to contain exactly the locally built files.
-
-    :param project: PyPI project name.
-    :param version: Release version.
-    :param dist: Directory holding the expected distribution files.
-    :returns: Published distribution URLs.
-    :raises ValueError: An artifact set is incomplete, mismatched, or malformed.
-    :raises _IncompleteReleaseError: PyPI has not published every expected file.
-    """
     try:
         normalized_project = canonicalize_name(project, validate=True)
         release_version = Version(version)
@@ -66,7 +44,29 @@ def _verify_files(project: str, version: str, dist: Path) -> list[str]:
         msg = f"artifact directory does not exist: {dist}"
         raise ValueError(msg)
     local = _local_files(dist, normalized_project, release_version)
-    remote = _remote_files(normalized_project, release_version)
+    deadline = time.monotonic() + wait_seconds
+    while True:
+        try:
+            urls = _verify_files(normalized_project, release_version, local)
+        except _IncompleteReleaseError:
+            if (remaining := deadline - time.monotonic()) <= 0:
+                raise
+            time.sleep(min(2, remaining))
+        else:
+            return urls
+
+
+def _verify_files(project: str, version: Version, local: dict[str, str]) -> list[str]:
+    """Require PyPI to contain exactly the locally built files.
+
+    :param project: PyPI project name.
+    :param version: Release version.
+    :param local: SHA256 digests of locally built artifacts, keyed by filename.
+    :returns: Published distribution URLs.
+    :raises ValueError: An artifact set is incomplete, mismatched, or malformed.
+    :raises _IncompleteReleaseError: PyPI has not published every expected file.
+    """
+    remote = _remote_files(project, version)
     if extra := remote.keys() - local.keys():
         msg = f"PyPI has unexpected files: {', '.join(sorted(extra))}"
         raise ValueError(msg)

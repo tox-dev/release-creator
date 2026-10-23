@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-from io import StringIO
-from typing import TYPE_CHECKING, cast
+lazy from io import StringIO
+lazy from typing import cast
 
-from docutils import nodes
-from docutils.core import publish_doctree
-from docutils.parsers.rst import roles
-from docutils.utils import SystemMessage
+lazy from docutils import nodes
+lazy from docutils.core import publish_doctree
+lazy from docutils.parsers.rst import roles
+lazy from docutils.parsers.rst.states import Inliner
+lazy from docutils.utils import SystemMessage
 
-from release_creator.anchors.names import release_anchor
-from release_creator.categories import RELEASE_CATEGORIES
-
-if TYPE_CHECKING:
-    from docutils.parsers.rst.states import Inliner
+lazy from release_creator.anchors.names import release_anchor
+lazy from release_creator.categories import RELEASE_CATEGORIES
 
 
 def render_rst_section(source: str, tag: str, repository: str) -> str:

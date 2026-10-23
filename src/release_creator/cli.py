@@ -1,6 +1,6 @@
 """Keep command registration separate from release work."""
 
-import argparse
+lazy import argparse
 
 lazy from release_creator.anchors.cli import register as register_anchors
 lazy from release_creator.artifacts.cli import register as register_artifacts

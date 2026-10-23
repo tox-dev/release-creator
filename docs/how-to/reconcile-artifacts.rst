@@ -3,8 +3,8 @@
 ####################################
 
 PyPI uploads distribution files one at a time. A failed publishing job can leave a partial release. The publisher should
-retry the complete validated ``dist`` directory without ``skip-existing``. PyPI accepts byte-identical reuploads and
-rejects files whose bytes changed.
+retry the same validated ``dist`` directory with ``skip-existing: true``. PyPI keeps files already uploaded and accepts
+only the missing files. The verification job below checks every published digest, including skipped files.
 
 After publishing, verify the full local distribution against PyPI's `Simple JSON API
 <https://packaging.python.org/en/latest/specifications/simple-repository-api/>`_:

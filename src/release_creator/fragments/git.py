@@ -1,10 +1,10 @@
 """Find the commits that introduced pending fragments."""
 
-import shutil
+lazy import shutil
 lazy from pathlib import Path
 
-from release_creator.process import run_text
 lazy from release_creator.fragments.names import pending_changesets, pending_fragments
+lazy from release_creator.process import run_text
 
 
 def fragment_commits_from_git(directory: Path, *, knope: bool = False) -> dict[str, str]:
@@ -19,6 +19,13 @@ def fragment_commits_from_git(directory: Path, *, knope: bool = False) -> dict[s
     if (git := shutil.which("git")) is None:
         msg = "Git is required to read fragment history"
         raise FileNotFoundError(msg)
+    shallow = run_text([git, "rev-parse", "--is-shallow-repository"])
+    if shallow.returncode:
+        msg = shallow.stderr.strip() or f"could not read Git history for {directory}"
+        raise ValueError(msg)
+    if shallow.stdout.strip() == "true":
+        msg = "full Git history is required to attribute changelog fragments"
+        raise ValueError(msg)
     fragments = (pending_changesets if knope else pending_fragments)(directory)
     result = run_text([
         git,

@@ -46,12 +46,21 @@ def news_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         pytest.param("topic.feature.md", "Add a feature.\n", 0, "unsupported changelog fragment", id="name"),
         pytest.param("+topic.feature.md", " \n", 0, "empty changelog fragment", id="empty"),
         pytest.param("README.md", "Read me.\n", 0, "", id="outside-directory"),
+        pytest.param("nested/+topic.feature.md", "Nested.\n", 0, "", id="nested-directory"),
+        pytest.param("notes.txt", "Other file.\n", 0, "", id="other-extension"),
         pytest.param("+.md", "Uncategorized.\n", 0, "unsupported changelog fragment", id="incomplete-name"),
-        pytest.param("+topic.feature.rst", "Add a feature.\n", 0, "", id="wrong-extension"),
+        pytest.param(
+            "+topic.feature.rst",
+            "Add a feature.\n",
+            0,
+            "unsupported changelog fragment extension",
+            id="wrong-extension",
+        ),
     ],
 )
 def test_changed_fragments(news_repository: Path, filename: str, content: str, count: int, error: str) -> None:
     destination = news_repository / (filename if filename == "README.md" else f"changelog.d/{filename}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(content, encoding="utf-8")
     _git("add", ".")
     _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
@@ -96,6 +105,43 @@ def test_changed_fragments_reads_towncrier_tables(news_repository: Path) -> None
     _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
 
     assert changed_fragments(news_repository / "pyproject.toml", "main") == 1
+
+
+def test_changed_fragments_uses_towncrier_defaults(news_repository: Path) -> None:
+    (news_repository / "pyproject.toml").write_text('[tool.towncrier]\nname = "fixture"\n', encoding="utf-8")
+    (news_repository / "NEWS.rst").write_text("News\n====\n", encoding="utf-8")
+    directory = news_repository / "newsfragments"
+    directory.mkdir()
+    (directory / "42.feature.rst").write_text("Add defaults.\n", encoding="utf-8")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+
+    assert changed_fragments(news_repository / "pyproject.toml", "main") == 1
+
+
+def test_changed_fragments_rejects_missing_towncrier_table(news_repository: Path) -> None:
+    (news_repository / "pyproject.toml").write_text('[project]\nname = "fixture"\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"missing \[tool.towncrier\]"):
+        changed_fragments(news_repository / "pyproject.toml", "main")
+
+
+def test_changed_fragments_from_subdirectory(news_repository: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    package = news_repository / "package"
+    directory = package / "changelog.d"
+    directory.mkdir(parents=True)
+    (package / "pyproject.toml").write_text(
+        '[tool.towncrier]\nname = "fixture"\ndirectory = "changelog.d"\n'
+        'filename = "CHANGELOG.md"\ntype = [{ directory = "feature", name = "Added" }]\n',
+        encoding="utf-8",
+    )
+    (package / "CHANGELOG.md").write_text("# Changelog\n", encoding="utf-8")
+    (directory / "+nested.feature.md").write_text("Add nested package.\n", encoding="utf-8")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+    monkeypatch.chdir(package)
+
+    assert changed_fragments(Path("pyproject.toml"), "main") == 1
 
 
 def test_changed_fragments_rejects_towncrier_duplicate(news_repository: Path) -> None:

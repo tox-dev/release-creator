@@ -1,12 +1,12 @@
 """Keep tag selection options beside the command."""
 
-import sys
 lazy import argparse
+lazy import sys
 lazy from datetime import UTC, datetime
 lazy from pathlib import Path
 
-from release_creator.package_name import valid_package_name
 lazy from release_creator.fragments.names import pending_fragments
+lazy from release_creator.package_name import valid_package_name
 lazy from release_creator.tags.select import next_tag, parse_tag, previous_tag, require_newer_tag
 
 

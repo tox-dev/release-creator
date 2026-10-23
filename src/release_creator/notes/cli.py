@@ -1,8 +1,8 @@
 """Keep note options beside their renderer."""
 
-import sys
-from pathlib import Path
 lazy import argparse
+lazy import sys
+lazy from pathlib import Path
 
 lazy from release_creator.notes.render import ReleaseContext, render_markdown, render_rst
 
