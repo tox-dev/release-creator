@@ -17,8 +17,14 @@ lazy from release_creator.notes.rst import render_rst_section
 
 _RE_RELEASE_PULL: Final = re.compile(
     r"""
-    \[\#(?P<number>\d+)\]\(  # Visible PR reference
-    https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/(?P=number)  # Matching URL
+    https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/(?P<number>\d+)  # PR URL
+    """,
+    re.VERBOSE,
+)
+_RE_MARKDOWN_PULL_LABEL: Final = re.compile(
+    r"""
+    \[\#(?P<label>\d+)\]\(  # Displayed PR number
+    https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/(?P<number>\d+)  # URL number
     \)
     """,
     re.VERBOSE,
@@ -200,25 +206,35 @@ def _generated_pr_authors(generated_notes: str, repository: str) -> tuple[dict[s
 def _release_entries(notes: str, repository: str) -> dict[str, list[tuple[set[str], bool]]]:
     entries: dict[str, list[tuple[set[str], bool]]] = {}
     for line in notes.splitlines():
+        for label in _RE_MARKDOWN_PULL_LABEL.finditer(line):
+            if label["repository"] == repository and label["label"] != label["number"]:
+                msg = f"pull request label #{label['label']} points to #{label['number']}"
+                raise ValueError(msg)
         references = [match for match in _RE_RELEASE_PULL.finditer(line) if match["repository"] == repository]
         if not references:
             continue
-        credit_text = _RE_GITHUB_CREDIT.search(line, references[-1].end()) or _RE_GITHUB_CREDIT.search(
-            line[: references[0].start()]
-        )
-        handles = (
-            {match["handle"] for match in _RE_GITHUB_HANDLE.finditer(credit_text["credits"])}
-            if credit_text is not None
-            else set()
-        )
-        attributed = bool(handles) or (credit_text is not None and credit_text["credits"].strip(" .()")[:1].isupper())
-        for reference in references:
-            number = reference["number"]
-            entries.setdefault(number, []).append((
-                handles,
-                attributed,
-            ))
+        initial_credit = _entry_credit(line[: references[0].start()], named=False)
+        pending: list[re.Match[str]] = []
+        for index, reference in enumerate(references):
+            pending.append(reference)
+            following = line[reference.end() : references[index + 1].start() if index + 1 < len(references) else None]
+            if (credit := _entry_credit(following, named=True)) is not None:
+                for item in pending:
+                    entries.setdefault(item["number"], []).append(credit)
+                pending.clear()
+        for item in pending:
+            entries.setdefault(item["number"], []).append(
+                initial_credit if len(pending) == len(references) and initial_credit is not None else (set(), False)
+            )
     return entries
+
+
+def _entry_credit(text: str, *, named: bool) -> tuple[set[str], bool] | None:
+    if (marker := _RE_GITHUB_CREDIT.search(text)) is None:
+        return None
+    credit_text = str(marker.group("credits"))
+    handles = {str(match.group("handle")) for match in _RE_GITHUB_HANDLE.finditer(credit_text)}
+    return handles, bool(handles) or (named and credit_text.strip(" .()")[:1].isupper())
 
 
 def _new_contributors(generated_notes: str, context: ReleaseContext) -> str:

@@ -1,1 +1,1 @@
-Credit the correct pull request authors in generated GitHub release notes.
+Reject GitHub release notes whose pull request credits do not match the merged authors.
