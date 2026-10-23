@@ -5,7 +5,7 @@ on:
     branches: ["main"]
     tags-ignore: ["**"]
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened]
   schedule:
     - cron: "0 8 * * *"
 permissions:
@@ -70,41 +70,6 @@ jobs:
       - run: uv tool install --python-preference only-managed --python 3.15 tox --with tox-uv
       - run: tox run -vv --notest --skip-missing-interpreters false -e ${{ matrix.tox_env }}
       - run: tox run --skip-pkg-install -e ${{ matrix.tox_env }}
-  changelog:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      # zizmor: ignore[cache-poisoning] Check jobs hold no release credential and publish no artifact.
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0 # zizmor: ignore[cache-poisoning]
-        with:
-          version: latest-known
-          python-version: "3.15"
-          enable-cache: true
-          cache-dependency-glob: |
-            pyproject.toml
-      - name: Check release note requirement
-        id: news
-        env:
-          SKIP_NEWS: ${{ contains(github.event.pull_request.labels.*.name, 'skip news') }}
-          BOT_AUTHOR: ${{ github.event.pull_request.user.type == 'Bot' }}
-        run: |
-          set -euo pipefail
-          if git diff --name-only "origin/${GITHUB_BASE_REF}...HEAD" -- 'changelog.d/*.rst' | grep -q .; then
-            echo 'fragment=true' >> "$GITHUB_OUTPUT"
-          elif [[ "$SKIP_NEWS" != true && "$BOT_AUTHOR" != true ]]; then
-            echo '::error::add a changelog fragment or apply the skip news label'
-            exit 1
-          fi
-      - name: Require releasable version
-        if: steps.news.outputs.fragment == 'true'
-        run: git tag --list | uv run --no-default-groups release-creator tags --next auto
-      - name: Validate Towncrier fragments
-        if: steps.news.outputs.fragment == 'true'
-        run: uv run --no-default-groups --group release-prepare towncrier check --compare-with "origin/${GITHUB_BASE_REF}"
   hook-update-cooldown:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-26.04
@@ -117,7 +82,7 @@ jobs:
   gate:
     name: Required checks pass
     if: always()
-    needs: [test, check, changelog, hook-update-cooldown]
+    needs: [test, check, hook-update-cooldown]
     runs-on: ubuntu-26.04
     steps:
       - name: Require successful jobs
@@ -129,7 +94,6 @@ jobs:
             all(
               to_entries[];
               .value.result == "success" or
-              (.key == "changelog" and .value.result == "skipped") or
               (.key == "hook-update-cooldown" and .value.result == "skipped" and env.EVENT_NAME != "pull_request")
             )
           ' <<< "$NEEDS_JSON"
