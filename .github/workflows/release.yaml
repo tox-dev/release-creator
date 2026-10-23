@@ -14,6 +14,7 @@ jobs:
     with:
       changelog: docs/changelog.rst
       artifact-base-url: https://pypi.org/project/release-creator/
+      local-tool-source: true
   previous:
     runs-on: ubuntu-26.04
     permissions:

@@ -10,3 +10,4 @@ def test_build_uses_required_inputs_of_pinned_validator() -> None:
     build = workflow["jobs"]["build"]
     assert build["uses"].endswith("@801969505384f96d16882e224e98a74bffd09d21")
     assert {"changelog", "artifact-base-url"} <= build["with"].keys()
+    assert build["with"]["local-tool-source"] is True
