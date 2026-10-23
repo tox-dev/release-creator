@@ -180,28 +180,29 @@ def _split_trailing_code(content: str, suffix: str) -> tuple[str, str]:
             position = sum(map(len, lines[: opening + 1]))
             before = content[:position].rstrip()
             return before, content[len(before) :]
-    if suffix == ".rst":
-        opening = next(
-            (
-                index
-                for index in range(len(lines) - 1, -1, -1)
-                if not lines[index][:1].isspace()
-                and (
-                    lines[index].startswith((".. code-block::", ".. code::", ".. sourcecode::"))
-                    or lines[index].rstrip().endswith("::")
-                )
-            ),
-            None,
-        )
-        if (
-            opening is not None
-            and any(line.startswith(" ") and line.strip() for line in lines[opening + 1 :])
-            and all(not line.strip() or line.startswith(" ") for line in lines[opening + 1 :])
-        ):
-            position = sum(map(len, lines[:opening]))
-            before = content[:position].rstrip()
-            return before, content[len(before) :]
+    if suffix == ".rst" and (opening := _trailing_rst_code_opening(lines)) is not None:
+        position = sum(map(len, lines[:opening]))
+        before = content[:position].rstrip()
+        return before, content[len(before) :]
     return content, ""
+
+
+def _trailing_rst_code_opening(lines: list[str]) -> int | None:
+    for index, line in enumerate(lines):
+        stripped = line.lstrip()
+        if not (
+            stripped.startswith((".. code-block::", ".. code::", ".. sourcecode::")) or stripped.rstrip().endswith("::")
+        ):
+            continue
+        body = [following for following in lines[index + 1 :] if following.strip()]
+        if body and all(_indent_width(following) > _indent_width(line) for following in body):
+            return index
+    return None
+
+
+def _indent_width(line: str) -> int:
+    expanded = line.expandtabs()
+    return len(expanded) - len(expanded.lstrip())
 
 
 def _final_fence_opening(lines: list[str]) -> int | None:

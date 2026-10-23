@@ -199,6 +199,31 @@ def test_add_pull_request_links_before_trailing_code(tmp_path: Path, extension: 
     assert fragment.read_text() == f"Add a feature {link}.\n\n{code}\n"
 
 
+@pytest.mark.parametrize(
+    "code",
+    [
+        pytest.param(".. code-block:: python\n\n      print(1)", id="nested-directive"),
+        pytest.param(".. code-block:: cpp\n\n      using std::\n        continuation", id="nested-colons"),
+    ],
+)
+def test_add_pull_request_links_to_list_item_before_nested_code(tmp_path: Path, code: str) -> None:
+    fragment = tmp_path / "+first.feature.rst"
+    fragment.write_text(f"- Item\n\n  {code}\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == f"- Item (:pr:`42`) by :user:`alice`.\n\n  {code}\n"
+
+
+def test_add_pull_request_links_after_nonindented_rst_literal_marker(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.rst"
+    fragment.write_text("Example::\n\nA new feature.\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == "Example::\n\nA new feature (:pr:`42`) by :user:`alice`.\n"
+
+
 def test_add_pull_request_links_after_earlier_fence_before_final_fence(tmp_path: Path) -> None:
     fragment = tmp_path / "+first.feature.md"
     fragment.write_text("Example.\n\n```sh\nfirst\n```\n\nMore details.\n\n```sh\nsecond\n```\n")

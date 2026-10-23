@@ -206,11 +206,7 @@ def _generated_pr_authors(generated_notes: str, repository: str) -> tuple[dict[s
 def _release_entries(notes: str, repository: str) -> dict[str, list[tuple[set[str], bool]]]:
     entries: dict[str, list[tuple[set[str], bool]]] = {}
     for line in notes.splitlines():
-        for label in _RE_MARKDOWN_PULL_LABEL.finditer(line):
-            if label["repository"] == repository and label["label"] != label["number"]:
-                msg = f"pull request label #{label['label']} points to #{label['number']}"
-                raise ValueError(msg)
-        references = [match for match in _RE_RELEASE_PULL.finditer(line) if match["repository"] == repository]
+        references = _pull_references(line, repository)
         if not references:
             continue
         initial_credit = _entry_credit(line[: references[0].start()], named=False)
@@ -222,6 +218,10 @@ def _release_entries(notes: str, repository: str) -> dict[str, list[tuple[set[st
                 for item in pending:
                     entries.setdefault(item["number"], []).append(credit)
                 pending.clear()
+            elif index + 1 < len(references) and ";" in following:
+                for item in pending:
+                    entries.setdefault(item["number"], []).append(initial_credit or (set(), False))
+                pending.clear()
         for item in pending:
             entries.setdefault(item["number"], []).append(
                 initial_credit if len(pending) == len(references) and initial_credit is not None else (set(), False)
@@ -229,12 +229,21 @@ def _release_entries(notes: str, repository: str) -> dict[str, list[tuple[set[st
     return entries
 
 
+def _pull_references(line: str, repository: str) -> list[re.Match[str]]:
+    for label in _RE_MARKDOWN_PULL_LABEL.finditer(line):
+        if label["repository"] == repository and label["label"] != label["number"]:
+            msg = f"pull request label #{label['label']} points to #{label['number']}"
+            raise ValueError(msg)
+    return [match for match in _RE_RELEASE_PULL.finditer(line) if match["repository"] == repository]
+
+
 def _entry_credit(text: str, *, named: bool) -> tuple[set[str], bool] | None:
     if (marker := _RE_GITHUB_CREDIT.search(text)) is None:
         return None
     credit_text = str(marker.group("credits"))
     handles = {str(match.group("handle")) for match in _RE_GITHUB_HANDLE.finditer(credit_text)}
-    return handles, bool(handles) or (named and credit_text.strip(" .()")[:1].isupper())
+    plain_name = credit_text.strip(" .()")
+    return handles, bool(handles) or (named and len(plain_name.split()) > 1 and plain_name.istitle())
 
 
 def _new_contributors(generated_notes: str, context: ReleaseContext) -> str:

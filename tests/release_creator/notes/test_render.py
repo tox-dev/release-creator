@@ -331,6 +331,44 @@ def test_render_markdown_scopes_distinct_credits_on_one_line() -> None:
     assert "[#43](https://github.com/tox-dev/example/pull/43)) by @bob" in result
 
 
+def test_render_markdown_scopes_credit_before_first_pull_request() -> None:
+    changelog = (
+        "## 1.2.3 (today)\n\n### Added\n\n"
+        "- Add support by @alice ([#42](https://github.com/tox-dev/example/pull/42)); "
+        "refine it ([#43](https://github.com/tox-dev/example/pull/43)) by @bob.\n"
+    )
+    generated = (
+        "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
+        "* Refine support by @bob in https://github.com/tox-dev/example/pull/43\n"
+    )
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert (
+        "- Add support by @alice ([#42](https://github.com/tox-dev/example/pull/42)); "
+        "refine it ([#43](https://github.com/tox-dev/example/pull/43)) by @bob."
+    ) in result
+
+
+def test_render_markdown_shares_credit_before_paired_pull_requests() -> None:
+    changelog = (
+        "## 1.2.3 (today)\n\n### Added\n\n"
+        "- Add support by @alice ([#42](https://github.com/tox-dev/example/pull/42)), "
+        "([#43](https://github.com/tox-dev/example/pull/43)).\n"
+    )
+    generated = (
+        "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
+        "* Refine support by @alice in https://github.com/tox-dev/example/pull/43\n"
+    )
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert (
+        "- Add support by @alice ([#42](https://github.com/tox-dev/example/pull/42)), "
+        "([#43](https://github.com/tox-dev/example/pull/43))."
+    ) in result
+
+
 def test_render_markdown_does_not_share_credit_past_its_reference() -> None:
     changelog = (
         "## 1.2.3 (today)\n\n### Added\n\n"
@@ -370,10 +408,17 @@ def test_render_markdown_rejects_mismatched_pull_link_number() -> None:
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), "")
 
 
-def test_render_markdown_does_not_treat_capitalized_prose_as_credit() -> None:
+@pytest.mark.parametrize(
+    "entry",
+    [
+        pytest.param("Group results by Python version {link}.", id="before-link"),
+        pytest.param("Group results {link} by Python version.", id="after-link"),
+    ],
+)
+def test_render_markdown_does_not_treat_capitalized_prose_as_credit(entry: str) -> None:
     changelog = (
-        "## 1.2.3 (today)\n\n### Added\n\n"
-        "- Group results by Python version ([#42](https://github.com/tox-dev/example/pull/42)).\n"
+        "## 1.2.3 (today)\n\n### Added\n\n- "
+        f"{entry.format(link='([#42](https://github.com/tox-dev/example/pull/42))')}\n"
     )
     generated = "* Group results in https://github.com/tox-dev/example/pull/42\n"
 
