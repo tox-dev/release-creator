@@ -124,6 +124,7 @@ directory = "changelog.d"
 filename = "docs/changelog.rst"
 template = "release_creator.fragments:template.rst.jinja2"
 title_format = false
+underlines = [ "-", "~", "^" ]
 orphan_prefix = "+"
 type = [
   { directory = "feature", name = "Added", showcontent = true },

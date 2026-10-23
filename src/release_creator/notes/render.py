@@ -142,7 +142,7 @@ def _finish(notes: str, context: ReleaseContext, generated_notes: str | None) ->
     )
     if notes:
         notes += "\n\n"
-    return f"{notes}**Full Changelog**: https://github.com/{context.repository}/{comparison}\n"
+    return f"{notes}[Full Changelog](https://github.com/{context.repository}/{comparison})\n"
 
 
 def _verify_authors(notes: str, generated_notes: str, context: ReleaseContext) -> None:
@@ -413,7 +413,7 @@ def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
 
 
 def _is_comparison_line(line: str) -> bool:
-    return line.strip().startswith(("**Full Changelog**:", "Full Changelog:"))
+    return line.strip().startswith(("**Full Changelog**:", "Full Changelog:", "[Full Changelog](", "`Full Changelog <"))
 
 
 def _is_version(tag: str) -> bool:

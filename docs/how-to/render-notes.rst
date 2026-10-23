@@ -59,7 +59,7 @@ the :doc:`tags command <select-release-tag>` can find it. ``--artifact-url`` add
 
     [PyPI release](https://pypi.org/project/project/1.2.3/)
 
-    **Full Changelog**: https://github.com/owner/project/compare/1.2.2...1.2.3
+    [Full Changelog](https://github.com/owner/project/compare/1.2.2...1.2.3)
 
 Review that file before passing it to ``gh release create --notes-file release-notes.md``. The ``by`` credit stays in
 the changelog; the GitHub body uses an ``@alice`` mention.

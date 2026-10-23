@@ -47,13 +47,13 @@ def test_render_markdown_maps_categories_and_credits() -> None:
 
         [PyPI release](https://pypi.org/project/example/1.2.3/)
 
-        **Full Changelog**: https://github.com/tox-dev/example/compare/1.2.2...1.2.3
+        [Full Changelog](https://github.com/tox-dev/example/compare/1.2.2...1.2.3)
         """)
 
 
 def test_render_markdown_first_release_without_artifact() -> None:
     result = render_markdown("## 0.1.0 (2026-02-13)\n", ReleaseContext(tag="0.1.0", repository="tox-dev/example"))
-    assert result == "**Full Changelog**: https://github.com/tox-dev/example/commits/0.1.0\n"
+    assert result == "[Full Changelog](https://github.com/tox-dev/example/commits/0.1.0)\n"
 
 
 def test_render_markdown_preserves_legacy_other_changes() -> None:
@@ -63,7 +63,7 @@ def test_render_markdown_preserves_legacy_other_changes() -> None:
 
     assert result == (
         "### Other changes\n\n- Update development tooling.\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -93,7 +93,7 @@ def test_render_markdown_accepts_two_part_historical_tags() -> None:
 
     assert result == (
         "### Other changes\n\n- Old maintenance entry.\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/compare/0.1...0.2\n"
+        "[Full Changelog](https://github.com/tox-dev/example/compare/0.1...0.2)\n"
     )
 
 
@@ -128,7 +128,7 @@ def test_render_markdown_accepts_existing_version_headings(heading: str) -> None
 
     assert result == (
         "### Features\n\n- Support another platform.\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/v1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/v1.2.3)\n"
     )
 
 
@@ -169,7 +169,7 @@ def test_render_markdown_accepts_historical_version_shapes(tag: str) -> None:
 
     assert result == (
         "### Bug fixes\n\n- Correct the current release.\n\n"
-        f"**Full Changelog**: https://github.com/tox-dev/example/commits/{tag}\n"
+        f"[Full Changelog](https://github.com/tox-dev/example/commits/{tag})\n"
     )
 
 
@@ -210,8 +210,8 @@ def test_render_markdown_selects_package_history() -> None:
 
     assert result == (
         "### Bug fixes\n\n- Preserve formatted input.\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/toml-fmt/compare/"
-        "pyproject-fmt/2.30.3...pyproject-fmt/2.30.4\n"
+        "[Full Changelog](https://github.com/tox-dev/toml-fmt/compare/"
+        "pyproject-fmt/2.30.3...pyproject-fmt/2.30.4)\n"
     )
 
 
@@ -256,6 +256,7 @@ def test_render_markdown_requires_one_package_history(changelog: str, count: int
     [
         pytest.param("**Full Changelog**: https://github.com/tox-dev/example/compare/old...1.2.3", id="bold"),
         pytest.param("Full Changelog: https://github.com/tox-dev/example/compare/old...1.2.3", id="plain"),
+        pytest.param("[Full Changelog](https://github.com/tox-dev/example/compare/old...1.2.3)", id="link"),
     ],
 )
 def test_render_markdown_replaces_source_comparison(comparison: str) -> None:
@@ -265,7 +266,7 @@ def test_render_markdown_replaces_source_comparison(comparison: str) -> None:
 
     assert result == (
         "### Bug fixes\n\n- Correct a bug.\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/compare/1.2.2...1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/compare/1.2.2...1.2.3)\n"
     )
 
 
@@ -346,7 +347,7 @@ def test_render_rst_keeps_named_credit_when_generated_author_is_unavailable() ->
         "### New Contributors\n\n"
         "- @JustAnotherArchivist made their first contribution in "
         "[#130](https://github.com/tox-dev/filelock/pull/130)\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/filelock/compare/3.4.2...3.5.0\n"
+        "[Full Changelog](https://github.com/tox-dev/filelock/compare/3.4.2...3.5.0)\n"
     )
 
 
@@ -469,7 +470,7 @@ def test_render_markdown_keeps_human_new_contributors(reference: str, heading: s
         '<a name="release-1-2-3-new-contributors"></a>\n\n'
         f"### New Contributors\n\n- @alice made their first contribution in [#42]({pull_url})\n"
         "- @bob made their first contribution in [#44](https://github.com/tox-dev/example/pull/44)\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -482,7 +483,7 @@ def test_render_markdown_keeps_human_new_contributors(reference: str, heading: s
 )
 def test_render_markdown_omits_unverified_contributors(generated: str) -> None:
     result = render_markdown("## 1.2.3 (today)\n", ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
-    assert result == "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+    assert result == "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
 
 
 def test_render_markdown_keeps_first_contributor_without_news_entry() -> None:
@@ -494,7 +495,7 @@ def test_render_markdown_keeps_first_contributor_without_news_entry() -> None:
         '<a name="release-1-2-3-new-contributors"></a>\n\n'
         "### New Contributors\n\n"
         "- @alice made their first contribution in [#42](https://github.com/tox-dev/example/pull/42)\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -529,7 +530,7 @@ def test_render_rst_maps_categories_and_credits() -> None:
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
         "- Discard bad cache entries ([#42](https://github.com/tox-dev/example/pull/42)) by @alice and @bob. "
         "Preserve `None` in the cache.\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/compare/1.2.2...1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/compare/1.2.2...1.2.3)\n"
     )
 
 
@@ -556,7 +557,7 @@ def test_render_rst_keeps_top_level_warning_outside_bullet() -> None:
         "- A shim remains for Python 2.\n\n"
         "> **Warning:** Version `20.0.0b1` starts a new release history. The old history is in the "
         "[legacy docs](https://virtualenv.pypa.io/en/legacy/changes.html).\n\n"
-        "**Full Changelog**: https://github.com/pypa/virtualenv/commits/20.0.0b1\n"
+        "[Full Changelog](https://github.com/pypa/virtualenv/commits/20.0.0b1)\n"
     )
 
 
@@ -592,7 +593,7 @@ def test_render_rst_keeps_nested_code_block(language: str, source: str, expected
         "- Display the virtual environment, for example:\n\n"
         f"  ```{language}\n  {expected}\n  ```\n\n"
         "  Patch by @alice. ([#2009](https://github.com/pypa/virtualenv/pull/2009))\n\n"
-        "**Full Changelog**: https://github.com/pypa/virtualenv/commits/20.2.0\n"
+        "[Full Changelog](https://github.com/pypa/virtualenv/commits/20.2.0)\n"
     )
 
 
@@ -617,7 +618,7 @@ def test_render_rst_keeps_nested_bullets() -> None:
         "- Upgrade embedded wheels:\n"
         "  - setuptools to `68.1.2` from `68.1.0` on `3.8+`\n"
         "  - wheel to `0.41.2` from `0.41.1` on `3.7+` ([#2628](https://github.com/pypa/virtualenv/pull/2628))\n\n"
-        "**Full Changelog**: https://github.com/pypa/virtualenv/commits/20.24.4\n"
+        "[Full Changelog](https://github.com/pypa/virtualenv/commits/20.24.4)\n"
     )
 
 
@@ -668,7 +669,7 @@ def test_render_rst_keeps_paragraph_after_nested_bullets() -> None:
         "  - add a CLI flag\n"
         "  - upgrade embedded wheels after 28 days\n\n"
         "  More details under `wheels` by @alice. ([#1821](https://github.com/pypa/virtualenv/issues/1821))\n\n"
-        "**Full Changelog**: https://github.com/pypa/virtualenv/commits/20.0.24\n"
+        "[Full Changelog](https://github.com/pypa/virtualenv/commits/20.0.24)\n"
     )
 
 
@@ -695,7 +696,7 @@ def test_render_rst_keeps_group_credit_after_nested_bullets() -> None:
         "  - setuptools to `75.2.0`\n"
         "  - Removed pip of `24.0`\n\n"
         "  by @alice. ([#2783](https://github.com/pypa/virtualenv/pull/2783))\n\n"
-        "**Full Changelog**: https://github.com/pypa/virtualenv/commits/20.27.0\n"
+        "[Full Changelog](https://github.com/pypa/virtualenv/commits/20.27.0)\n"
     )
 
 
@@ -732,7 +733,7 @@ def test_render_rst_joins_wrapped_author_credit() -> None:
     assert result == (
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
         "- Correct a long description. [#42](https://github.com/tox-dev/example/pull/42) by @alice and @bob.\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -753,7 +754,7 @@ def test_render_rst_joins_wrapped_author_marker() -> None:
     assert result == (
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
         "- Correct a long description. [#42](https://github.com/tox-dev/example/pull/42) by @alice and @bob.\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -765,7 +766,7 @@ def test_render_rst_preserves_legacy_other_changes() -> None:
     assert result == (
         '<a name="release-1-2-3-other-changes"></a>\n\n'
         "### Other changes\n\n- Update development tooling.\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -784,7 +785,7 @@ def test_render_rst_accepts_two_part_historical_tags(heading: str) -> None:
     assert result == (
         '<a name="release-0-2-other-changes"></a>\n\n'
         "### Other changes\n\n- Old maintenance entry.\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/0.2\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/0.2)\n"
     )
 
 
@@ -824,7 +825,7 @@ def test_render_rst_accepts_historical_version_shapes(tag: str) -> None:
     assert result == (
         f'<a name="release-{tag.replace(".", "-")}-fixed"></a>\n\n'
         "### Bug fixes\n\n- Correct the current release.\n\n"
-        f"**Full Changelog**: https://github.com/tox-dev/example/commits/{tag}\n"
+        f"[Full Changelog](https://github.com/tox-dev/example/commits/{tag})\n"
     )
 
 
@@ -852,7 +853,7 @@ def test_render_rst_accepts_undated_linked_four_part_heading() -> None:
     assert result == (
         '<a name="release-0-12-1-0-fixed"></a>\n\n'
         "### Bug fixes\n\n- Correct the current release.\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/0.12.1.0\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/0.12.1.0)\n"
     )
 
 
@@ -872,7 +873,7 @@ def test_render_rst_accepts_linked_prerelease_heading() -> None:
     assert result == (
         '<a name="release-v2-0-0a1-added"></a>\n\n'
         "### Features\n\n- Add the first release.\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/v2.0.0a1\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/v2.0.0a1)\n"
     )
 
 
@@ -892,7 +893,7 @@ def test_render_rst_omits_empty_prerelease_section() -> None:
 
     result = render_rst(changelog, ReleaseContext(tag="v2.0.0a2", repository="tox-dev/example"))
 
-    assert result == "**Full Changelog**: https://github.com/tox-dev/example/commits/v2.0.0a2\n"
+    assert result == "[Full Changelog](https://github.com/tox-dev/example/commits/v2.0.0a2)\n"
 
 
 def test_render_rst_accepts_version_without_adornment() -> None:
@@ -945,7 +946,7 @@ def test_render_rst_converts_external_link(source: str, expected: str) -> None:
     assert result == (
         '<a name="release-1-2-3-added"></a>\n\n### Features\n\n'
         f"- Read {expected}.\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -974,7 +975,7 @@ def test_render_rst_keeps_role_display(source: str, expected: str) -> None:
     assert result == (
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
         f"- Call {expected}.\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -1006,7 +1007,7 @@ def test_render_rst_preserves_field_literals(source: str, expected: str) -> None
     assert result == (
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
         f"- {expected}.\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -1056,7 +1057,7 @@ def test_render_rst_keeps_duplicate_reference_labels() -> None:
         "- First [#42](https://github.com/tox-dev/example/issues/42).\n\n"
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
         "- Second [#42](https://github.com/tox-dev/example/issues/42).\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -1112,7 +1113,7 @@ def test_render_rst_links_pep_role(role: str, expected: str) -> None:
     assert result == (
         '<a name="release-1-2-3-added"></a>\n\n### Features\n\n'
         f"- Support {expected}.\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -1138,7 +1139,7 @@ def test_render_empty_release_section_has_comparison_link(changelog: str, format
 
     assert result == (
         "[PyPI release](https://pypi.org/project/example/1.2.3/)\n\n"
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -1147,7 +1148,7 @@ def test_render_rst_omits_empty_category() -> None:
     result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
     assert result == (
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n- Correct a bug.\n\n'
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -1156,6 +1157,7 @@ def test_render_rst_omits_empty_category() -> None:
     [
         pytest.param("**Full Changelog**: https://github.com/tox-dev/example/compare/old...1.2.3", id="bold"),
         pytest.param("Full Changelog: https://github.com/tox-dev/example/compare/old...1.2.3", id="plain"),
+        pytest.param("`Full Changelog <https://github.com/tox-dev/example/compare/old...1.2.3>`__", id="rst-link"),
     ],
 )
 def test_render_rst_replaces_source_comparison(comparison: str) -> None:
@@ -1165,7 +1167,7 @@ def test_render_rst_replaces_source_comparison(comparison: str) -> None:
 
     assert result == (
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n- Correct a bug.\n\n'
-        "**Full Changelog**: https://github.com/tox-dev/example/compare/1.2.2...1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/compare/1.2.2...1.2.3)\n"
     )
 
 
@@ -1192,7 +1194,7 @@ def test_render_rst_stops_at_linked_previous_version() -> None:
 
     assert result == (
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n- Correct a bug.\n\n'
-        "**Full Changelog**: https://github.com/tox-dev/example/commits/1.2.3\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
