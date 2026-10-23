@@ -8,7 +8,7 @@ lazy import yaml
 def test_build_uses_released_validator_without_retired_inputs() -> None:
     workflow = yaml.safe_load((Path(__file__).resolve().parents[2] / ".github/workflows/release.yaml").read_text())
     build = workflow["jobs"]["build"]
-    assert build["uses"].endswith("@9d946ea8e156141225290b92b00105a56783f4d3")
+    assert build["uses"].endswith("@74472c1a3602ca9b66db058ea31578865e1d208b")
     assert "with" not in build
 
 
@@ -16,5 +16,5 @@ def test_verify_pypi_uses_released_verifier() -> None:
     workflow = yaml.safe_load((Path(__file__).resolve().parents[2] / ".github/workflows/release.yaml").read_text())
     verify = workflow["jobs"]["verify-pypi"]
     action = next(step for step in verify["steps"] if "reconcile-pypi-artifacts@" in step.get("uses", ""))
-    assert action["uses"].endswith("@9d946ea8e156141225290b92b00105a56783f4d3")
+    assert action["uses"].endswith("@74472c1a3602ca9b66db058ea31578865e1d208b")
     assert action["with"].keys() == {"project", "version", "dist"}
