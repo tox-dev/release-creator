@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@2b4ed19340a7ec97020f4fd0a403531845c49356
+    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@ce0c6dead6aac95779a1c0477affe9c0650b500a
     permissions:
       contents: read
     with:
@@ -51,11 +51,10 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: echo "sha=$(git rev-parse "${TAG}^{commit}")" >>"$GITHUB_OUTPUT"
       - id: notes
-        uses: tox-dev/github-workflows/render-release-notes@2b4ed19340a7ec97020f4fd0a403531845c49356
+        uses: tox-dev/github-workflows/render-release-notes@ce0c6dead6aac95779a1c0477affe9c0650b500a
         with:
           tag: ${{ github.ref_name }}
           changelog: docs/changelog.md
-          repository: ${{ github.repository }}
           artifact-url: https://pypi.org/project/release-creator/${{ github.ref_name }}/
           output: ${{ runner.temp }}/candidate-notes.md
   contributors:
@@ -104,11 +103,10 @@ jobs:
           python-version: "3.15"
           enable-cache: false
       - *install-tagged-release-creator
-      - uses: tox-dev/github-workflows/render-release-notes@2b4ed19340a7ec97020f4fd0a403531845c49356
+      - uses: tox-dev/github-workflows/render-release-notes@ce0c6dead6aac95779a1c0477affe9c0650b500a
         with:
           tag: ${{ github.ref_name }}
           changelog: docs/changelog.md
-          repository: ${{ github.repository }}
           artifact-url: https://pypi.org/project/release-creator/${{ github.ref_name }}/
           generated-notes: ${{ runner.temp }}/generated-notes.md
           output: ${{ runner.temp }}/release-notes.md
@@ -153,12 +151,11 @@ jobs:
         with:
           name: python-package-distributions
           path: dist
-      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@2b4ed19340a7ec97020f4fd0a403531845c49356
+      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@ce0c6dead6aac95779a1c0477affe9c0650b500a
         with:
           project: release-creator
           version: ${{ github.ref_name }}
           dist: dist
-          wait-seconds: "120"
           local-tool-source: "true"
   github-release:
     needs: [previous, notes, verify-pypi]
@@ -171,11 +168,10 @@ jobs:
         with:
           name: final-github-release-notes
           path: ${{ runner.temp }}
-      - uses: tox-dev/github-workflows/publish-github-release@2b4ed19340a7ec97020f4fd0a403531845c49356
+      - uses: tox-dev/github-workflows/publish-github-release@ce0c6dead6aac95779a1c0477affe9c0650b500a
         env:
           GH_TOKEN: ${{ github.token }}
         with:
-          repository: ${{ github.repository }}
           tag: ${{ github.ref_name }}
           commit: ${{ needs.previous.outputs.commit }}
           title: v${{ github.ref_name }}
