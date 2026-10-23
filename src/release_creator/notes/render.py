@@ -24,8 +24,8 @@ _RE_RELEASE_PULL: Final = re.compile(
 )
 _RE_GITHUB_CREDIT: Final = re.compile(
     r"""
-    \bby\s+                      # Author credit marker
-    (?P<credits>.*)$              # GitHub mentions following the marker
+    \s(?:-\s)?by\s+          # Credit after the final PR link
+    (?P<credits>[^\n]+)$         # Credit after the final PR link
     """,
     re.VERBOSE,
 )
@@ -43,6 +43,15 @@ _RE_GENERATED_PR_AUTHOR: Final = re.compile(
     (?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)  # Repository in the generated link
     /pull/(?P<number>\d+)              # Pull request number
     \s*$                                # Actual credit follows the entire title
+    """,
+    re.VERBOSE,
+)
+_RE_GENERATED_PR_LINK: Final = re.compile(
+    r"""
+    \bin\s+https://github\.com/
+    (?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)  # GitHub repository
+    /pull/(?P<number>\d+)                            # Final PR on the generated line
+    \s*$                                               # End of generated line
     """,
     re.VERBOSE,
 )
@@ -173,20 +182,17 @@ def _generated_pr_authors(generated_notes: str, repository: str) -> tuple[dict[s
             in_new_contributors = line.removeprefix("### ").removeprefix("## ") == "New Contributors"
         if in_new_contributors:
             continue
+        if (link := _RE_GENERATED_PR_LINK.search(line)) is None or link["repository"] != repository:
+            continue
         match = _RE_GENERATED_PR_AUTHOR.search(line)
-        if match is not None and match["repository"] != repository:
-            match = None
-        for link in _RE_RELEASE_PULL.finditer(line):
-            if link["repository"] != repository:
-                continue
-            number = link["number"]
-            author = None if match is None or match["bot"] is not None else match["handle"]
-            if match is not None and match["bot"] is not None:
-                bots[number] = match["handle"]
-            if number in authors and authors[number] != author:
-                msg = f"conflicting generated authors for pull request #{number}"
-                raise ValueError(msg)
-            authors[number] = author
+        number = link["number"]
+        author = None if match is None or match["bot"] is not None else match["handle"]
+        if match is not None and match["bot"] is not None:
+            bots[number] = match["handle"]
+        if number in authors and authors[number] != author:
+            msg = f"conflicting generated authors for pull request #{number}"
+            raise ValueError(msg)
+        authors[number] = author
     return authors, bots
 
 
@@ -198,7 +204,7 @@ def _release_entries(notes: str, repository: str) -> dict[str, list[tuple[set[st
         ]
         if not pull_requests:
             continue
-        credit_text = _RE_GITHUB_CREDIT.search(line)
+        credit_text = _RE_GITHUB_CREDIT.search(line, max(match.end() for match in _RE_RELEASE_PULL.finditer(line)))
         handles = (
             {match["handle"] for match in _RE_GITHUB_HANDLE.finditer(credit_text["credits"])}
             if credit_text is not None
@@ -207,7 +213,7 @@ def _release_entries(notes: str, repository: str) -> dict[str, list[tuple[set[st
         for number in pull_requests:
             entries.setdefault(number, []).append((
                 handles,
-                credit_text is not None and bool(credit_text["credits"].strip(" .,;")),
+                credit_text is not None,
             ))
     return entries
 

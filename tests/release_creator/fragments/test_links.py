@@ -19,7 +19,7 @@ def _link(
     subjects: dict[str, str],
     authors: dict[str, PullRequestAuthor] | None = None,
     *,
-    mode: Literal["towncrier", "knope", "numbered-prs"] = "towncrier",
+    mode: Literal["towncrier", "knope"] = "towncrier",
 ) -> None:
     pull_requests: dict[str, PullRequest] = {}
     for name, subject in subjects.items():
@@ -167,6 +167,42 @@ def test_add_pull_request_links_preserves_shared_credits(tmp_path: Path) -> None
     assert fragment.read_text() == (
         "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) by "
         "[@alice](https://github.com/alice) and [@bob](https://github.com/bob).\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("extension", "code"),
+    [
+        pytest.param("md", "```sh\necho yes\n```", id="markdown-fence"),
+        pytest.param("rst", ".. code-block:: sh\n\n  echo yes", id="rst-directive"),
+    ],
+)
+def test_add_pull_request_links_before_trailing_code(tmp_path: Path, extension: str, code: str) -> None:
+    fragment = tmp_path / f"+first.feature.{extension}"
+    fragment.write_text(f"Add a feature.\n\n{code}\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    link = (
+        "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice)"
+        if extension == "md"
+        else "(:pr:`42`) by :user:`alice`"
+    )
+    assert fragment.read_text() == f"Add a feature {link}.\n\n{code}\n"
+
+
+@pytest.mark.parametrize(
+    "ending",
+    [pytest.param("```unfinished", id="text-after-fence"), pytest.param("```", id="unmatched-fence")],
+)
+def test_add_pull_request_links_to_unmatched_fence(tmp_path: Path, ending: str) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    fragment.write_text(f"Add a feature.\n\n{ending}\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text().endswith(
+        "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n"
     )
 
 

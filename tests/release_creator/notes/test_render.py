@@ -289,6 +289,25 @@ def test_render_markdown_cross_checks_pull_request_authors() -> None:
     assert "by @alice" in result
 
 
+def test_render_markdown_ignores_pull_links_inside_generated_titles() -> None:
+    changelog = dedent("""\
+        ## 1.2.3 (today)
+
+        ### Added
+
+        - Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) by [@bob](https://github.com/bob).
+        """)
+    generated = (
+        "* Follow https://github.com/tox-dev/example/pull/42 by @alice in "
+        "https://github.com/tox-dev/example/pull/12 by @bob in "
+        "https://github.com/tox-dev/example/pull/42\n"
+    )
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "by @bob" in result
+
+
 @pytest.mark.parametrize(
     "generated",
     [
@@ -948,6 +967,45 @@ def test_render_rst_converts_external_link(source: str, expected: str) -> None:
         f"- Read {expected}.\n\n"
         "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param("<path>", r"\<path>", id="angle-brackets"),
+        pytest.param("2*3*4", r"2\*3\*4", id="asterisks"),
+        pytest.param("<img src=x>", r"\<img src=x>", id="html-image"),
+        pytest.param("<details>", r"\<details>", id="html-details"),
+    ],
+)
+def test_render_rst_escapes_markdown_syntax(source: str, expected: str) -> None:
+    changelog = f"1.2.3 (today)\n==============\n\nAdded\n-----\n\n- Show {source}.\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert f"- Show {expected}." in result
+
+
+def test_render_rst_uses_longer_fence_for_backticks() -> None:
+    changelog = dedent("""\
+        1.2.3 (today)
+        ==============
+
+        Added
+        -----
+
+        - Show this example:
+
+          .. code-block:: text
+
+              ```
+              hello
+              ```
+        """)
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert "````text\n  ```\n  hello\n  ```\n  ````" in result
 
 
 @pytest.mark.parametrize(

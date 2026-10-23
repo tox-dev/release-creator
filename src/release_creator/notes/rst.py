@@ -185,16 +185,16 @@ def _render_paragraph(node: nodes.Node) -> str:
 
 def _render_inline(node: nodes.Node) -> str:
     if isinstance(node, nodes.Text):
-        value = node.astext()
+        value = _escape_text(node.astext())
     elif isinstance(node, nodes.title_reference):
-        value = f"`{node.rawsource[1:-1]}`"
+        value = _code_span(node.rawsource[1:-1])
     elif isinstance(node, nodes.literal):
-        value = f"`{node.astext()}`"
+        value = _code_span(node.astext())
     elif isinstance(node, nodes.reference):
         label = node.astext()
         url = node.get("refuri")
         is_profile = label.startswith("@") and url == f"https://github.com/{label.removeprefix('@')}"
-        value = label if is_profile or url is None or url == label else f"[{label}]({url})"
+        value = label if is_profile or url is None or url == label else f"[{_escape_text(label)}]({url})"
     elif isinstance(node, nodes.target):
         value = ""
     elif isinstance(node, nodes.emphasis):
@@ -204,6 +204,26 @@ def _render_inline(node: nodes.Node) -> str:
     else:
         value = "".join(map(_render_inline, cast("nodes.Element", node).children))
     return value
+
+
+def _escape_text(value: str) -> str:
+    for character in ("\\", "`", "*", "_", "[", "]", "<", ">"):
+        value = value.replace(character, f"\\{character}")
+    return value
+
+
+def _code_span(value: str) -> str:
+    fence = _backtick_fence(value, 1)
+    padding = " " if "`" in value else ""
+    return f"{fence}{padding}{value}{padding}{fence}"
+
+
+def _backtick_fence(value: str, minimum: int) -> str:
+    longest = run = 0
+    for character in value:
+        run = run + 1 if character == "`" else 0
+        longest = max(longest, run)
+    return "`" * max(minimum, longest + 1)
 
 
 def _render_item_child(child: nodes.Node, item: nodes.list_item, depth: int) -> str:
@@ -223,7 +243,8 @@ def _render_item_child(child: nodes.Node, item: nodes.list_item, depth: int) -> 
     if isinstance(child, nodes.literal_block):
         language = next((name for name in child["classes"] if name != "code"), "")
         code = "\n".join(f"{indent}  {line}" for line in child.astext().splitlines())
-        return f"\n\n{indent}  ```{language}\n{code}\n{indent}  ```"
+        fence = _backtick_fence(child.astext(), 3)
+        return f"\n\n{indent}  {fence}{language}\n{code}\n{indent}  {fence}"
     msg = f"unexpected release text: {child.tagname}"
     raise TypeError(msg)
 
