@@ -1,13 +1,14 @@
 """Validate changed changelog fragments in a pull request."""
 
 lazy import shutil
-lazy import subprocess  # ruff: ignore[suspicious-subprocess-import]  # Git checks the PR diff without a shell.
 lazy import sys
 lazy import tomllib
+lazy from fnmatch import fnmatch
 lazy from pathlib import Path
 
-lazy from release_creator.fragments.knope import changeset_parts, knope_kinds
+lazy from release_creator.fragments.knope import changeset_parts, knope_kinds, load_knope_package
 lazy from release_creator.fragments.names import fragment_category
+lazy from release_creator.process import run_text
 
 
 def changed_fragments(config: Path, base: str) -> int:
@@ -18,31 +19,19 @@ def changed_fragments(config: Path, base: str) -> int:
     :returns: Number of changed fragments.
     :raises ValueError: The configuration or a changed fragment is invalid.
     """
-    config, directory, suffix, categories = _towncrier_settings(config)
+    config, directory, suffix, categories, ignored = _towncrier_settings(config)
     if not base or suffix not in {".md", ".rst"}:
         msg = "news validation needs a PR base and a Markdown or reStructuredText changelog"
         raise ValueError(msg)
     count = 0
     for path in _git_paths(directory, ["--diff-filter=AM", f"origin/{base}...HEAD"]):
-        if path.parent != directory:
-            continue
-        if path.suffix != suffix and fragment_category(path.with_suffix(suffix), categories) is not None:
-            msg = f"unsupported changelog fragment extension: {path}"
-            raise ValueError(msg)
-        if path.suffix != suffix:
-            continue
-        if fragment_category(path, categories) is None:
-            msg = f"unsupported changelog fragment: {path}"
-            raise ValueError(msg)
-        if not path.read_text(encoding="utf-8").strip():
-            msg = f"empty changelog fragment: {path}"
-            raise ValueError(msg)
-        count += 1
+        count += _validate_changed_fragment(path, directory, suffix, categories, ignored)
     if count:
-        repository_root = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Git receives argv.
-            [_git_executable(), "rev-parse", "--show-toplevel"], capture_output=True, check=True, text=True
-        ).stdout.strip()
-        result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Towncrier receives argv.
+        root = run_text([_git_executable(), "rev-parse", "--show-toplevel"])
+        if root.returncode:
+            msg = root.stderr.strip() or "could not locate repository root"
+            raise ValueError(msg)
+        result = run_text(
             [
                 sys.executable,
                 "-m",
@@ -53,15 +42,31 @@ def changed_fragments(config: Path, base: str) -> int:
                 "--compare-with",
                 f"origin/{base}",
             ],
-            capture_output=True,
-            check=False,
-            text=True,
-            cwd=repository_root,
+            cwd=Path(root.stdout.strip()),
         )
         if result.returncode:
             msg = result.stderr.strip() or result.stdout.strip()
             raise ValueError(msg)
     return count
+
+
+def _validate_changed_fragment(
+    path: Path, directory: Path, suffix: str, categories: set[str], ignored: set[str]
+) -> int:
+    if path.parent != directory or any(fnmatch(path.name.lower(), pattern) for pattern in ignored):
+        return 0
+    if path.suffix != suffix and set(path.name.split(".")[1:]) & categories:
+        msg = f"unsupported changelog fragment extension: {path}"
+        raise ValueError(msg)
+    if path.suffix != suffix:
+        return 0
+    if fragment_category(path, categories) is None:
+        msg = f"unsupported changelog fragment: {path}"
+        raise ValueError(msg)
+    if not path.read_text(encoding="utf-8").strip():
+        msg = f"empty changelog fragment: {path}"
+        raise ValueError(msg)
+    return 1
 
 
 def validate_fragment_deletions(config: Path) -> None:
@@ -70,7 +75,7 @@ def validate_fragment_deletions(config: Path) -> None:
     :param config: Towncrier configuration file.
     :raises ValueError: A deleted path is not a configured fragment.
     """
-    _, directory, suffix, categories = _towncrier_settings(config)
+    _, directory, suffix, categories, _ = _towncrier_settings(config)
     for path in _git_paths(directory, ["--cached", "--diff-filter=D", "--no-renames"]):
         if path.parent != directory or path.suffix != suffix or fragment_category(path, categories) is None:
             msg = f"unsupported release fragment: {path}"
@@ -88,7 +93,7 @@ def changed_changesets(config: Path, base: str) -> int:
     if not base:
         msg = "news validation needs a PR base"
         raise ValueError(msg)
-    knope = tomllib.loads(config.read_text(encoding="utf-8"))["package"]
+    knope = load_knope_package(config)
     categories = knope_kinds(knope)
     directory = Path(".changeset")
     count = 0
@@ -109,38 +114,45 @@ def changed_changesets(config: Path, base: str) -> int:
     return count
 
 
-def _towncrier_settings(config: Path) -> tuple[Path, Path, str, set[str]]:
+def _towncrier_settings(config: Path) -> tuple[Path, Path, str, set[str], set[str]]:
     if config.name == "pyproject.toml" and (towncrier_config := config.with_name("towncrier.toml")).is_file():
         config = towncrier_config
     towncrier = tomllib.loads(config.read_text(encoding="utf-8")).get("tool", {}).get("towncrier")
     if towncrier is None:
         msg = f"missing [tool.towncrier] in {config}"
         raise ValueError(msg)
+    if towncrier.get("section"):
+        msg = f"Towncrier sections are not supported for news validation: {config}"
+        raise ValueError(msg)
+    if towncrier.get("package") and "directory" not in towncrier:
+        msg = f"set an explicit Towncrier fragment directory for news validation: {config}"
+        raise ValueError(msg)
     categories = (
         {str(name) for name in towncrier["fragment"]}
         if "fragment" in towncrier
-        else {str(item.get("directory", item["name"].lower())) for item in towncrier["type"]}
+        else {str(item.get("directory") or str(item.get("name", "")).lower()) for item in towncrier["type"]}
         if "type" in towncrier
         else {"feature", "bugfix", "doc", "removal", "misc"}
     )
+    ignored = {".gitignore", ".gitkeep", ".keep", "readme", "readme.md", "readme.rst"}
+    if isinstance(template := towncrier.get("template"), str):
+        ignored.add(Path(template).name.lower())
+    ignored.update(str(pattern).lower() for pattern in towncrier.get("ignore", []))
     return (
         config,
         Path(towncrier.get("directory", "newsfragments")),
         Path(towncrier.get("filename", "NEWS.rst")).suffix,
         categories,
+        ignored,
     )
 
 
 def _git_paths(directory: Path, options: list[str]) -> list[Path]:
-    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Git argument list has no shell.
-        [_git_executable(), "diff", "--relative", "--name-only", "-z", *options, "--", str(directory)],
-        capture_output=True,
-        check=False,
-    )
+    result = run_text([_git_executable(), "diff", "--relative", "--name-only", "-z", *options, "--", str(directory)])
     if result.returncode:
-        msg = result.stderr.decode("utf-8").strip() or "could not inspect changelog fragments"
+        msg = result.stderr.strip() or "could not inspect changelog fragments"
         raise ValueError(msg)
-    return [Path(filename) for filename in result.stdout.decode("utf-8").strip("\0").split("\0") if filename]
+    return [Path(filename) for filename in result.stdout.strip("\0").split("\0") if filename]
 
 
 def _git_executable() -> str:

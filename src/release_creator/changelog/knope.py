@@ -1,12 +1,11 @@
 """Preview unreleased Knope changesets in a Markdown changelog."""
 
-lazy import tomllib
 lazy from pathlib import Path
 
 lazy import yaml
 
 lazy from release_creator.anchors.names import draft_anchor
-lazy from release_creator.fragments.knope import changeset_parts, knope_kinds
+lazy from release_creator.fragments.knope import changeset_parts, knope_kinds, knope_sections, load_knope_package
 lazy from release_creator.fragments.names import pending_changesets
 
 
@@ -22,9 +21,9 @@ def render_knope_preview(changelog: Path, config: Path, fragments: Path) -> str:
     changesets = pending_changesets(fragments)
     if not changesets:
         return history
-    package = tomllib.loads(config.read_text(encoding="utf-8"))["package"]
-    sections = package.get("extra_changelog_sections", [])
-    categories = {kind: section["name"] for section in sections for kind in section["types"]}
+    package = load_knope_package(config)
+    sections = knope_sections(package)
+    categories = {kind: name for name, kinds in sections for kind in kinds}
     defaults = {"major": "Breaking changes", "minor": "Added", "patch": "Fixed"}
     for kind in knope_kinds(package):
         if kind in defaults:
@@ -34,7 +33,7 @@ def render_knope_preview(changelog: Path, config: Path, fragments: Path) -> str:
         for category, body in _changeset_items(changeset, categories):
             items.setdefault(category, []).append(body)
     draft = [f'<a name="{draft_anchor()}"></a>', "", "## Draft", ""]
-    for name in dict.fromkeys([*defaults.values(), *(section["name"] for section in sections)]):
+    for name in dict.fromkeys([*defaults.values(), *(name for name, _ in sections)]):
         if (entries := items.get(name)) is not None:
             draft.extend((
                 f'<a name="{draft_anchor(category=name)}"></a>',

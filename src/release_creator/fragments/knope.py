@@ -1,7 +1,24 @@
 """Read Knope changesets without rewriting their YAML front matter."""
 
+lazy import tomllib
 lazy from pathlib import Path
-lazy from typing import cast
+
+
+def load_knope_package(config: Path) -> dict[str, object]:
+    """Read one package from a Knope configuration.
+
+    :param config: Knope configuration path.
+    :returns: The configured package.
+    :raises ValueError: The package layout is absent or ambiguous.
+    """
+    document = tomllib.loads(config.read_text(encoding="utf-8"))
+    package = document.get("package")
+    if package is None and isinstance(packages := document.get("packages"), dict) and len(packages) == 1:
+        package = next(iter(packages.values()))
+    if isinstance(package, dict):
+        return {str(key): value for key, value in package.items()}
+    msg = f"expected one [package] or [packages.<name>] in {config}"
+    raise ValueError(msg)
 
 
 def knope_kinds(config: dict[str, object]) -> set[str]:
@@ -10,10 +27,37 @@ def knope_kinds(config: dict[str, object]) -> set[str]:
     :param config: Knope package configuration.
     :returns: Accepted changeset types.
     """
-    sections = cast("list[dict[str, object]]", config.get("extra_changelog_sections", []))
-    return {"major", "minor", "patch"} | {
-        str(kind) for section in sections for kind in cast("list[str]", section["types"])
-    }
+    return {"major", "minor", "patch"} | {kind for _, kinds in knope_sections(config) for kind in kinds}
+
+
+def knope_sections(config: dict[str, object]) -> list[tuple[str, list[str]]]:
+    """Validate named changeset sections.
+
+    :param config: Knope package configuration.
+    :returns: Section names and their accepted types.
+    :raises TypeError: The section collection has an invalid type.
+    :raises ValueError: A section lacks its name or types.
+    """
+    sections = config.get("extra_changelog_sections", [])
+    if not isinstance(sections, list):
+        msg = "Knope changelog sections need a name and nonempty types"
+        raise TypeError(msg)
+    result: list[tuple[str, list[str]]] = []
+    for section in sections:
+        if not isinstance(section, dict):
+            msg = "Knope changelog sections need a name and nonempty types"
+            raise TypeError(msg)
+        name, kinds = section.get("name"), section.get("types")
+        if (
+            not isinstance(name, str)
+            or not isinstance(kinds, list)
+            or not kinds
+            or not all(isinstance(kind, str) for kind in kinds)
+        ):
+            msg = "Knope changelog sections need a name and nonempty types"
+            raise ValueError(msg)
+        result.append((name, kinds))
+    return result
 
 
 def changeset_parts(fragment: Path, content: str) -> tuple[str, str, str]:
@@ -42,4 +86,6 @@ def changeset_parts(fragment: Path, content: str) -> tuple[str, str, str]:
 __all__ = [
     "changeset_parts",
     "knope_kinds",
+    "knope_sections",
+    "load_knope_package",
 ]

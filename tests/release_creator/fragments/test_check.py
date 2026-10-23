@@ -48,7 +48,19 @@ def news_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         pytest.param("README.md", "Read me.\n", 0, "", id="outside-directory"),
         pytest.param("nested/+topic.feature.md", "Nested.\n", 0, "", id="nested-directory"),
         pytest.param("notes.txt", "Other file.\n", 0, "", id="other-extension"),
+        pytest.param("README.rst", "Fragment guide.\n", 0, "", id="fragment-guide"),
+        pytest.param(".keep", "", 0, "", id="directory-marker"),
         pytest.param("+.md", "Uncategorized.\n", 0, "unsupported changelog fragment", id="incomplete-name"),
+        pytest.param(
+            "+topic.feature", "Add a feature.\n", 0, "unsupported changelog fragment extension", id="no-suffix"
+        ),
+        pytest.param(
+            "+topic.feature.md.bak",
+            "Add a feature.\n",
+            0,
+            "unsupported changelog fragment extension",
+            id="extra-suffix",
+        ),
         pytest.param(
             "+topic.feature.rst",
             "Add a feature.\n",
@@ -62,7 +74,7 @@ def test_changed_fragments(news_repository: Path, filename: str, content: str, c
     destination = news_repository / (filename if filename == "README.md" else f"changelog.d/{filename}")
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(content, encoding="utf-8")
-    _git("add", ".")
+    _git("add", "-f", str(destination))
     _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
 
     if error:
@@ -70,6 +82,31 @@ def test_changed_fragments(news_repository: Path, filename: str, content: str, c
             changed_fragments(news_repository / "pyproject.toml", "main")
     else:
         assert changed_fragments(news_repository / "pyproject.toml", "main") == count
+
+
+def test_changed_fragments_ignores_towncrier_template(news_repository: Path) -> None:
+    config = news_repository / "pyproject.toml"
+    config.write_text(config.read_text() + 'template = "changelog.d/template.jinja2"\n')
+    (news_repository / "changelog.d/template.jinja2").write_text("{{ version }}\n")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Add template")
+
+    assert changed_fragments(config, "main") == 0
+
+
+def test_changed_fragments_reports_missing_repository_root(news_repository: Path, mocker: MockerFixture) -> None:
+    (news_repository / "changelog.d/+topic.feature.md").write_text("Add a feature.\n")
+    mocker.patch(
+        "release_creator.process.subprocess.run",
+        autospec=True,
+        side_effect=[
+            subprocess.CompletedProcess([], 0, "changelog.d/+topic.feature.md\0", ""),
+            subprocess.CompletedProcess([], 1, "", "no root"),
+        ],
+    )
+
+    with pytest.raises(ValueError, match="no root"):
+        changed_fragments(news_repository / "pyproject.toml", "main")
 
 
 @pytest.mark.parametrize(
@@ -124,6 +161,26 @@ def test_changed_fragments_rejects_missing_towncrier_table(news_repository: Path
 
     with pytest.raises(ValueError, match=r"missing \[tool.towncrier\]"):
         changed_fragments(news_repository / "pyproject.toml", "main")
+
+
+@pytest.mark.parametrize(
+    ("addition", "message"),
+    [
+        pytest.param('package = "fixture"\n', "explicit Towncrier fragment directory", id="package-default"),
+        pytest.param('[[tool.towncrier.section]]\npath = "core"\n', "sections are not supported", id="sections"),
+    ],
+)
+def test_changed_fragments_rejects_unsupported_towncrier_layout(
+    news_repository: Path, addition: str, message: str
+) -> None:
+    config = news_repository / "pyproject.toml"
+    source = config.read_text(encoding="utf-8")
+    if addition.startswith("package"):
+        source = source.replace('directory = "changelog.d"\n', "")
+    config.write_text(f"{source}{addition}", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        changed_fragments(config, "main")
 
 
 def test_changed_fragments_from_subdirectory(news_repository: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -299,3 +356,58 @@ def test_changed_changesets_skips_directory_guide(news_repository: Path) -> None
     _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
 
     assert changed_changesets(news_repository / "knope.toml", "main") == 0
+
+
+def test_changed_changesets_accepts_single_named_package(news_repository: Path) -> None:
+    (news_repository / ".changeset").mkdir()
+    (news_repository / "knope.toml").write_text("[packages.fixture]\n", encoding="utf-8")
+    (news_repository / ".changeset" / "fix.md").write_text("---\nfixture: patch\n---\n\n# Fix a bug\n")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+
+    assert changed_changesets(news_repository / "knope.toml", "main") == 1
+
+
+@pytest.mark.parametrize(
+    "section",
+    [
+        pytest.param('{ types = ["security"] }', id="missing-name"),
+        pytest.param('{ name = "Security" }', id="missing-types"),
+    ],
+)
+def test_changed_changesets_rejects_incomplete_section(news_repository: Path, section: str) -> None:
+    (news_repository / "knope.toml").write_text(
+        f"[package]\nextra_changelog_sections = [{section}]\n", encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="Knope changelog sections need"):
+        changed_changesets(news_repository / "knope.toml", "main")
+
+
+@pytest.mark.parametrize(
+    ("configuration", "error", "message"),
+    [
+        pytest.param("[other]\n", ValueError, "expected one", id="no-package"),
+        pytest.param("[packages.first]\n[packages.second]\n", ValueError, "expected one", id="multiple-packages"),
+        pytest.param(
+            '[package]\nextra_changelog_sections = "bad"\n',
+            TypeError,
+            "Knope changelog sections need",
+            id="sections-type",
+        ),
+        pytest.param(
+            '[package]\nextra_changelog_sections = ["bad"]\n',
+            TypeError,
+            "Knope changelog sections need",
+            id="section-type",
+        ),
+    ],
+)
+def test_changed_changesets_rejects_invalid_package_layout(
+    news_repository: Path, configuration: str, error: type[Exception], message: str
+) -> None:
+    config = news_repository / "knope.toml"
+    config.write_text(configuration, encoding="utf-8")
+
+    with pytest.raises(error, match=message):
+        changed_changesets(config, "main")

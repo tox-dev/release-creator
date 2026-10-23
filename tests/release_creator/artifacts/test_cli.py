@@ -1,5 +1,9 @@
 """PyPI artifact command."""
 
+import hashlib
+import io
+import json
+import operator
 import sys
 from typing import TYPE_CHECKING
 
@@ -15,8 +19,18 @@ if TYPE_CHECKING:
 def test_artifacts_prints_published_urls(
     dist: Path, monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    urls = ["https://files.pythonhosted.org/packages/example-1.0.0.tar.gz"]
-    verify = mocker.patch("release_creator.artifacts.cli.verify_artifacts", return_value=urls)
+    files = [
+        {
+            "filename": path.name,
+            "hashes": {"sha256": hashlib.sha256(path.read_bytes()).hexdigest()},
+            "url": f"https://files.pythonhosted.org/packages/{path.name}",
+        }
+        for path in dist.iterdir()
+    ]
+    request = mocker.patch(
+        "release_creator.artifacts.reconcile.urlopen",
+        return_value=io.BytesIO(json.dumps({"meta": {"api-version": "1.4"}, "files": files}).encode()),
+    )
     monkeypatch.setattr(
         sys,
         "argv",
@@ -36,5 +50,7 @@ def test_artifacts_prints_published_urls(
 
     main()
 
-    verify.assert_called_once_with("example", "1.0.0", dist, 120)
-    assert capsys.readouterr().out == f"{urls[0]}\n"
+    assert request.call_count == 1
+    assert capsys.readouterr().out == "".join(
+        f"{item['url']}\n" for item in sorted(files, key=operator.itemgetter("filename"))
+    )

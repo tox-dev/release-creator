@@ -127,4 +127,4 @@ belongs to PR #12. Named fragments still use their introducing commits. Leave th
 name issues; it does not apply to Knope changesets.
 
 Use ``--directory`` if the fragments are outside ``changelog.d``. Fetch Git history for every pending fragment before
-running the linker; a shallow checkout that predates an introducing commit cannot resolve it.
+running the linker. Shallow checkouts are unsupported even when they contain the introducing commit.

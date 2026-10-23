@@ -161,6 +161,7 @@ def test_pins_python_hook_package_dependencies(
         call.args[0][0] == "uv" and ("colorama\n" in call.kwargs["stdin"]) == existing
         for call in commands.call_args_list
     )
+    assert any("--" in call.args[0] and call.args[0][0:2] == ["git", "clone"] for call in commands.call_args_list)
     assert "# release-creator managed" in config.read_text(encoding="utf-8")
     first = config.read_text(encoding="utf-8")
 
