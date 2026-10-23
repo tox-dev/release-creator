@@ -32,6 +32,50 @@ def test_fragment_commits_from_git_reads_multiple_origins(git_repository: tuple[
     }
 
 
+def test_fragment_commits_from_git_reads_unicode_name(git_repository: tuple[Path, str]) -> None:
+    repository, git = git_repository
+    directory = repository / "changelog.d"
+    directory.mkdir()
+    (directory / "+café.feature.md").write_text("News.\n")
+    assert run_text([git, "-C", str(repository), "add", "changelog.d"]).returncode == 0
+    assert run_text([git, "-C", str(repository), "commit", "-qm", "News"]).returncode == 0
+
+    assert fragment_git.fragment_commits_from_git(directory) == {
+        "+café.feature.md": run_text([git, "-C", str(repository), "rev-parse", "HEAD"]).stdout.strip()
+    }
+
+
+def test_fragment_commits_from_git_follows_rename(git_repository: tuple[Path, str]) -> None:
+    repository, git = git_repository
+    directory = repository / "changelog.d"
+    directory.mkdir()
+    (directory / "+first.feature.md").write_text("News.\n")
+    (directory / "+other.doc.md").write_text("Documentation.\n")
+    assert run_text([git, "-C", str(repository), "add", "changelog.d"]).returncode == 0
+    assert run_text([git, "-C", str(repository), "commit", "-qm", "Origin"]).returncode == 0
+    original = run_text([git, "-C", str(repository), "rev-parse", "HEAD"]).stdout.strip()
+    assert (
+        run_text([
+            git,
+            "-C",
+            str(repository),
+            "mv",
+            "changelog.d/+first.feature.md",
+            "changelog.d/+renamed.feature.md",
+        ]).returncode
+        == 0
+    )
+    assert run_text([git, "-C", str(repository), "commit", "-qm", "Rename"]).returncode == 0
+    (directory / "+renamed.feature.md").write_text("Updated news.\n")
+    assert run_text([git, "-C", str(repository), "add", "changelog.d"]).returncode == 0
+    assert run_text([git, "-C", str(repository), "commit", "-qm", "Edit"]).returncode == 0
+
+    assert fragment_git.fragment_commits_from_git(directory) == {
+        "+renamed.feature.md": original,
+        "+other.doc.md": original,
+    }
+
+
 def test_fragment_commits_from_git_rejects_uncommitted_fragment(git_repository: tuple[Path, str]) -> None:
     tmp_path, git = git_repository
     (tmp_path / "README.md").write_text("Project.\n", encoding="utf-8")
