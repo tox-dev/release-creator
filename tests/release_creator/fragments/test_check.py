@@ -251,11 +251,16 @@ def test_validate_fragment_deletions_reads_towncrier_toml(news_repository: Path)
     validate_fragment_deletions(news_repository / "pyproject.toml")
 
 
-def test_validate_fragment_deletions_cli(news_repository: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _stage_fragment_deletion(news_repository, "42.feature.md")
+def test_validate_fragment_deletions_cli(
+    news_repository: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _stage_fragment_deletion(news_repository, "template.jinja")
     monkeypatch.setattr(sys, "argv", ["release-creator", "validate-fragment-deletions"])
 
-    main()
+    with pytest.raises(SystemExit, match="2"):
+        main()
+
+    assert "unsupported release fragment" in capsys.readouterr().err
 
 
 def _stage_fragment_deletion(repository: Path, filename: str) -> None:

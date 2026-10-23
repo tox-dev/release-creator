@@ -162,6 +162,22 @@ def test_tags_require_newer_scopes_package(monkeypatch: pytest.MonkeyPatch) -> N
     main()
 
 
+def test_tags_require_newer_rejects_newer_same_package(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["release-creator", "tags", "tox-toml-fmt/1.11.2", "--require-newer", "--package", "tox-toml-fmt"],
+    )
+    monkeypatch.setattr(sys, "stdin", StringIO("tox-toml-fmt/1.11.3\npyproject-fmt/99.0.0\n"))
+
+    with pytest.raises(SystemExit, match="2"):
+        main()
+
+    assert "must be newer" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize(
     ("arguments", "message"),
     [
