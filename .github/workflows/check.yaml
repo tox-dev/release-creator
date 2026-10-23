@@ -78,7 +78,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: tox-dev/github-workflows/check-hook-update-cooldown@801969505384f96d16882e224e98a74bffd09d21 # v0.4.1
+      - uses: tox-dev/github-workflows/check-hook-update-cooldown@0b37116dc986ac75b79e579dc69dd744eb94e6d4 # v1.0.0
   gate:
     name: Required checks pass
     if: always()
