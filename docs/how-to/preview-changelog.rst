@@ -29,7 +29,8 @@ its anchors unchanged. Draft headings receive package-specific anchors such as `
 ``draft-pyproject-fmt-added``, so links to them remain stable as new fragments arrive. Each fragment must be one
 nonempty paragraph named ``+topic.feature.md`` or ``42.bugfix.md``, using a supported release category. A documentation
 task can call ``release_creator.changelog.preview.render_preview`` directly when it needs to convert the resulting
-Markdown for a Sphinx page.
+Markdown for a Sphinx page. Other fragment files fail the preview; ``.gitkeep`` is ignored. A ``##`` heading inside a
+fenced code example remains in that package's history.
 
 Knope Markdown changelog
 ========================

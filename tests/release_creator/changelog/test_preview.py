@@ -80,6 +80,23 @@ def test_render_preview_supports_first_draft(changelog: Path, tmp_path: Path) ->
     assert result.endswith('### Draft\n\n<a name="draft-pyproject-fmt-added"></a>\n\n#### Added\n\n- First release.\n')
 
 
+@pytest.mark.parametrize("fence", [pytest.param("```", id="backticks"), pytest.param("~~~", id="tildes")])
+def test_render_preview_keeps_fenced_package_headings(changelog: Path, tmp_path: Path, fence: str) -> None:
+    changelog.write_text(
+        "# Changelog\n\n## pyproject-fmt\n\n"
+        f"{fence}md\n## tox-toml-fmt\n## pyproject-fmt\n{fence}\n\n"
+        "### 2.30.3 (2026-10-10)\n\n- Preserve the example.\n\n"
+        "## tox-toml-fmt\n\n### 1.11.1 (2026-10-10)\n",
+        encoding="utf-8",
+    )
+
+    result = render_preview(changelog, "pyproject-fmt", tmp_path)
+
+    assert f"{fence}md\n## tox-toml-fmt\n## pyproject-fmt\n{fence}" in result
+    assert "- Preserve the example." in result
+    assert "### 1.11.1" not in result
+
+
 @pytest.mark.parametrize(
     ("package", "source", "error"),
     [
@@ -116,10 +133,16 @@ def test_render_preview_rejects_bad_fragment(
         render_preview(changelog, "pyproject-fmt", tmp_path)
 
 
-def test_render_preview_ignores_non_markdown(changelog: Path, tmp_path: Path) -> None:
+def test_render_preview_ignores_directory_marker(changelog: Path, tmp_path: Path) -> None:
     (tmp_path / ".gitkeep").write_text("", encoding="utf-8")
-    (tmp_path / "+later.feature.rst").write_text("RST fragment.\n", encoding="utf-8")
 
     result = render_preview(changelog, "pyproject-fmt", tmp_path)
 
     assert "Draft" not in result
+
+
+def test_render_preview_rejects_other_fragment_format(changelog: Path, tmp_path: Path) -> None:
+    (tmp_path / "+later.feature.rst").write_text("RST fragment.\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="invalid changelog fragment"):
+        render_preview(changelog, "pyproject-fmt", tmp_path)

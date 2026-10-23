@@ -14,6 +14,7 @@ lazy from packaging.version import InvalidVersion, Version
 lazy from release_creator.anchors.names import release_anchor
 lazy from release_creator.categories import RELEASE_CATEGORIES
 lazy from release_creator.github import MARKDOWN_AUTHOR, validate_repository
+lazy from release_creator.markdown import prose_lines
 lazy from release_creator.notes.rst import render_rst_section
 
 _RE_RELEASE_PULL: Final = re.compile(
@@ -128,12 +129,6 @@ _RE_CODE_SPAN: Final = re.compile(
     (?P<delimiter>`+)  # Opening backticks
     (?P<content>.*?)   # Inline code is ignored when checking PR credits
     (?P=delimiter)      # Closing backticks of the same length
-    """,
-    re.VERBOSE,
-)
-_RE_CODE_FENCE: Final = re.compile(
-    r"""
-    ^[ ]{0,3}(?P<delimiter>`{3,}|~{3,})(?P<rest>.*)$  # Markdown fence and optional info string
     """,
     re.VERBOSE,
 )
@@ -270,17 +265,8 @@ def _release_entries(notes: str, repository: str, known_numbers: set[str]) -> di
 
 
 def _release_lines(notes: str) -> Iterator[str]:
-    fence: str | None = None
-    for line in notes.splitlines():
-        if match := _RE_CODE_FENCE.match(line):
-            delimiter = str(match["delimiter"])
-            if fence is None:
-                fence = delimiter
-            elif delimiter[0] == fence[0] and len(delimiter) >= len(fence) and not match["rest"].strip():
-                fence = None
-            continue
-        if fence is None and not line.startswith("    "):
-            yield _RE_CODE_SPAN.sub(lambda match: " " * len(match.group()), line)
+    for _, line in prose_lines(notes.splitlines()):
+        yield _RE_CODE_SPAN.sub(lambda match: " " * len(match.group()), line)
 
 
 def _parenthetical_pull_link(line: str, reference: re.Match[str]) -> bool:
