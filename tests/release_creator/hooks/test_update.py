@@ -566,6 +566,46 @@ def test_preserves_dependency_list_on_rerun(tmp_path: Path, mocker: MockerFixtur
     assert config.read_text(encoding="utf-8") == first
 
 
+def test_adds_managed_dependency_after_folded_root(tmp_path: Path, mocker: MockerFixture) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text("additional_dependencies:\n  - >-\n    black==1\nnext: value\n", encoding="utf-8")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch(
+        "release_creator.hooks.update.run_text",
+        return_value=subprocess.CompletedProcess([], 0, "black==2\nclick==8\n", ""),
+    )
+
+    update_pins(config, "7 days", "3.15")
+
+    assert safe_load(config.read_text(encoding="utf-8")) == {
+        "additional_dependencies": ["black==2", "click==8"],
+        "next": "value",
+    }
+
+
+def test_updates_multiline_flow_hook_without_stale_pins(tmp_path: Path, mocker: MockerFixture) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(
+        "repos:\n  - repo: local\n    hooks:\n      - id: format\n"
+        "        language: python\n        additional_dependencies: [\n"
+        '          black==1,\n          "click==7", # release-creator managed\n        ]\n',
+        encoding="utf-8",
+    )
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch(
+        "release_creator.hooks.update.run_text",
+        return_value=subprocess.CompletedProcess([], 0, "black==2\nclick==8\n", ""),
+    )
+
+    update_pins(config, "7 days", "3.15")
+    first = config.read_text(encoding="utf-8")
+    update_pins(config, "7 days", "3.15")
+
+    assert safe_load(first)["repos"][0]["hooks"][0]["additional_dependencies"] == ["black==2", "click==8"]
+    assert first.count("# release-creator managed") == 1
+    assert config.read_text(encoding="utf-8") == first
+
+
 def test_flow_mapping_marks_transitive_dependencies(tmp_path: Path, mocker: MockerFixture) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_text(

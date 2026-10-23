@@ -299,7 +299,7 @@ def _group_edits(source: str, group: _Group, resolved: list[Requirement]) -> lis
     if managed and not direct and not resolved and len(managed) == len(sequence.value):
         if flow_mapping:
             return [(_start(sequence), _end(sequence), "[]")]
-        end = source.find("\n", _end(sequence.value[-1]))
+        end = source.find("\n", _last_content_end(sequence.value[-1]))
         return [(_start(key), end + 1 if end >= 0 else len(source), f"{key.value}: []\n")]
     roots = {canonicalize_name(requirement.name) for _, requirement in direct}
     transitive = [item for item in resolved if canonicalize_name(item.name) not in roots]
@@ -401,7 +401,7 @@ def _block_edits(
     if transitive:
         first = _start(sequence.value[0])
         indent = source[source.rfind("\n", 0, first) + 1 : first].partition("-")[0]
-        end = source.find("\n", _end(sequence.value[-1]))
+        end = source.find("\n", _last_content_end(sequence.value[-1]))
         insertion = end + 1 if end >= 0 else len(source)
         prefix = "\n" if end < 0 and not source.endswith("\n") else ""
         lines = (f"{indent}- {json.dumps(str(item))} # release-creator managed\n" for item in transitive)
