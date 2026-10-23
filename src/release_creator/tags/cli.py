@@ -22,7 +22,6 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
     )
     choice.add_argument("--previous", action="store_true", help="print the preceding tag from standard input")
     choice.add_argument("--require-newer", action="store_true", help="require a tag newer than those on standard input")
-    tags.add_argument("--stable-only", action="store_true", help="ignore prerelease tags when finding the predecessor")
     tags.add_argument("--prefix", choices=("v",), default="", help="prefix the calculated tag with v")
     tags.add_argument("--package", help="scope tags to package/ and print package-prefixed results")
     tags.add_argument(
@@ -36,9 +35,6 @@ def _select(args: argparse.Namespace) -> None:
         msg = f"invalid package name: {args.package}"
         raise ValueError(msg)
     if args.next is not None:
-        if args.stable_only:
-            msg = "--stable-only requires --previous"
-            raise ValueError(msg)
         if args.tag is not None:
             msg = "omit the tag when calculating the next version"
             raise ValueError(msg)
@@ -57,15 +53,12 @@ def _select(args: argparse.Namespace) -> None:
         raise ValueError(msg)
     tag = _scoped_target(args.tag, args.package)
     parse_tag(tag)
-    if args.stable_only and not args.previous:
-        msg = "--stable-only requires --previous"
-        raise ValueError(msg)
     if not args.previous and not args.require_newer:
         return
     tags = _scoped_tags(sys.stdin.read().splitlines(), args.package)
     if args.require_newer:
         require_newer_tag(tag, tags)
-    elif (previous := previous_tag(tag, tags, stable_only=args.stable_only)) is not None:
+    elif (previous := previous_tag(tag, tags)) is not None:
         sys.stdout.write(f"{args.package}/{previous}\n" if args.package else f"{previous}\n")
 
 

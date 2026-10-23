@@ -96,18 +96,6 @@ def test_previous_tag_orders_prereleases() -> None:
     assert previous_tag("1.2.3", ["1.2.2", "1.2.3rc1", "1.2.3b1"]) == "1.2.3rc1"
 
 
-@pytest.mark.parametrize(
-    ("target", "tags", "expected"),
-    [
-        pytest.param("1.2.3", ["1.2.2", "1.2.3rc1"], "1.2.2", id="stable-target"),
-        pytest.param("1.2.3rc2", ["1.2.2", "1.2.3rc1"], "1.2.2", id="prerelease-target"),
-        pytest.param("1.2.3", ["1.2.3rc1", "1.2.3.dev1"], None, id="no-stable-predecessor"),
-    ],
-)
-def test_previous_tag_stable_only(target: str, tags: list[str], expected: str | None) -> None:
-    assert previous_tag(target, tags, stable_only=True) == expected
-
-
 def test_previous_tag_missing() -> None:
     assert previous_tag("1.0.0", ["junk", "1.0.0", "2.0.0"]) is None
 
