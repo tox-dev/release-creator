@@ -28,7 +28,7 @@ _RE_AUTHOR_MARKER: Final = re.compile(
     r"""
     (?:,?\s+)                     # Optional comma and whitespace before the credit
     by\s+                         # Credit marker and following whitespace
-    (?=\[@|:user:`|`@)            # Supported Markdown or RST author syntax
+    (?=(?:\*{1,2})?(?:\[@|:user:`|`@))  # Supported author syntax, optionally emphasized in RST
     """,
     re.VERBOSE,
 )
@@ -50,14 +50,6 @@ _RE_AUTHOR_SEPARATOR: Final = re.compile(
 _RE_HTML_TAG: Final = re.compile(
     r"""
     <\s*(?P<closing>/)?\s*(?P<name>code|kbd|pre|samp)\b[^>]*>  # Hidden HTML literal element
-    """,
-    re.VERBOSE | re.IGNORECASE,
-)
-_RE_HTML_LINK: Final = re.compile(
-    r"""
-    <a\b[^>]*\bhref\s*=\s*(?P<quote>["'])
-    (?P<href>https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/\d+)
-    (?P=quote)[^>]*>  # HTML pull request anchor
     """,
     re.VERBOSE | re.IGNORECASE,
 )
@@ -164,10 +156,14 @@ def _has_pull_request_link(content: str, repository: str, number: str, extension
     )
 
 
-def _markdown_visible_children(content: str) -> list[Token]:
-    visible: list[Token] = []
+def _markdown_visible_children(content: str) -> list[Token | None]:
+    visible: list[Token | None] = []
     hidden = 0
     for token in MarkdownIt().parse(content):
+        if token.type != "inline":
+            continue
+        if visible:
+            visible.append(None)
         for child in token.children or ():
             if child.type == "html_inline" and (match := _RE_HTML_TAG.fullmatch(child.content)):
                 hidden = max(0, hidden - 1) if match["closing"] else hidden + 1
@@ -179,9 +175,9 @@ def _markdown_visible_children(content: str) -> list[Token]:
 def _markdown_prose(content: str) -> list[str]:
     prose: list[str] = []
     for child in _markdown_visible_children(content):
-        if child.type == "html_inline" and (match := _RE_HTML_LINK.fullmatch(child.content)):
-            prose.append(match["href"])
-        elif child.type == "text":
+        if child is None:
+            continue
+        if child.type == "text":
             prose.append(child.content)
         elif child.type == "link_open" and isinstance(destination := child.attrGet("href"), str):
             prose.append(destination)
@@ -243,6 +239,9 @@ def _markdown_credit_prose(content: str) -> str:
     link_text: list[str] = []
     link_plain = True
     for child in _markdown_visible_children(content):
+        if child is None:
+            prose.append(" ")
+            continue
         if child.type == "link_open" and isinstance(destination := child.attrGet("href"), str):
             link_destination = destination
             link_text = []
@@ -255,9 +254,11 @@ def _markdown_credit_prose(content: str) -> str:
             (link_text if link_destination is not None else prose).append(
                 child.content if link_destination is not None else child.content.replace("[", "\0")
             )
-        elif link_destination is not None:
+        elif link_destination is not None and child.type not in {"em_open", "em_close", "strong_open", "strong_close"}:
             link_plain = False
-        elif child.type in {"softbreak", "hardbreak"}:
+        elif child.type in {"softbreak", "hardbreak"} or (
+            child.type == "html_inline" and child.content.casefold().replace(" ", "") in {"<br>", "<br/>"}
+        ):
             prose.append(" ")
     return "".join(prose)
 
@@ -380,11 +381,13 @@ def _author_credit(author: str, extension: str) -> str:
 
 def _credited_handles(credit_text: str, extension: str) -> set[str]:
     pattern = _RE_RST_USER if extension == ".rst" else MARKDOWN_AUTHOR
-    remaining = credit_text.lstrip()
+    remaining = credit_text.lstrip().lstrip("*") if extension == ".rst" else credit_text.lstrip()
     handles: set[str] = set()
     while (author := pattern.match(remaining)) is not None:
         handles.add(author["handle"] or author["link_handle"] if extension == ".rst" else author["handle"])
         remaining = remaining[author.end() :]
+        if extension == ".rst":
+            remaining = remaining.lstrip("*")
         if (separator := _RE_AUTHOR_SEPARATOR.match(remaining)) is None:
             break
         remaining = remaining[separator.end() :]

@@ -183,14 +183,58 @@ def test_add_pull_request_links_accepts_credit_after_line_break(tmp_path: Path, 
     )
 
 
-def test_add_pull_request_links_does_not_treat_formatted_link_label_as_credit(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param("Change behavior.\n\nby [@alice](https://github.com/alice).\n", id="paragraph"),
+        pytest.param("Change behavior.<br>by [@alice](https://github.com/alice).\n", id="html-break"),
+        pytest.param("Change behavior.<br />by [@alice](https://github.com/alice).\n", id="html-break-spaced"),
+        pytest.param("Change behavior.\n\n---\n\nby [@alice](https://github.com/alice).\n", id="horizontal-rule"),
+        pytest.param("- Change behavior.\n- by [@alice](https://github.com/alice).\n", id="list"),
+        pytest.param("> Change behavior.\n> by [@alice](https://github.com/alice).\n", id="blockquote"),
+    ],
+)
+def test_add_pull_request_links_accepts_credit_across_visible_boundary(tmp_path: Path, source: str) -> None:
     fragment = tmp_path / "+first.feature.md"
-    fragment.write_text("Add a feature by [**@mallory**](https://github.com/mallory).\n")
+    fragment.write_text(source)
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text().count("by [@alice](https://github.com/alice)") == 1
+    assert "([#42](https://github.com/tox-dev/example/pull/42))" in fragment.read_text()
+
+
+def test_add_pull_request_links_rejects_formatted_wrong_author_credit(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    source = "Add a feature by [**@mallory**](https://github.com/mallory).\n"
+    fragment.write_text(source)
+
+    with pytest.raises(ValueError, match="author @alice is missing"):
+        _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == source
+
+
+def test_add_pull_request_links_accepts_formatted_author_credit(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    fragment.write_text("Add a feature by [**@alice**](https://github.com/alice).\n")
 
     _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
 
     assert fragment.read_text() == (
-        "Add a feature by [**@mallory**](https://github.com/mallory) "
+        "Add a feature by [**@alice**](https://github.com/alice) ([#42](https://github.com/tox-dev/example/pull/42)).\n"
+    )
+
+
+@pytest.mark.parametrize("label", [pytest.param("`@alice`", id="code"), pytest.param("", id="empty")])
+def test_add_pull_request_links_ignores_nontext_profile_label(tmp_path: Path, label: str) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    fragment.write_text(f"Add a feature by [{label}](https://github.com/alice).\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == (
+        f"Add a feature by [{label}](https://github.com/alice) "
         "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n"
     )
 
@@ -804,14 +848,24 @@ def test_add_pull_request_links_ignores_html_literal_reference(tmp_path: Path, t
     )
 
 
-def test_add_pull_request_links_recognizes_html_anchor(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "anchor",
+    [
+        pytest.param('<a href="https://github.com/tox-dev/example/pull/42">#42</a>', id="labeled"),
+        pytest.param('<a href="https://github.com/tox-dev/example/pull/42"></a>', id="empty"),
+        pytest.param('<a href="https://github.com/tox-dev/example/pull/42" style="display:none">#42</a>', id="hidden"),
+    ],
+)
+def test_add_pull_request_links_adds_visible_link_beside_html_anchor(tmp_path: Path, anchor: str) -> None:
     fragment = tmp_path / "42.feature.md"
-    anchor = '<a href="https://github.com/tox-dev/example/pull/42">#42</a>'
     fragment.write_text(f"Add parser ({anchor}).\n")
 
     _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
 
-    assert fragment.read_text() == f"Add parser ({anchor}) by [@alice](https://github.com/alice).\n"
+    assert fragment.read_text() == (
+        f"Add parser ({anchor}) ([#42](https://github.com/tox-dev/example/pull/42)) "
+        "by [@alice](https://github.com/alice).\n"
+    )
 
 
 def test_add_pull_request_links_recognizes_link_after_unmatched_html_close(tmp_path: Path) -> None:
@@ -1074,9 +1128,18 @@ def test_add_pull_request_links_rejects_invalid_input(
         _link(tmp_path, repository, {fragment.name: subject}, authors)
 
 
-def test_add_pull_request_links_rejects_bot_credits(tmp_path: Path) -> None:
-    fragment = tmp_path / "+fix.bugfix.md"
-    fragment.write_text("Fix a bug by [@dependabot](https://github.com/dependabot).\n")
+@pytest.mark.parametrize(
+    ("extension", "credit"),
+    [
+        pytest.param("md", "[@dependabot](https://github.com/dependabot)", id="markdown"),
+        pytest.param("md", "[**@dependabot**](https://github.com/dependabot)", id="markdown-formatted"),
+        pytest.param("rst", ":user:`dependabot`", id="rst"),
+        pytest.param("rst", "**:user:`dependabot`**", id="rst-formatted"),
+    ],
+)
+def test_add_pull_request_links_rejects_bot_credits(tmp_path: Path, extension: str, credit: str) -> None:
+    fragment = tmp_path / f"+fix.bugfix.{extension}"
+    fragment.write_text(f"Fix a bug by {credit}.\n")
 
     with pytest.raises(ValueError, match="bot author @dependabot must not be credited"):
         _link(
