@@ -1303,6 +1303,31 @@ def test_render_markdown_rejects_self_closing_literal() -> None:
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
 
+@pytest.mark.parametrize(
+    ("item", "error"),
+    [
+        pytest.param("- Add support.\n  <pre>hidden", "unclosed HTML literal element", id="unclosed-block"),
+        pytest.param(
+            "- Add support.\n  <pre/>",
+            "self-closing HTML literal elements are unsupported",
+            id="self-closing-block",
+        ),
+        pytest.param("- Add support </kbd>.", "mismatched HTML literal elements", id="unmatched-inline-closing"),
+        pytest.param("- Add support.\n  </kbd>", "mismatched HTML literal elements", id="unmatched-block-closing"),
+        pytest.param(
+            "- Add support.\n  <code><kbd>sample</code></kbd>",
+            "mismatched HTML literal elements",
+            id="crossed-block-tags",
+        ),
+    ],
+)
+def test_render_markdown_rejects_malformed_literal(item: str, error: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Fixed\n\n{item}\n"
+
+    with pytest.raises(ValueError, match=error):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+
 def test_render_markdown_rejects_raw_html_credit_link() -> None:
     changelog = dedent("""\
         ## 1.2.3 (today)

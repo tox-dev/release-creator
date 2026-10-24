@@ -311,6 +311,10 @@ def _visible_lines(notes: str, repository: str) -> Iterator[str]:
                 items[-1].append(line)
             else:
                 yield line
+    parser.close()
+    if parser.in_literal():
+        msg = "unclosed HTML literal element in release notes"
+        raise ValueError(msg)
 
 
 def _visible_inline(children: list[Token], parser: _RawHtmlLinkParser, repository: str) -> str:
@@ -697,7 +701,10 @@ class _RawHtmlLinkParser(HTMLParser):
 
     @override
     def handle_endtag(self, tag: str) -> None:
-        if self._literal_tags and self._literal_tags[-1] == tag:
+        if tag in _LITERAL_HTML_TAGS:
+            if not self._literal_tags or self._literal_tags[-1] != tag:
+                msg = "mismatched HTML literal elements in release notes"
+                raise ValueError(msg)
             self._literal_tags.pop()
 
 

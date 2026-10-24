@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 lazy import re
+lazy from html.parser import HTMLParser
 lazy from io import StringIO
 lazy from pathlib import Path
-lazy from typing import Final
+lazy from typing import Final, cast, override
 
 lazy from docutils import nodes
 lazy from docutils.core import publish_doctree
@@ -60,8 +61,12 @@ def markdown_visible_children(tokens: list[Token]) -> list[tuple[Token | None, i
     """Literal HTML text cannot establish visible release attribution."""
     visible: list[tuple[Token | None, int]] = []
     hidden: list[str] = []
+    block_parser = _BlockLiteralParser(hidden)
     has_inline = False
     for token in tokens:
+        if token.type == "html_block":
+            block_parser.feed(token.content)
+            continue
         if token.type != "inline":
             continue
         end_line = token.map[1] if token.map is not None else 0
@@ -73,6 +78,7 @@ def markdown_visible_children(tokens: list[Token]) -> list[tuple[Token | None, i
                 continue
             if not hidden:
                 visible.append((child, end_line))
+    block_parser.close()
     if hidden:
         msg = "unclosed HTML literal element in changelog fragment"
         raise ValueError(msg)
@@ -86,14 +92,31 @@ def _update_literal_stack(content: str, hidden: list[str]) -> bool:
         msg = "self-closing HTML literal elements are unsupported in changelog fragments"
         raise ValueError(msg)
     if match["closing"]:
-        if hidden and hidden[-1] != match["name"].casefold():
+        if not hidden or hidden[-1] != match["name"].casefold():
             msg = "mismatched HTML literal elements in changelog fragment"
             raise ValueError(msg)
-        if hidden:
-            hidden.pop()
+        hidden.pop()
     else:
         hidden.append(match["name"].casefold())
     return True
+
+
+class _BlockLiteralParser(HTMLParser):
+    def __init__(self, hidden: list[str]) -> None:
+        super().__init__()
+        self._hidden = hidden
+
+    @override
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:  # Required callback signature.
+        _update_literal_stack(cast("str", self.get_starttag_text()), self._hidden)
+
+    @override
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:  # Required callback signature.
+        _update_literal_stack(cast("str", self.get_starttag_text()), self._hidden)
+
+    @override
+    def handle_endtag(self, tag: str) -> None:
+        _update_literal_stack(f"</{tag}>", self._hidden)
 
 
 __all__ = [

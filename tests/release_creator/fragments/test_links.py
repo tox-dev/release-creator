@@ -1011,14 +1011,16 @@ def test_add_pull_request_links_adds_visible_link_beside_html_anchor(tmp_path: P
     )
 
 
-def test_add_pull_request_links_recognizes_link_after_unmatched_html_close(tmp_path: Path) -> None:
+def test_add_pull_request_links_rejects_unmatched_html_close(tmp_path: Path) -> None:
     fragment = tmp_path / "42.feature.md"
     link = "[#42](https://github.com/tox-dev/example/pull/42)"
-    fragment.write_text(f"Add parser </code> ({link}).\n")
+    source = f"Add parser </code> ({link}).\n"
+    fragment.write_text(source)
 
-    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+    with pytest.raises(ValueError, match="mismatched HTML literal elements"):
+        _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
 
-    assert fragment.read_text() == f"Add parser </code> ({link}) by [@alice](https://github.com/alice).\n"
+    assert fragment.read_text() == source
 
 
 @pytest.mark.parametrize(
