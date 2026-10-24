@@ -988,6 +988,22 @@ def test_updates_hook_with_unrelated_yaml_alias(tmp_path: Path, mocker: MockerFi
     assert safe_load(config.read_text(encoding="utf-8"))["additional_dependencies"] == ["sphinx>=9", "sphinx==9.1"]
 
 
+def test_rejects_hook_merge_with_hidden_dependencies(tmp_path: Path) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    source = (
+        "defaults: &defaults\n  additional_dependencies: [sphinx>=9]\n"
+        "repos:\n  - repo: local\n    hooks:\n"
+        "      - id: docs\n        language: python\n        <<: *defaults\n"
+    )
+    config.write_text(source, encoding="utf-8")
+    assert safe_load(source)["repos"][0]["hooks"][0]["additional_dependencies"] == ["sphinx>=9"]
+
+    with pytest.raises(ValueError, match="YAML merge keys in hook definitions"):
+        update_pins(config, "7 days", "3.15")
+
+    assert config.read_text(encoding="utf-8") == source
+
+
 def test_rejects_resolver_failure(tmp_path: Path, mocker: MockerFixture) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_text("additional_dependencies: [mdformat-gfm==1.0.0]\n", encoding="utf-8")

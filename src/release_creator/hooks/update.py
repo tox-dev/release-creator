@@ -217,6 +217,9 @@ def _hook_language(hook: Node, languages: dict[str, str], *, require_id: bool) -
     if not isinstance(hook, MappingNode):
         msg = "selected hook must be a mapping with an id"
         raise TypeError(msg)
+    if any(isinstance(key, ScalarNode) and key.value == "<<" for key, _ in hook.value):
+        msg = "YAML merge keys in hook definitions cannot be updated safely"
+        raise ValueError(msg)
     identifier = _mapping_value(hook, "id")
     if require_id and not isinstance(identifier, ScalarNode):
         msg = "selected hook must be a mapping with an id"

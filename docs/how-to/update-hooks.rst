@@ -22,7 +22,8 @@ block list when the closure adds packages. Resolution uses each hook's ``languag
 ``default_language_version``; otherwise it targets Python 3.15. It excludes packages released in the last seven days and
 ignores uv config files, source overrides, and uv and pip environment settings that could change the index or resolver.
 It resolves packages from PyPI. An alias that shares an edited value is rejected because changing the anchor could also
-change an unrelated hook field.
+change an unrelated hook field. YAML merge keys in hook definitions are rejected because they can hide dependencies from
+the updater.
 
 If uv cannot resolve every pinned package, the command fails without changing the file. Review the patch and run
 ``prek`` before opening the update PR. The command does not update hook revisions, project requirements, or
