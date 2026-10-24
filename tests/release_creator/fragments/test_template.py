@@ -110,6 +110,19 @@ def test_markdown_template_preserves_prose_continuations(tmp_path: Path, source:
     )
 
 
+def test_markdown_template_rejects_unclosed_literal_before_build(tmp_path: Path) -> None:
+    source = "Add <code>by [@mallory](https://github.com/mallory).\n"
+
+    with pytest.raises(ValueError, match="unclosed HTML literal element"):
+        _build_markdown_fragments(
+            tmp_path,
+            {"+change.bugfix.md": source},
+            {"+change.bugfix.md": PullRequest(number="42", author=PullRequestAuthor(handle="alice", is_bot=False))},
+        )
+
+    assert (tmp_path / "changelog.d" / "+change.bugfix.md").read_text() == source
+
+
 def _build_markdown_fragments(
     tmp_path: Path,
     sources: dict[str, str],

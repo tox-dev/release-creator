@@ -949,6 +949,49 @@ def test_add_pull_request_links_rejects_self_closing_literal(tmp_path: Path, tag
 
 
 @pytest.mark.parametrize(
+    "opening",
+    [
+        pytest.param("<code>", id="code"),
+        pytest.param("<kbd>", id="kbd"),
+        pytest.param("<code><kbd>", id="nested"),
+        pytest.param('<CoDe TiTlE="x > y">', id="mixed-case-quoted-attribute"),
+    ],
+)
+def test_add_pull_request_links_rejects_unclosed_html_literal(tmp_path: Path, opening: str) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    source = f"Add {opening}by [@mallory](https://github.com/mallory).\n"
+    fragment.write_text(source)
+
+    with pytest.raises(ValueError, match="unclosed HTML literal element"):
+        _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == source
+
+
+def test_add_pull_request_links_rejects_crossed_html_literals(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    source = "Add <code><kbd>by [@mallory](https://github.com/mallory)</code></kbd> support.\n"
+    fragment.write_text(source)
+
+    with pytest.raises(ValueError, match="mismatched HTML literal elements"):
+        _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == source
+
+
+def test_add_pull_request_links_accepts_balanced_nested_html_literals(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    fragment.write_text("Add <code><kbd>sample</kbd></code> support.\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == (
+        "Add <code><kbd>sample</kbd></code> support "
+        "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n"
+    )
+
+
+@pytest.mark.parametrize(
     "anchor",
     [
         pytest.param('<a href="https://github.com/tox-dev/example/pull/42">#42</a>', id="labeled"),

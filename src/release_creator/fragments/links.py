@@ -14,7 +14,7 @@ lazy from markdown_it.token import Token
 lazy from release_creator.fragments.knope import changeset_parts
 lazy from release_creator.fragments.names import fragment_number, pending_changesets, pending_fragments
 lazy from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor
-lazy from release_creator.fragments.shape import validate_towncrier_fragment
+lazy from release_creator.fragments.shape import markdown_visible_children, validate_towncrier_fragment
 lazy from release_creator.github import MARKDOWN_AUTHOR
 
 _RE_PULL_REQUEST_LINK: Final = re.compile(
@@ -47,14 +47,6 @@ _RE_AUTHOR_SEPARATOR: Final = re.compile(
     ^[ \t]*(?P<separator>,(?:[ \t]*and)?|and)[ \t]*  # Continue a shared author list
     """,
     re.VERBOSE,
-)
-# These patterns run for every inline token in each pending fragment.
-_RE_HTML_TAG: Final = re.compile(
-    r"""
-    <\s*(?P<closing>/)?\s*(?P<name>code|kbd|pre|samp|script|style|textarea|template|noscript)\b  # Hidden HTML element
-    (?P<attributes>(?:[^>"']|"[^"]*"|'[^']*')*)>         # Attributes may contain quoted >
-    """,
-    re.VERBOSE | re.IGNORECASE,
 )
 _RE_HTML_BREAK: Final = re.compile(
     r"""
@@ -176,31 +168,9 @@ def _has_pull_request_link(content: str, repository: str, number: str, extension
     )
 
 
-def _markdown_visible_children(content: str) -> list[tuple[Token | None, int]]:
-    visible: list[tuple[Token | None, int]] = []
-    hidden = 0
-    has_inline = False
-    for token in MarkdownIt().parse(content):
-        if token.type != "inline":
-            continue
-        end_line = token.map[1] if token.map is not None else 0
-        if has_inline:
-            visible.append((None, end_line))
-        has_inline = True
-        for child in token.children or ():
-            if child.type == "html_inline" and (match := _RE_HTML_TAG.fullmatch(child.content)):
-                if not match["closing"] and match["attributes"].rstrip().endswith("/"):
-                    msg = "self-closing HTML literal elements are unsupported in changelog fragments"
-                    raise ValueError(msg)
-                hidden = max(0, hidden - 1) if match["closing"] else hidden + 1
-            elif not hidden:
-                visible.append((child, end_line))
-    return visible
-
-
 def _markdown_prose(content: str) -> list[str]:
     prose: list[str] = []
-    for child, _ in _markdown_visible_children(content):
+    for child, _ in markdown_visible_children(MarkdownIt().parse(content)):
         if child is None:
             continue
         if child.type == "text":
@@ -281,7 +251,7 @@ def _markdown_credit_blocks(content: str) -> list[tuple[str, int]]:
     blocks: list[tuple[str, int]] = []
     children: list[Token] = []
     end_line = 0
-    for child, line in _markdown_visible_children(content):
+    for child, line in markdown_visible_children(MarkdownIt().parse(content)):
         if child is None:
             blocks.append((_markdown_credit_children(children), end_line))
             children = []

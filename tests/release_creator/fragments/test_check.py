@@ -63,6 +63,13 @@ def news_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         pytest.param("+topic.feature.md", "<!-- hidden -->\n", 0, "fragment must be prose", id="comment-only"),
         pytest.param("+topic.feature.md", "---\n", 0, "fragment must be prose", id="thematic-only"),
         pytest.param("+topic.feature.md", "<div>Hidden</div>\n", 0, "fragment must be prose", id="html-only"),
+        pytest.param(
+            "+topic.feature.md",
+            "Add <code>by [@mallory](https://github.com/mallory).\n",
+            0,
+            "unclosed HTML literal element",
+            id="unclosed-html-literal",
+        ),
         pytest.param("42.feature.md", "Add a feature.\n", 1, "", id="numbered"),
         pytest.param("+topic.feature.1.md", "Add a feature.\n", 1, "", id="multiple-entries"),
         pytest.param("42.feature.2.md", "Add a feature.\n", 1, "", id="numbered-counter"),
