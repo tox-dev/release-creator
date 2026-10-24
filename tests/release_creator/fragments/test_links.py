@@ -609,6 +609,16 @@ def test_add_pull_request_links_recognizes_html_anchor(tmp_path: Path) -> None:
     assert fragment.read_text() == f"Add parser ({anchor}) by [@alice](https://github.com/alice).\n"
 
 
+def test_add_pull_request_links_recognizes_link_after_unmatched_html_close(tmp_path: Path) -> None:
+    fragment = tmp_path / "42.feature.md"
+    link = "[#42](https://github.com/tox-dev/example/pull/42)"
+    fragment.write_text(f"Add parser </code> ({link}).\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == f"Add parser </code> ({link}) by [@alice](https://github.com/alice).\n"
+
+
 @pytest.mark.parametrize("suffix", ["[docs](unterminated", "](unfinished"])
 def test_add_pull_request_links_keeps_credit_after_malformed_target(tmp_path: Path, suffix: str) -> None:
     fragment = tmp_path / "+first.feature.md"

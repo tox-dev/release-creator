@@ -168,7 +168,7 @@ def _markdown_prose(content: str) -> list[str]:
         for child in token.children or ():
             if child.type == "html_inline":
                 if match := _RE_HTML_TAG.fullmatch(child.content):
-                    hidden += -1 if match["closing"] else 1
+                    hidden = max(0, hidden - 1) if match["closing"] else hidden + 1
                 elif not hidden and (match := _RE_HTML_LINK.fullmatch(child.content)):
                     prose.append(match["href"])
             elif child.type == "text" and not hidden:
