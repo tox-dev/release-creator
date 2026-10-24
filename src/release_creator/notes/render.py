@@ -8,6 +8,7 @@ lazy from collections.abc import Iterator
 lazy from dataclasses import dataclass
 lazy from html.parser import HTMLParser
 lazy from typing import Final, override
+lazy from urllib.parse import urlsplit
 
 lazy import mdformat
 lazy from markdown_it import MarkdownIt
@@ -16,12 +17,11 @@ lazy from packaging.version import InvalidVersion, Version
 lazy from release_creator.anchors.names import release_anchor
 lazy from release_creator.categories import RELEASE_CATEGORIES
 lazy from release_creator.github import MARKDOWN_AUTHOR, validate_repository
-lazy from release_creator.markdown import prose_lines
 lazy from release_creator.notes.rst import render_rst_section
 
 _RE_RELEASE_PULL: Final = re.compile(
     r"""
-    (?<![A-Za-z0-9_.\[#-])  # Ignore words, headings, and Markdown link labels
+    (?<![A-Za-z0-9_.#-])  # Ignore words and headings
     (?:
         \#|GH-  # GitHub's current-repository shorthand
         |
@@ -32,15 +32,6 @@ _RE_RELEASE_PULL: Final = re.compile(
         (?P<kind>pull|issues)/  # GitHub also serves PRs at their issue URL
     )
     (?P<number>\d+)
-    """,
-    re.VERBOSE | re.IGNORECASE,
-)
-_RE_MARKDOWN_PULL_LABEL: Final = re.compile(
-    r"""
-    \[\#(?P<label>\d+)\]\(  # Displayed PR number
-    https://(?:www\.)?github\.com/
-    (?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/(?:pull|issues)/(?P<number>\d+)  # URL number
-    \)
     """,
     re.VERBOSE | re.IGNORECASE,
 )
@@ -57,10 +48,33 @@ _RE_GITHUB_HANDLE: Final = re.compile(
     """,
     re.VERBOSE,
 )
-_RE_LINKED_HANDLE: Final = re.compile(
+_RE_PROFILE_LABEL: Final = re.compile(
     r"""
-    \[@(?P<handle>[A-Za-z0-9-]+)\]  # Displayed GitHub handle
-    \((?P<url>[^)]+)\)              # Profile destination
+    @(?P<handle>[A-Za-z0-9-]+)  # Displayed GitHub handle
+    """,
+    re.VERBOSE,
+)
+_RE_GITHUB_PATH: Final = re.compile(
+    r"""
+    ^/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)  # Owner and repository
+    /(?P<kind>pull|issues)/(?P<number>\d+)             # Pull request or issue route
+    (?:/|$)                                             # Optional subpath
+    """,
+    re.VERBOSE,
+)
+_RE_PULL_LABEL: Final = re.compile(
+    r"""
+    (?:PR\ )?\#(?P<number>\d+)  # Displayed pull request number
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+_RE_CREDIT_HANDLES: Final = re.compile(
+    r"""
+    ^\s*(?P<handles>
+        @[A-Za-z0-9-]+  # First credited author
+        (?:(?:\s*,\s*|\s+and\s+)@[A-Za-z0-9-]+)*  # Additional authors
+    )
+    (?:[.,;)\s]|$)  # Credit ends before other prose
     """,
     re.VERBOSE,
 )
@@ -174,9 +188,9 @@ def render_rst(changelog: str, context: ReleaseContext, generated_notes: str | N
 
 
 def _finish(notes: str, context: ReleaseContext, generated_notes: str | None) -> str:
-    _validate_profile_links(notes)
+    visible_lines = list(_visible_lines(notes, context.repository))
     if generated_notes is not None:
-        _verify_authors(notes, generated_notes, context)
+        _verify_authors(visible_lines, generated_notes, context)
         if contributors := _new_contributors(generated_notes, context):
             notes = f"{notes}\n\n{contributors}" if notes else contributors
     if context.artifact_url is not None:
@@ -190,21 +204,23 @@ def _finish(notes: str, context: ReleaseContext, generated_notes: str | None) ->
     return f"{notes}[Full Changelog](https://github.com/{context.repository}/{comparison})\n"
 
 
-def _verify_authors(notes: str, generated_notes: str, context: ReleaseContext) -> None:
+def _verify_authors(visible_lines: list[str], generated_notes: str, context: ReleaseContext) -> None:
     generated_authors, generated_bots = _generated_pr_authors(generated_notes, context.repository)
-    for number, entries in _release_entries(notes, context.repository, set(generated_authors)).items():
+    for number, entries in _release_entries(visible_lines, context.repository, set(generated_authors)).items():
         if number not in generated_authors:
             if any(not handles for handles, _ in entries):
                 msg = f"generated notes have no author for pull request #{number}"
                 raise ValueError(msg)
             continue
-        if (bot := generated_bots.get(number)) is not None and any(bot in handles for handles, _ in entries):
+        if (bot := generated_bots.get(number)) is not None and any(bot.casefold() in handles for handles, _ in entries):
             msg = f"changelog credit for pull request #{number} must not name bot @{bot}"
             raise ValueError(msg)
         if bot is None and generated_authors[number] is None and any(not attributed for _, attributed in entries):
             msg = f"changelog has no credit for pull request #{number} with an unavailable author"
             raise ValueError(msg)
-        if (author := generated_authors[number]) is not None and any(author not in handles for handles, _ in entries):
+        if (author := generated_authors[number]) is not None and any(
+            author.casefold() not in handles for handles, _ in entries
+        ):
             msg = f"changelog credit for pull request #{number} does not include @{author}"
             raise ValueError(msg)
 
@@ -218,7 +234,9 @@ def _generated_pr_authors(generated_notes: str, repository: str) -> tuple[dict[s
             in_new_contributors = line.removeprefix("### ").removeprefix("## ") == "New Contributors"
         if in_new_contributors:
             continue
-        if (link := _RE_GENERATED_PR_LINK.search(line)) is None or link["repository"] != repository:
+        if (link := _RE_GENERATED_PR_LINK.search(line)) is None or link[
+            "repository"
+        ].casefold() != repository.casefold():
             continue
         match = _RE_GENERATED_PR_AUTHOR.search(line)
         number = link["number"]
@@ -232,9 +250,11 @@ def _generated_pr_authors(generated_notes: str, repository: str) -> tuple[dict[s
     return authors, bots
 
 
-def _release_entries(notes: str, repository: str, known_numbers: set[str]) -> dict[str, list[tuple[set[str], bool]]]:
+def _release_entries(
+    visible_lines: list[str], repository: str, known_numbers: set[str]
+) -> dict[str, list[tuple[set[str], bool]]]:
     entries: dict[str, list[tuple[set[str], bool]]] = {}
-    for line in _release_lines(notes):
+    for line in visible_lines:
         references = _pull_references(line, repository, known_numbers)
         if not references:
             continue
@@ -247,9 +267,7 @@ def _release_entries(notes: str, repository: str, known_numbers: set[str]) -> di
                 for item in pending:
                     entries.setdefault(item["number"], []).append(credit)
                 pending.clear()
-            elif index + 1 < len(references) and (
-                following.partition("[")[0].strip(" ()") not in {",", "and", ", and"}
-            ):
+            elif index + 1 < len(references) and not _shared_credit_group(line, reference, references[index + 1]):
                 for item in pending:
                     entries.setdefault(item["number"], []).append(initial_credit or (set(), False))
                 pending.clear()
@@ -260,51 +278,79 @@ def _release_entries(notes: str, repository: str, known_numbers: set[str]) -> di
     return entries
 
 
-def _release_lines(notes: str) -> Iterator[str]:
-    for _, line in prose_lines(notes.splitlines()):
-        yield _without_code_spans(line)
+def _shared_credit_group(line: str, first: re.Match[str], second: re.Match[str]) -> bool:
+    between = line[first.end() : second.start()]
+    if between.strip(" (),;") not in {"", "and"}:
+        return False
+    before_first = line[: first.start()]
+    before_second = line[: second.start()]
+    return (
+        "," in between
+        or "and" in between
+        or before_first.rstrip().endswith("(") == before_second.rstrip().endswith("(")
+    )
 
 
-def _without_code_spans(line: str) -> str:
-    result: list[str] = []
-    index = 0
-    while index < len(line):
-        if line[index] == "\\" and index + 1 < len(line):
-            result.append(line[index : index + 2])
-            index += 2
-        elif line[index] == "`":
-            end = index
-            while end < len(line) and line[end] == "`":
-                end += 1
-            if (close := _code_span_end(line, end, end - index)) is None:
-                result.append(line[index:end])
+def _visible_lines(notes: str, repository: str) -> Iterator[str]:
+    parser = _RawHtmlLinkParser()
+    for token in MarkdownIt().parse(notes):
+        if token.type == "html_block":
+            parser.feed(token.content)
+            yield from parser.take_text().splitlines()
+        if token.type != "inline":
+            continue
+        parts: list[str] = []
+        children = token.children or []
+        index = 0
+        while index < len(children):
+            child = children[index]
+            if child.type == "link_open":
+                end = next(
+                    position for position in range(index + 1, len(children)) if children[position].type == "link_close"
+                )
+                label = "".join(
+                    item.content for item in children[index + 1 : end] if item.type in {"text", "code_inline"}
+                )
+                parts.append(_visible_link(label, str(child.attrGet("href") or ""), repository))
                 index = end
-            else:
-                result.append(" " * (close - index))
-                index = close
-        else:
-            result.append(line[index])
+            elif child.type == "text":
+                parts.append(child.content)
+            elif child.type in {"softbreak", "hardbreak"}:
+                parts.append("\n")
+            elif child.type == "html_inline":
+                parser.feed(child.content)
+                parts.append(parser.take_text())
+            elif child.type == "code_inline":
+                parts.append(" ")
             index += 1
-    return "".join(result)
+        yield from "".join(parts).splitlines()
 
 
-def _code_span_end(line: str, start: int, width: int) -> int | None:
-    index = start
-    while (index := line.find("`", index)) >= 0:
-        end = index
-        while end < len(line) and line[end] == "`":
-            end += 1
-        if end - index == width:
-            return end
-        index = end
-    return None
+def _visible_link(label: str, url: str, repository: str) -> str:
+    if (profile := _RE_PROFILE_LABEL.fullmatch(label)) is not None:
+        if url.casefold() != f"https://github.com/{profile['handle']}".casefold():
+            msg = f"GitHub credit link for @{profile['handle']} points to another profile"
+            raise ValueError(msg)
+        return label
+    parsed = urlsplit(url)
+    path = _RE_GITHUB_PATH.match(parsed.path)
+    github_pull = (
+        parsed.scheme == "https" and parsed.netloc.casefold() in {"github.com", "www.github.com"} and path is not None
+    )
+    current_pull = github_pull and path is not None and path["repository"].casefold() == repository.casefold()
+    number = _RE_PULL_LABEL.fullmatch(label)
+    if (
+        number is not None
+        and not (github_pull and not current_pull)
+        and (not current_pull or number["number"] != path["number"])
+    ):
+        destination = path["number"] if current_pull else "another URL"
+        msg = f"pull request label #{number['number']} points to #{destination}"
+        raise ValueError(msg)
+    return f" https://github.com/{repository}/pull/{path['number']} " if current_pull else " "
 
 
 def _pull_references(line: str, repository: str, known_numbers: set[str]) -> list[re.Match[str]]:
-    for label in _RE_MARKDOWN_PULL_LABEL.finditer(line):
-        if label["repository"].casefold() == repository.casefold() and label["label"] != label["number"]:
-            msg = f"pull request label #{label['label']} points to #{label['number']}"
-            raise ValueError(msg)
     candidates = [
         match
         for match in _RE_RELEASE_PULL.finditer(line)
@@ -319,7 +365,11 @@ def _entry_credit(text: str, *, named: bool) -> tuple[set[str], bool] | None:
     if (marker := _RE_GITHUB_CREDIT.search(text)) is None:
         return None
     credit_text = str(marker.group("credits"))
-    handles = {str(match.group("handle")) for match in _RE_GITHUB_HANDLE.finditer(credit_text)}
+    handles = (
+        {str(item.group("handle")).casefold() for item in _RE_GITHUB_HANDLE.finditer(match["handles"])}
+        if (match := _RE_CREDIT_HANDLES.match(credit_text)) is not None
+        else set[str]()
+    )
     plain_name = credit_text.strip(" .()")
     return handles, bool(handles) or (named and len(plain_name.split()) > 1 and plain_name.istitle())
 
@@ -538,29 +588,20 @@ def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
     return "\n".join(body).strip()
 
 
-def _validate_profile_links(text: str) -> None:
-    parser = _RawHtmlLinkParser()
-    for token in MarkdownIt().parse(text):
-        if token.type == "html_block":
-            parser.feed(token.content)
-        for child in token.children or ():
-            if child.type == "html_inline":
-                parser.feed(child.content)
-    if (
-        invalid := next(
-            (
-                link
-                for link in _RE_LINKED_HANDLE.finditer(text)
-                if link["url"].casefold() != f"https://github.com/{link['handle']}".casefold()
-            ),
-            None,
-        )
-    ) is not None:
-        msg = f"GitHub credit link for @{invalid['handle']} points to another profile"
-        raise ValueError(msg)
-
-
 class _RawHtmlLinkParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self._text: list[str] = []
+
+    def take_text(self) -> str:
+        content = "".join(self._text)
+        self._text.clear()
+        return content
+
+    @override
+    def handle_data(self, data: str) -> None:
+        self._text.append(data)
+
     @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "a" and any(name == "href" for name, _ in attrs):

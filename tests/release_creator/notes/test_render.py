@@ -377,6 +377,40 @@ def test_render_markdown_checks_shared_credit_for_multiple_pull_requests() -> No
 
 
 @pytest.mark.parametrize(
+    "references",
+    [
+        pytest.param(
+            "[#5](https://github.com/tox-dev/example/pull/5) [#6](https://github.com/tox-dev/example/pull/6)",
+            id="adjacent-links",
+        ),
+        pytest.param("(#5) (#6)", id="adjacent-short-references"),
+    ],
+)
+def test_render_markdown_shares_credit_for_adjacent_references(references: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Added\n\n- Add support {references} by @alice.\n"
+    generated = (
+        "* Add support by @alice in https://github.com/tox-dev/example/pull/5\n"
+        "* Refine support by @alice in https://github.com/tox-dev/example/pull/6\n"
+    )
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "by @alice" in result
+
+
+def test_render_rst_shares_credit_for_adjacent_roles() -> None:
+    changelog = "1.2.3 (today)\n==============\n\nAdded\n-----\n\n- Add support (:pr:`5`) (:pr:`6`) by :user:`alice`.\n"
+    generated = (
+        "* Add support by @alice in https://github.com/tox-dev/example/pull/5\n"
+        "* Refine support by @alice in https://github.com/tox-dev/example/pull/6\n"
+    )
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "by @alice" in result
+
+
+@pytest.mark.parametrize(
     "entry",
     [
         pytest.param(
@@ -731,6 +765,99 @@ def test_render_markdown_rejects_credit_link_to_another_profile() -> None:
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
 
+@pytest.mark.parametrize(
+    "credit",
+    [
+        pytest.param("[**@alice**](https://github.com/mallory)", id="bold-inline"),
+        pytest.param("[@alice][profile]\n\n  [profile]: https://github.com/mallory", id="reference-link"),
+    ],
+)
+def test_render_markdown_rejects_misdirected_profile_links(credit: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Added\n\n- Add support (#42) by {credit}.\n"
+
+    with pytest.raises(ValueError, match="credit link for @alice points to another profile"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+
+def test_render_markdown_does_not_count_reviewer_as_author() -> None:
+    changelog = "## 1.2.3 (today)\n\n### Added\n\n- Add support (#42) by @bob, reviewed by @alice.\n"
+    generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
+
+    with pytest.raises(ValueError, match="pull request #42 does not include @alice"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+def test_render_markdown_does_not_credit_author_after_hard_break() -> None:
+    changelog = "## 1.2.3 (today)\n\n### Added\n\n- Add support (#42)  \n  by @alice.\n"
+    generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
+
+    with pytest.raises(ValueError, match="pull request #42 does not include @alice"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+def test_render_markdown_ignores_other_repository_link_label() -> None:
+    changelog = (
+        "## 1.2.3 (today)\n\n### Added\n\n- Follow [PR #42](https://github.com/other/project/pull/42) by @alice.\n"
+    )
+    generated = "* Local change by @bob in https://github.com/tox-dev/example/pull/42\n"
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "[PR #42](https://github.com/other/project/pull/42)" in result
+
+
+@pytest.mark.parametrize(
+    "reference",
+    [
+        pytest.param("[#42][pull]", id="reference-link"),
+        pytest.param("[#42]", id="short-bracket"),
+        pytest.param("_#42_", id="emphasized-short-reference"),
+        pytest.param('[#42](https://github.com/tox-dev/example/pull/42 "literal ` title")', id="backtick-title"),
+    ],
+)
+def test_render_markdown_checks_parsed_pull_references(reference: str) -> None:
+    changelog = (
+        f"## 1.2.3 (today)\n\n### Added\n\n- Add support {reference} by @mallory.\n\n"
+        "  [pull]: https://github.com/tox-dev/example/pull/42\n"
+    )
+    generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
+
+    with pytest.raises(ValueError, match="pull request #42 does not include @alice"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        pytest.param("https://github.com/tox-dev/example/pull/5#top", id="fragment"),
+        pytest.param("https://github.com/tox-dev/example/pull/5/files", id="subpath"),
+        pytest.param("https://evil.example/pull/6", id="other-host"),
+    ],
+)
+def test_render_markdown_rejects_misdirected_pull_label(url: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Added\n\n- Add support [#6]({url}) by @alice.\n"
+
+    with pytest.raises(ValueError, match="pull request label #6 points to"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+
+def test_render_markdown_checks_generated_repository_case_insensitively() -> None:
+    changelog = "## 1.2.3 (today)\n\n### Added\n\n- Add support (#42) by @mallory.\n"
+    generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
+
+    with pytest.raises(ValueError, match="pull request #42 does not include @alice"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="Tox-Dev/Example"), generated)
+
+
+def test_render_markdown_matches_author_handle_case_insensitively() -> None:
+    changelog = "## 1.2.3 (today)\n\n### Added\n\n- Add support (#42) by @alice.\n"
+    generated = "* Add support by @Alice in https://github.com/tox-dev/example/pull/42\n"
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "by @alice" in result
+
+
 def test_render_markdown_rejects_raw_html_credit_link() -> None:
     changelog = dedent("""\
         ## 1.2.3 (today)
@@ -759,6 +886,23 @@ def test_render_markdown_rejects_raw_html_block_link() -> None:
 
     with pytest.raises(ValueError, match="raw HTML links are unsupported"):
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+
+def test_render_markdown_checks_pull_reference_in_html_block() -> None:
+    changelog = dedent("""\
+        ## 1.2.3 (today)
+
+        ### Fixed
+
+        - Fix the parser.
+          <details>
+          #42 by @mallory
+          </details>
+        """)
+    generated = "* Fix the parser by @alice in https://github.com/tox-dev/example/pull/42\n"
+
+    with pytest.raises(ValueError, match="pull request #42 does not include @alice"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
 
 def test_render_markdown_keeps_html_anchor_and_literal_link_example() -> None:
@@ -805,6 +949,19 @@ def test_render_markdown_accepts_multiple_profile_credit_links() -> None:
     result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
     assert "by @alice and @bob" in result
+
+
+def test_render_markdown_accepts_reference_profile_credit_link() -> None:
+    changelog = (
+        "## 1.2.3 (today)\n\n### Added\n\n"
+        "- Add support (#42) by [@alice][profile].\n\n"
+        "  [profile]: https://github.com/alice\n"
+    )
+    generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "by [@alice][profile]" in result
 
 
 @pytest.mark.parametrize(
