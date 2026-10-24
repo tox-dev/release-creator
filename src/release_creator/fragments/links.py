@@ -252,7 +252,9 @@ def _markdown_credit_prose(content: str) -> str:
                 prose.append(f"[{''.join(link_text)}]({link_destination})")
             link_destination = None
         elif child.type == "text":
-            (link_text if link_destination is not None else prose).append(child.content)
+            (link_text if link_destination is not None else prose).append(
+                child.content if link_destination is not None else child.content.replace("[", "\0")
+            )
         elif link_destination is not None:
             link_plain = False
         elif child.type in {"softbreak", "hardbreak"}:

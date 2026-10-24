@@ -195,6 +195,25 @@ def test_add_pull_request_links_does_not_treat_formatted_link_label_as_credit(tm
     )
 
 
+@pytest.mark.parametrize(
+    "credit",
+    [
+        pytest.param(r"\[@alice](https://github.com/alice)", id="escaped-label"),
+        pytest.param(r"[@alice]\(https://github.com/alice)", id="escaped-target"),
+    ],
+)
+def test_add_pull_request_links_requires_rendered_author_link(tmp_path: Path, credit: str) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    fragment.write_text(f"Add a feature by {credit}.\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == (
+        f"Add a feature by {credit} "
+        "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n"
+    )
+
+
 def test_add_pull_request_links_accepts_oxford_comma_credit(tmp_path: Path) -> None:
     fragment = tmp_path / "+first.feature.md"
     credit = (
