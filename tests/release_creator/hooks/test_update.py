@@ -201,8 +201,7 @@ def test_hooks_update_runs_isolated_resolver(tmp_path: Path, monkeypatch: pytest
         else f"#!{sys.executable}\n{script.read_text(encoding='utf-8')}",
         encoding="utf-8",
     )
-    if sys.platform != "win32":
-        executable.chmod(0o755)
+    executable.chmod(0o755)
     monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("RESOLVER_LOG", str(tmp_path / "resolver.json"))
     monkeypatch.setenv("UV_INDEX_URL", "https://evil.invalid/simple/")
