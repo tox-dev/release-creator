@@ -517,6 +517,8 @@ def test_add_pull_request_links_ignores_reference_in_html_comment(tmp_path: Path
         pytest.param(".. Maintainer note by :user:`alice`", id="author"),
         pytest.param(".. Maintainer note :pr:`42`", id="pull-request"),
         pytest.param(".. Maintainer note\n   by :user:`bob`", id="continuation"),
+        pytest.param("..\n   by :user:`alice`", id="standalone-author"),
+        pytest.param("..\n   :pr:`42`", id="standalone-pull-request"),
     ],
 )
 def test_add_pull_request_links_ignores_rst_comment(tmp_path: Path, hidden: str) -> None:
@@ -535,6 +537,13 @@ def test_add_pull_request_links_ignores_rst_comment(tmp_path: Path, hidden: str)
         pytest.param('[docs](https://example.com "x &#98;y [@alice](https://github.com/alice)")', id="encoded-title"),
         pytest.param('[docs](https://example.com/path(x) "x by [@alice](https://github.com/alice)")', id="nested-url"),
         pytest.param("[docs](https://example.com/path\\) 'x by [@alice](https://github.com/alice)')", id="escaped-url"),
+        pytest.param(
+            '[docs](https://example.com/foo\'bar "x by [@alice](https://github.com/alice)")', id="apostrophe-url"
+        ),
+        pytest.param('[docs](https://example.com/foo"bar "x by [@alice](https://github.com/alice)")', id="quote-url"),
+        pytest.param(
+            '[docs](<https://example.com/foo\'bar> "x by [@alice](https://github.com/alice)")', id="angle-url"
+        ),
         pytest.param('<span title="x by [@alice](https://github.com/alice)">docs</span>', id="html-attribute"),
         pytest.param("<code>by [@alice](https://github.com/alice)</code>", id="html-code"),
     ],
@@ -560,6 +569,45 @@ def test_add_pull_request_links_uses_visible_credit_after_hidden_title(tmp_path:
     assert fragment.read_text() == (
         f"Add {hidden} ([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n"
     )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param(
+            'Add `<span title="x by [@alice](https://github.com/alice)">` then '
+            '<span title="x by [@alice](https://github.com/alice)">docs</span>.\n',
+            id="earlier-inline-code",
+        ),
+        pytest.param(
+            "Show example:\n\n```html\n<code>foo</code>\n```\n\n"
+            "Add parser <code> by [@alice](https://github.com/alice)</code>.\n",
+            id="earlier-fence",
+        ),
+    ],
+)
+def test_add_pull_request_links_ignores_repeated_html_inside_code(tmp_path: Path, source: str) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    fragment.write_text(source)
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == (
+        f"{source.rstrip().removesuffix('.')} "
+        "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n"
+    )
+
+
+@pytest.mark.parametrize("prefix", ["Add ](", "Add [docs] \\]("])
+def test_add_pull_request_links_rejects_visible_credit_after_nonlink_target(tmp_path: Path, prefix: str) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    source = f'{prefix}https://example.com "x by [@mallory](https://github.com/mallory)") now.\n'
+    fragment.write_text(source)
+
+    with pytest.raises(ValueError, match="author @alice is missing"):
+        _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == source
 
 
 def test_add_pull_request_links_ignores_reference_definition_title(tmp_path: Path) -> None:
@@ -641,6 +689,19 @@ def test_add_pull_request_links_keeps_credit_before_unclosed_target(tmp_path: Pa
     assert fragment.read_text() == (
         "Add parser ([#42](https://github.com/tox-dev/example/pull/42)) "
         "by [@alice](https://github.com/alice) and document ](unfinished.\n"
+    )
+
+
+@pytest.mark.parametrize("source", ["<div>\nAdd parser\n</div>\n", "<!-- Add parser -->\n"])
+def test_add_pull_request_links_after_html_block(tmp_path: Path, source: str) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    fragment.write_text(source)
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == (
+        f"{source.rstrip()}\n\n"
+        "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n"
     )
 
 

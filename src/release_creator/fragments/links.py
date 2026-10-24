@@ -210,6 +210,8 @@ def _rst_hidden_lines(lines: list[str]) -> set[int]:
 
 
 def _rst_comment(line: str) -> bool:
+    if line.strip() == "..":
+        return True
     if not line.startswith(".. "):
         return False
     first = line[3:].split(maxsplit=1)
@@ -233,10 +235,12 @@ def _markdown_credit_prose(content: str, lines: list[str]) -> str:
     for index in range(len(lines)):
         if index not in visible_lines:
             lines[index] = "\0" * len(lines[index])
-    masked = list("".join(lines))
-    for start, end in [*_markdown_hidden_spans(content, tokens), *_markdown_target_spans(content)]:
+    masked = list(_mask_delimited(_mask_markdown_code("".join(lines)), "<!--", "-->"))
+    for start, end in _markdown_hidden_spans("".join(masked), tokens):
         masked[start:end] = "\0" * (end - start)
-    return _mask_markdown_code(_mask_delimited("".join(masked), "<!--", "-->"))
+    for start, end in _markdown_target_spans("".join(masked)):
+        masked[start:end] = "\0" * (end - start)
+    return "".join(masked)
 
 
 def _markdown_hidden_spans(content: str, tokens: list[Token]) -> list[tuple[int, int]]:
@@ -256,10 +260,16 @@ def _markdown_target_spans(content: str) -> list[tuple[int, int]]:
     spans: list[tuple[int, int]] = []
     cursor = 0
     while (opening := content.find("](", cursor)) >= 0:
-        if (end := _markdown_target_end(content, opening + 2)) is not None and any(
-            token.type == "link_open"
-            for block in MarkdownIt().parse(f"[x]({content[opening + 2 : end]})")
-            for token in (block.children or ())[:1]
+        line_start = content.rfind("\n", 0, opening) + 1
+        label_start = content.rfind("[", line_start, opening)
+        if (
+            label_start >= 0
+            and (end := _markdown_target_end(content, opening + 2)) is not None
+            and any(
+                token.type == "link_open"
+                for block in MarkdownIt().parse(content[label_start : end + 1])
+                for token in (block.children or ())[:1]
+            )
         ):
             spans.append((opening + 2, end))
         cursor = opening + 2
@@ -268,7 +278,7 @@ def _markdown_target_spans(content: str) -> list[tuple[int, int]]:
 
 def _markdown_target_end(content: str, start: int) -> int | None:
     depth = 1
-    quote = ""
+    quote = ">" if content[start : start + 1] == "<" else ""
     escaped = False
     for index in range(start, len(content)):
         char = content[index]
@@ -278,7 +288,7 @@ def _markdown_target_end(content: str, start: int) -> int | None:
             escaped = True
         elif quote:
             quote = "" if char == quote else quote
-        elif char in "\"'":
+        elif char in "\"'" and content[index - 1].isspace() and depth == 1:
             quote = char
         elif char == "(":
             depth += 1
@@ -376,19 +386,7 @@ def _split_trailing_code(content: str, suffix: str) -> tuple[str, str]:
             position = sum(map(len, lines[: visible_ends[-1]]))
             before = content[:position].rstrip()
             return before, content[len(before) :]
-        opening = next(
-            (
-                index
-                for index in range(len(lines) - 1, -1, -1)
-                if lines[index].strip() and not lines[index].startswith("    ")
-            ),
-            None,
-        )
-        if (
-            opening is None
-            and any(line.strip() for line in lines)
-            and all(not line.strip() or line.startswith("    ") for line in lines)
-        ):
+        if not visible_ends and content.strip():
             return "", content
     if suffix == ".rst" and (opening := _trailing_rst_code_opening(lines)) is not None:
         position = sum(map(len, lines[:opening]))
