@@ -39,8 +39,9 @@ def test_updates_each_hook_with_its_universal_closure(tmp_path: Path, mocker: Mo
         "MDFormat_GFM\nsphinx>=9\n": "mdformat-gfm==1.1.0\nsphinx==9.1.1\nmdformat==1.0.0\n",
     }
 
-    def resolve(command: list[str], *, stdin: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+    def resolve(command: list[str], *, stdin: str, cwd: Path, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
         assert cwd == tmp_path
+        assert "UV_INDEX_URL" not in env
         return subprocess.CompletedProcess(command, 0, responses[stdin], "")
 
     run = mocker.patch("release_creator.hooks.update.run_text", side_effect=resolve)
@@ -75,7 +76,9 @@ def test_updates_each_hook_with_its_universal_closure(tmp_path: Path, mocker: Mo
     assert all("--no-deps" not in call.args[0] for call in run.call_args_list)
 
 
-def test_resolves_real_universal_closure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolves_real_universal_closure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture
+) -> None:
     wheels = tmp_path / "wheels"
     wheels.mkdir()
     for name, version, requirements in (
@@ -87,6 +90,12 @@ def test_resolves_real_universal_closure(tmp_path: Path, monkeypatch: pytest.Mon
     monkeypatch.setenv("UV_NO_INDEX", "1")
     monkeypatch.setenv("UV_FIND_LINKS", str(wheels))
     monkeypatch.setenv("UV_OFFLINE", "1")
+    compiled = run_text(
+        ["uv", "pip", "compile", "-", "--universal", "--no-config", "--no-sources", "--no-header", "--no-annotate"],
+        stdin="closure-root\n",
+        cwd=tmp_path,
+    )
+    assert compiled.returncode == 0
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_text(
         "repos:\n  - repo: local\n    hooks:\n      - id: closure\n"
@@ -94,6 +103,10 @@ def test_resolves_real_universal_closure(tmp_path: Path, monkeypatch: pytest.Mon
         encoding="utf-8",
     )
 
+    mocker.patch(
+        "release_creator.hooks.update.run_text",
+        side_effect=lambda command, **_kwargs: subprocess.CompletedProcess(command, 0, compiled.stdout, ""),
+    )
     update_pins(config, "2099-01-01T00:00:00Z", "3.15")
 
     assert safe_load(config.read_text(encoding="utf-8"))["repos"][0]["hooks"][0]["additional_dependencies"] == [
@@ -101,6 +114,46 @@ def test_resolves_real_universal_closure(tmp_path: Path, monkeypatch: pytest.Mon
         "closure-child==2.0.0",
         'closure-color==0.4.6; sys_platform == "win32"',
     ]
+
+
+def test_ignores_ambient_uv_resolution_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture
+) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(
+        "repos:\n  - repo: local\n    hooks:\n      - id: format\n"
+        "        language: python\n        additional_dependencies: [packaging==26.0]\n",
+        encoding="utf-8",
+    )
+    for name in (
+        "UV_INDEX",
+        "UV_INDEX_URL",
+        "UV_EXTRA_INDEX_URL",
+        "UV_DEFAULT_INDEX",
+        "UV_FIND_LINKS",
+        "UV_CONSTRAINT",
+        "UV_OVERRIDE",
+        "UV_INSECURE_HOST",
+        "PIP_INDEX_URL",
+        "SSL_CERT_FILE",
+    ):
+        monkeypatch.setenv(name, "https://evil.invalid/simple/")
+    mocker.patch("release_creator.process.shutil.which", return_value="uv")
+    execute = mocker.patch(
+        "release_creator.process.subprocess.run",
+        autospec=True,
+        return_value=subprocess.CompletedProcess([], 0, "packaging==26.1\n", ""),
+    )
+
+    update_pins(config, "7 days", "3.15")
+
+    assert safe_load(config.read_text(encoding="utf-8"))["repos"][0]["hooks"][0]["additional_dependencies"] == [
+        "packaging==26.1"
+    ]
+    assert execute.call_args.args[0][execute.call_args.args[0].index("--default-index") + 1] == (
+        "https://pypi.org/simple/"
+    )
+    assert all("evil.invalid" not in value for value in execute.call_args.kwargs["env"].values())
 
 
 def test_block_closure_stays_with_its_hook(tmp_path: Path, mocker: MockerFixture) -> None:
@@ -498,13 +551,13 @@ def _mock_hook_compiler(mocker: MockerFixture, output: str) -> MagicMock:
     original = run_text
 
     def resolve(
-        command: list[str], *, stdin: str | None = None, cwd: Path | None = None
+        command: list[str], *, stdin: str | None = None, cwd: Path | None = None, env: dict[str, str] | None = None
     ) -> subprocess.CompletedProcess[str]:
         if command[0] == "uv":
             assert stdin is not None
             assert stdin.startswith("-e file://")
             return subprocess.CompletedProcess(command, 0, output, "")
-        return original(command, cwd=cwd, stdin=stdin)
+        return original(command, cwd=cwd, stdin=stdin, env=env)
 
     mocker.patch("release_creator.process.shutil.which", side_effect=lambda name: name)
     patched = mocker.patch("release_creator.hooks.update.run_text", side_effect=resolve)

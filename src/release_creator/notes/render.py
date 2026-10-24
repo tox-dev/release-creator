@@ -537,10 +537,18 @@ def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
 
 
 def _validate_profile_links(text: str) -> None:
-    for link in _RE_LINKED_HANDLE.finditer(text):
-        if link["url"].casefold() != f"https://github.com/{link['handle']}".casefold():
-            msg = f"GitHub credit link for @{link['handle']} points to another profile"
-            raise ValueError(msg)
+    if (
+        invalid := next(
+            (
+                link
+                for link in _RE_LINKED_HANDLE.finditer(text)
+                if link["url"].casefold() != f"https://github.com/{link['handle']}".casefold()
+            ),
+            None,
+        )
+    ) is not None:
+        msg = f"GitHub credit link for @{invalid['handle']} points to another profile"
+        raise ValueError(msg)
 
 
 def _is_comparison_line(line: str) -> bool:

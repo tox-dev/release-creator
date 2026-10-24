@@ -3,17 +3,19 @@
 lazy import shlex
 lazy import shutil
 lazy import subprocess  # ruff: ignore[suspicious-subprocess-import]  # Callers pass argument lists without a shell.
+lazy from collections.abc import Mapping
 lazy from pathlib import Path
 
 
 def run_text(
-    command: list[str], *, cwd: Path | None = None, stdin: str | None = None
+    command: list[str], *, cwd: Path | None = None, stdin: str | None = None, env: Mapping[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
     """Run a command without a shell.
 
     :param command: Executable and arguments, passed without a shell.
     :param cwd: Working directory for the command.
     :param stdin: Text sent to the command.
+    :param env: Environment passed to the command, or the parent's environment.
     :returns: Captured stdout, stderr, and exit status.
     :raises ValueError: The command exceeds the timeout.
     """
@@ -21,6 +23,7 @@ def run_text(
         return subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # No shell or interpolated command.
             command,
             cwd=cwd,
+            env=env,
             input=stdin,
             stdin=subprocess.DEVNULL if stdin is None else None,
             capture_output=True,

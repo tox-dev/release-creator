@@ -2,6 +2,7 @@
 
 lazy import json
 lazy import operator
+lazy import os
 lazy from pathlib import Path
 lazy from tempfile import TemporaryDirectory
 lazy from typing import Final, cast
@@ -289,6 +290,8 @@ def _resolve(
             "--no-annotate",
             "--no-config",
             "--no-sources",
+            "--default-index",
+            "https://pypi.org/simple/",
             "--exclude-newer",
             exclude_newer,
             "--python-version",
@@ -296,6 +299,12 @@ def _resolve(
         ],
         stdin=f"{editable}{root_lines}",
         cwd=config.parent,
+        env={
+            name: value
+            for name, value in os.environ.items()
+            if not name.startswith(("UV_", "PIP_"))
+            and name not in {"SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"}
+        },
     )
     if result.returncode:
         msg = f"cannot resolve hook dependencies: {result.stderr.strip()}"
