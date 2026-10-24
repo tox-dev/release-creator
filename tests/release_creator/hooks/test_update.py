@@ -136,6 +136,8 @@ def test_ignores_ambient_uv_resolution_settings(
         "UV_INSECURE_HOST",
         "PIP_INDEX_URL",
         "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "SSL_CLIENT_CERT",
     ):
         monkeypatch.setenv(name, "https://evil.invalid/simple/")
     mocker.patch("release_creator.process.shutil.which", return_value="uv")
@@ -361,6 +363,54 @@ def test_pins_python_hook_package_dependencies(
     update_pins(config, "7 days", "3.15")
 
     assert config.read_text(encoding="utf-8") == first
+
+
+@pytest.mark.parametrize(
+    ("override", "expected"),
+    [
+        pytest.param("", "3.12", id="manifest-version"),
+        pytest.param("        language_version: python3.13\n", "3.13", id="configuration-override"),
+    ],
+)
+def test_resolves_hook_with_effective_python_version(
+    tmp_path: Path, mocker: MockerFixture, upstream_python_hook: tuple[Path, str], override: str, expected: str
+) -> None:
+    upstream, _ = upstream_python_hook
+    (upstream / ".pre-commit-hooks.yaml").write_text(
+        "- id: lint\n  name: lint\n  entry: lint\n  language: python\n  language_version: python3.12\n",
+        encoding="utf-8",
+    )
+    assert run_text(["git", "-C", str(upstream), "add", "."]).returncode == 0
+    assert (
+        run_text([
+            "git",
+            "-C",
+            str(upstream),
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.org",
+            "commit",
+            "-qm",
+            "Set Python version",
+        ]).returncode
+        == 0
+    )
+    revision = run_text(["git", "-C", str(upstream), "rev-parse", "HEAD"]).stdout.strip()
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(
+        f"repos:\n  - repo: {upstream.as_uri()}\n    rev: {revision}\n    hooks:\n      - id: lint\n{override}",
+        encoding="utf-8",
+    )
+    commands = _mock_hook_compiler(mocker, "-e file:///checkout\nclick==8.1\n")
+
+    update_pins(config, "7 days", "3.15")
+
+    assert [
+        call.args[0][call.args[0].index("--python-version") + 1]
+        for call in commands.call_args_list
+        if call.args[0][0] == "uv"
+    ] == [expected]
 
 
 @pytest.mark.parametrize("style", [pytest.param("|", id="literal"), pytest.param(">+", id="folded")])
@@ -1054,6 +1104,36 @@ def test_rejects_hook_merge_with_hidden_dependencies(tmp_path: Path) -> None:
         update_pins(config, "7 days", "3.15")
 
     assert config.read_text(encoding="utf-8") == source
+
+
+def test_rejects_repository_merge_with_hidden_source(tmp_path: Path, upstream_python_hook: tuple[Path, str]) -> None:
+    upstream, revision = upstream_python_hook
+    config = tmp_path / ".pre-commit-config.yaml"
+    source = (
+        f"repos:\n  - &remote\n    repo: {upstream.as_uri()}\n    rev: {revision}\n    hooks: []\n"
+        "  - <<: *remote\n    hooks:\n      - id: lint\n        additional_dependencies: [click==8]\n"
+    )
+    config.write_text(source, encoding="utf-8")
+    assert safe_load(source)["repos"][1]["repo"] == upstream.as_uri()
+
+    with pytest.raises(ValueError, match="YAML merge keys in repository definitions"):
+        update_pins(config, "7 days", "3.15")
+
+    assert config.read_text(encoding="utf-8") == source
+
+
+def test_keeps_flow_dependencies_with_a_trailing_managed_comment(tmp_path: Path, mocker: MockerFixture) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text("additional_dependencies: [packaging==26, click==8] # release-creator managed\n")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch(
+        "release_creator.hooks.update.run_text",
+        return_value=subprocess.CompletedProcess([], 0, "packaging==26\nclick==8\n", ""),
+    )
+
+    update_pins(config, "7 days", "3.15")
+
+    assert safe_load(config.read_text(encoding="utf-8"))["additional_dependencies"] == ["packaging==26", "click==8"]
 
 
 @pytest.mark.parametrize(

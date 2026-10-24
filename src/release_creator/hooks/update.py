@@ -123,14 +123,15 @@ def _default_python_version(root: MappingNode, fallback: str) -> str:
     return _python_version(override, fallback)
 
 
-def _python_version(value: Node | None, fallback: str, system_version: str | None = None) -> str:
-    if not isinstance(value, ScalarNode) or value.value == "default":
+def _python_version(value: Node | str | None, fallback: str, system_version: str | None = None) -> str:
+    value = cast("str", value.value) if isinstance(value, ScalarNode) else value
+    if not isinstance(value, str) or value == "default":
         return fallback
-    if value.value == "python3":
+    if value == "python3":
         return system_version or fallback
-    version = str(value.value).removeprefix("python")
-    if version == value.value or not version.startswith("3."):
-        msg = f"unsupported Python hook language_version: {value.value}"
+    version = value.removeprefix("python")
+    if version == value or not version.startswith("3."):
+        msg = f"unsupported Python hook language_version: {value}"
         raise ValueError(msg)
     return version
 
@@ -168,8 +169,10 @@ def _parse_group(
     direct: list[tuple[ScalarNode, Requirement]] = []
     managed: list[ScalarNode] = []
     for item in value.value:
-        line_end = source.find("\n", _start(item))
-        if "# release-creator managed" in source[_start(item) : line_end if line_end >= 0 else len(source)]:
+        line_end = source.find("\n", _end(item))
+        trailing = source[_end(item) : line_end if line_end >= 0 else len(source)]
+        before, marker, comment = trailing.partition("#")
+        if marker and comment.startswith(" release-creator managed") and not before.strip(" ,"):
             managed.append(item)
             continue
         try:
@@ -209,25 +212,38 @@ def _hook_packages(
         if not isinstance(repository, MappingNode):
             msg = "hook repository must be a mapping"
             raise TypeError(msg)
+        _reject_repository_merge(repository)
         hooks = _mapping_value(repository, "hooks")
         if not isinstance(hooks, SequenceNode):
             msg = "hook repository must include hooks"
             raise TypeError(msg)
         checkout_and_hooks = _repository_checkout(repository, temporary / str(index), cwd)
         checkout = checkout_and_hooks[0] if checkout_and_hooks is not None else None
-        languages = (
+        manifest = (
             {
-                entry["id"]: entry["language"]
+                entry["id"]: entry
                 for entry in safe_load((checkout / ".pre-commit-hooks.yaml").read_text(encoding="utf-8"))
             }
             if checkout is not None
             else {}
         )
+        languages = {identifier: entry["language"] for identifier, entry in manifest.items()}
         for hook in hooks.value:
             if _hook_language(hook, languages, require_id=checkout is not None) not in {None, "python"}:
                 continue
             hook = cast("MappingNode", hook)
-            version = _python_version(_mapping_value(hook, "language_version"), default_version, system_version)
+            identifier = _mapping_value(hook, "id")
+            override = _mapping_value(hook, "language_version")
+            manifest_version = (
+                manifest.get(identifier.value, {}).get("language_version")
+                if isinstance(identifier, ScalarNode)
+                else None
+            )
+            version = _python_version(
+                override if override is not None else manifest_version,
+                default_version,
+                system_version,
+            )
             if isinstance(dependencies := _mapping_key(hook, "additional_dependencies"), ScalarNode):
                 python_groups[_start(dependencies)] = version
                 if checkout is not None:
@@ -235,6 +251,12 @@ def _hook_packages(
             elif checkout is not None:
                 missing.append((hook, checkout, version))
     return packages, missing, python_groups
+
+
+def _reject_repository_merge(repository: MappingNode) -> None:
+    if any(isinstance(key, ScalarNode) and key.value == "<<" for key, _ in repository.value):
+        msg = "YAML merge keys in repository definitions cannot be updated safely"
+        raise ValueError(msg)
 
 
 def _hook_language(hook: Node, languages: dict[str, str], *, require_id: bool) -> str | None:
@@ -330,7 +352,7 @@ def _resolve(
             name: value
             for name, value in os.environ.items()
             if not name.startswith(("UV_", "PIP_"))
-            and name not in {"SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"}
+            and name not in {"SSL_CERT_FILE", "SSL_CERT_DIR", "SSL_CLIENT_CERT", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"}
         },
     )
     if result.returncode:
