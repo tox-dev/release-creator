@@ -71,6 +71,10 @@ The tagged changelog decides which changes appear, their order, their categories
 infer changes or people from commits. Add only user-visible changes to the changelog. Credit verified human authors
 there; do not credit bots or reviewers for work they did not author.
 
+Link the pull request credited by each entry. If an entry mentions a different pull request only for context, put ``See
+<URL>`` or ``compare <URL>`` after a comma, semicolon, or sentence boundary. Leave that clause without a ``by`` credit.
+Otherwise ``notes`` treats the URL as another credited pull request and checks its author.
+
 ``notes`` requires exactly one section for ``--tag`` and rejects unknown categories. It renames ``Fixed`` to ``Bug
 fixes`` and ``Added`` to ``Features`` while keeping each release bullet on one line. For Markdown, leave empty headings
 out of the tagged changelog; the supplied Towncrier template does this. The reStructuredText reader omits empty

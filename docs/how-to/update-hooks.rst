@@ -11,6 +11,12 @@ weekly change to pin packages declared by Python hook repositories and packages 
     release-creator hooks
     prek run --all-files
 
+On a hook update PR, ``release-creator hooks --check`` checks the proposed pins without changing the file. It resolves
+the frozen hook revision and direct dependencies at their proposed versions, uses managed pins as constraints, and
+requires the managed pins to match the complete dependency closure. A removed dependency can lose its managed pin;
+removing a pin that is still needed fails the check. The same PyPI-only resolution and seven-day cutoff apply. Use
+``--minimum-days N`` on both commands when the repository requires a longer package cooldown; the minimum is seven.
+
 The command checks out each external hook repository at its frozen commit and reads ``.pre-commit-hooks.yaml``. For
 selected Python hooks, it resolves the repository package with all ``additional_dependencies`` and adds the pinned
 closure to that hook's ``additional_dependencies``. It also resolves dependencies in local hooks. Conditional

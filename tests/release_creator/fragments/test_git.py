@@ -128,7 +128,8 @@ def test_fragment_commits_from_git_reports_log_failure(tmp_path: Path, mocker: M
     (directory / "+news.feature.md").write_text("News.\n", encoding="utf-8")
     mocker.patch("release_creator.process.shutil.which", return_value="git")
     mocker.patch(
-        "release_creator.fragments.git.run_text",
+        "release_creator.process.subprocess.run",
+        autospec=True,
         side_effect=[
             subprocess.CompletedProcess([], 0, "false\n", ""),
             subprocess.CompletedProcess([], 1, "", "history unavailable"),

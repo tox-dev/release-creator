@@ -24,7 +24,7 @@ def test_hooks_command_uses_reviewed_cutoff(
     )
     mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
     resolve = mocker.patch(
-        "release_creator.hooks.update.run_text",
+        "release_creator.process.subprocess.run",
         autospec=True,
         return_value=subprocess.CompletedProcess([], 0, "black==2\n", ""),
     )

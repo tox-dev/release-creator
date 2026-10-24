@@ -147,21 +147,21 @@ def _render_section(section: nodes.section, tag: str) -> list[str]:
     if name not in RELEASE_CATEGORIES:
         msg = f"unknown changelog category: {name}"
         raise ValueError(msg)
-    entries: list[str] = []
-    warnings: list[str] = []
+    body: list[str] = []
+    has_entries = False
     for child in section[1:]:
         if isinstance(child, nodes.target):
             continue
-        if isinstance(child, nodes.bullet_list) and not warnings:
-            entries.extend(_render_item(item, 0) for item in child)
+        if isinstance(child, nodes.bullet_list):
+            has_entries = True
+            body.append("\n".join(_render_item(item, 0) for item in child))
         elif isinstance(child, nodes.warning):
-            warnings.append(f"> **Warning:** {' '.join(_render_paragraph(part) for part in child)}")
+            body.append(f"> **Warning:** {' '.join(_render_paragraph(part) for part in child)}")
         else:
             _reject_top_level(child)
-    if entries:
-        body = "\n".join(entries)
-        warnings.insert(0, f'<a name="{release_anchor(tag, name)}"></a>\n\n### {RELEASE_CATEGORIES[name]}\n\n{body}')
-    return warnings
+    if has_entries:
+        body.insert(0, f'<a name="{release_anchor(tag, name)}"></a>\n\n### {RELEASE_CATEGORIES[name]}')
+    return body
 
 
 def _render_item(item: nodes.list_item, depth: int) -> str:
@@ -169,8 +169,13 @@ def _render_item(item: nodes.list_item, depth: int) -> str:
     if isinstance(item[0], nodes.bullet_list) and len(item) == 1:
         nested = "\n".join(_render_item(entry, depth + 1) for entry in item[0])
         return f"{indent}-\n{nested}"
-    result = f"{indent}- {_render_paragraph(item[0])}"
-    only_paragraphs = True
+    only_paragraphs = isinstance(item[0], nodes.paragraph)
+    if isinstance(item[0], nodes.literal_block):
+        result = f"{indent}- {_render_item_child(item[0], item, depth).removeprefix(f'\n\n{indent}  ')}"
+    elif only_paragraphs:
+        result = f"{indent}- {_render_paragraph(item[0])}"
+    else:
+        result = f"{indent}-{_render_item_child(item[0], item, depth)}"
     for child in item[1:]:
         if isinstance(child, nodes.paragraph) and only_paragraphs:
             result += f" {_render_paragraph(child)}"
@@ -194,7 +199,11 @@ def _render_inline(node: nodes.Node) -> str:
     elif isinstance(node, nodes.reference):
         label = node.astext()
         url = node.get("refuri")
-        is_profile = label.startswith("@") and url == f"https://github.com/{label.removeprefix('@')}"
+        is_profile = (
+            label.startswith("@")
+            and url is not None
+            and url.casefold() == f"https://github.com/{label.removeprefix('@').casefold()}"
+        )
         value = label if is_profile or url is None or url == label else f"[{_escape_text(label)}]({_escape_url(url)})"
     elif isinstance(node, nodes.target):
         value = ""

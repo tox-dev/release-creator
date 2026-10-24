@@ -1,11 +1,12 @@
 """Refresh hook dependencies while preserving unrelated pre-commit YAML."""
 
+# ruff: file-ignore[lazy-import-immediately-resolved]  # NamedTuple resolves when the policy class is defined.
 lazy import json
 lazy import operator
 lazy import os
 lazy from pathlib import Path
 lazy from tempfile import TemporaryDirectory
-lazy from typing import Final, cast
+lazy from typing import Final, NamedTuple, cast
 
 lazy from packaging.requirements import InvalidRequirement, Requirement
 lazy from packaging.utils import NormalizedName, canonicalize_name
@@ -17,6 +18,13 @@ lazy from release_creator.process import required_executable, run_text
 
 type _Group = tuple[ScalarNode, SequenceNode, list[tuple[ScalarNode, Requirement]], list[ScalarNode], bool]
 type _Edit = tuple[int, int, str]
+type _PinKey = tuple[NormalizedName, str]
+
+
+class _ResolvePolicy(NamedTuple):
+    exclude_newer: str
+    python_version: str
+    no_deps: bool = False
 
 
 def update_pins(config: Path, exclude_newer: str, python_version: str) -> None:
@@ -41,26 +49,119 @@ def update_pins(config: Path, exclude_newer: str, python_version: str) -> None:
             direct = group[2]
             package = packages.get(_start(group[0]))
             if direct or package is not None:
+                policy = _ResolvePolicy(exclude_newer, python_groups.get(_start(group[0]), version))
                 resolved = _resolve(
                     [requirement for _, requirement in direct],
                     config,
-                    exclude_newer,
-                    python_groups.get(_start(group[0]), version),
+                    policy,
                     package,
                 )
-                edits.extend(_group_edits(source, group, resolved))
+                active = (
+                    set(_active_pins([requirement for _, requirement in direct], config, policy))
+                    if any(requirement.marker for _, requirement in direct)
+                    else None
+                )
+                edits.extend(_group_edits(source, group, resolved, active))
             elif group[3]:
                 edits.extend(_group_edits(source, group, []))
-        for hook, package, hook_version in missing:
-            resolved = _resolve([], config, exclude_newer, hook_version, package)
-            if resolved:
-                edits.append(_new_group_edit(source, hook, resolved))
+        for hook, package, hook_version, manifest_dependencies in missing:
+            resolved = _resolve(manifest_dependencies, config, _ResolvePolicy(exclude_newer, hook_version), package)
+            if resolved or manifest_dependencies:
+                edits.append(_new_group_edit(source, hook, resolved, manifest_dependencies))
     _reject_shared_edits(root, edits)
     for start, end, replacement in sorted(edits, key=operator.itemgetter(0), reverse=True):
         source = f"{source[:start]}{replacement}{source[end:]}"
     if edits:
         _config_root(source)
         config.write_bytes(source.replace("\n", newline).encode("utf-8"))
+
+
+def check_pins(config: Path, exclude_newer: str, python_version: str) -> None:
+    """Check the proposed hook dependency closure without editing the configuration.
+
+    :param config: Proposed pre-commit configuration file.
+    :param exclude_newer: Cutoff for eligible package releases.
+    :param python_version: Fallback Python version for dependency resolution.
+    :raises ValueError: The proposed pins differ from the resolved dependency closure.
+    """
+    source = config.read_text(encoding="utf-8")
+    root = _config_root(source)
+    with TemporaryDirectory() as temporary:
+        version = _default_python_version(root, python_version)
+        packages, missing, python_groups = _hook_packages(root, Path(temporary), config.parent, version, python_version)
+        for group in _groups(source, root, set(python_groups)):
+            direct = [requirement for _, requirement in group[2]]
+            managed = [_managed_requirement(node) for node in group[3]]
+            package = packages.get(_start(group[0]))
+            policy = _ResolvePolicy(exclude_newer, python_groups.get(_start(group[0]), version))
+            resolved = (
+                _resolve(
+                    direct,
+                    config,
+                    policy,
+                    package,
+                    constraints=tuple(managed),
+                )
+                if direct or package is not None
+                else []
+            )
+            expected = [requirement for requirement in direct if _exact_pin(requirement)] + managed
+            if _pins(resolved) != _active_pins(expected, config, policy):
+                msg = f"hook dependency pins do not match the resolved closure: {group[0].value}"
+                raise ValueError(msg)
+        for hook, package, hook_version, manifest_dependencies in missing:
+            if _resolve(
+                manifest_dependencies, config, _ResolvePolicy(exclude_newer, hook_version), package, constraints=()
+            ):
+                identifier = _mapping_value(hook, "id")
+                hook_id = identifier.value if isinstance(identifier, ScalarNode) else "unknown"
+                msg = f"hook is missing managed dependencies: {hook_id}"
+                raise ValueError(msg)
+
+
+def _managed_requirement(node: ScalarNode) -> Requirement:
+    try:
+        requirement = Requirement(node.value)
+    except InvalidRequirement as error:
+        msg = f"invalid managed hook dependency {node.value!r}"
+        raise ValueError(msg) from error
+    if requirement.url is not None or not _exact_pin(requirement):
+        msg = f"managed hook dependency must be an exact index pin: {node.value!r}"
+        raise ValueError(msg)
+    return requirement
+
+
+def _pins(requirements: list[Requirement]) -> dict[_PinKey, str]:
+    pins: dict[_PinKey, str] = {}
+    for requirement in requirements:
+        key = _pin_key(requirement)
+        pin = next(iter(requirement.specifier)).version
+        if key in pins and pins[key] != pin:
+            msg = f"conflicting hook dependency pins for {key[0]}"
+            raise ValueError(msg)
+        pins[key] = pin
+    return pins
+
+
+def _pin_key(requirement: Requirement) -> _PinKey:
+    return canonicalize_name(requirement.name), str(requirement.marker or "")
+
+
+def _resolved_version(pins: dict[_PinKey, str], key: _PinKey) -> str | None:
+    return pins.get(key, pins.get((key[0], "")))
+
+
+def _active_pins(requirements: list[Requirement], config: Path, policy: _ResolvePolicy) -> dict[_PinKey, str]:
+    if not any(requirement.marker for requirement in requirements):
+        return _pins(requirements)
+    return _pins(
+        _resolve(
+            requirements,
+            config,
+            _ResolvePolicy(policy.exclude_newer, policy.python_version, no_deps=True),
+            constraints=(),
+        )
+    )
 
 
 def _config_root(source: str) -> MappingNode:
@@ -201,9 +302,9 @@ def _last_content_end(node: MappingNode | ScalarNode | SequenceNode) -> int:
 
 def _hook_packages(
     root: MappingNode, temporary: Path, cwd: Path, default_version: str, system_version: str
-) -> tuple[dict[int, Path], list[tuple[MappingNode, Path, str]], dict[int, str]]:
+) -> tuple[dict[int, Path], list[tuple[MappingNode, Path, str, list[Requirement]]], dict[int, str]]:
     packages: dict[int, Path] = {}
-    missing: list[tuple[MappingNode, Path, str]] = []
+    missing: list[tuple[MappingNode, Path, str, list[Requirement]]] = []
     python_groups: dict[int, str] = {}
     repositories = _mapping_value(root, "repos")
     if not isinstance(repositories, SequenceNode):
@@ -249,8 +350,29 @@ def _hook_packages(
                 if checkout is not None:
                     packages[_start(dependencies)] = checkout
             elif checkout is not None:
-                missing.append((hook, checkout, version))
+                missing.append((
+                    hook,
+                    checkout,
+                    version,
+                    _manifest_dependencies(manifest.get(cast("ScalarNode", identifier).value, {})),
+                ))
     return packages, missing, python_groups
+
+
+def _manifest_dependencies(entry: dict[str, object]) -> list[Requirement]:
+    values = entry.get("additional_dependencies", [])
+    if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+        msg = "hook manifest additional_dependencies must contain requirement strings"
+        raise TypeError(msg)
+    try:
+        requirements = [Requirement(value) for value in values]
+    except InvalidRequirement as error:
+        msg = "hook manifest has an invalid additional dependency"
+        raise ValueError(msg) from error
+    if any(requirement.url is not None for requirement in requirements):
+        msg = "hook manifest direct URLs bypass the package cooldown"
+        raise ValueError(msg)
+    return requirements
 
 
 def _reject_repository_merge(repository: MappingNode) -> None:
@@ -322,13 +444,18 @@ def _start(node: MappingNode | ScalarNode | SequenceNode) -> int:
 
 
 def _resolve(
-    roots: list[Requirement], config: Path, exclude_newer: str, python_version: str, package: Path | None = None
+    roots: list[Requirement],
+    config: Path,
+    policy: _ResolvePolicy,
+    package: Path | None = None,
+    *,
+    constraints: tuple[Requirement, ...] | None = None,
 ) -> list[Requirement]:
     uv = required_executable("uv")
     editable = f"-e {package.as_uri()}\n" if package is not None else ""
-    root_lines = "".join(f"{_root_input(root)}\n" for root in roots)
-    result = run_text(
-        [
+    root_lines = "".join(f"{root if constraints is not None else _root_input(root)}\n" for root in roots)
+    with TemporaryDirectory() as temporary:
+        command = [
             uv,
             "pip",
             "compile",
@@ -342,30 +469,38 @@ def _resolve(
             "--default-index",
             "https://pypi.org/simple/",
             "--exclude-newer",
-            exclude_newer,
+            policy.exclude_newer,
             "--python-version",
-            python_version,
-        ],
-        stdin=f"{editable}{root_lines}",
-        cwd=config.parent,
-        env={
-            name: value
-            for name, value in os.environ.items()
-            if not name.startswith(("UV_", "PIP_"))
-            and name not in {"SSL_CERT_FILE", "SSL_CERT_DIR", "SSL_CLIENT_CERT", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"}
-        },
-    )
+            policy.python_version,
+        ]
+        if policy.no_deps:
+            command.append("--no-deps")
+        if constraints is not None and len(constraints) > 0:
+            constraint_file = Path(temporary) / "constraints.txt"
+            constraint_file.write_text("".join(f"{requirement}\n" for requirement in constraints), encoding="utf-8")
+            command.extend(("--constraint", str(constraint_file)))
+        result = run_text(
+            command,
+            stdin=f"{editable}{root_lines}",
+            cwd=config.parent,
+            env={
+                name: value
+                for name, value in os.environ.items()
+                if not name.startswith(("UV_", "PIP_"))
+                and name
+                not in {
+                    "SSL_CERT_FILE",
+                    "SSL_CERT_DIR",
+                    "SSL_CLIENT_CERT",
+                    "REQUESTS_CA_BUNDLE",
+                    "CURL_CA_BUNDLE",
+                }
+            },
+        )
     if result.returncode:
         msg = f"cannot resolve hook dependencies: {result.stderr.strip()}"
         raise ValueError(msg)
-    resolved = [
-        _resolved_line(line) for line in result.stdout.splitlines() if line.strip() and not line.startswith("-e ")
-    ]
-    names = [canonicalize_name(requirement.name) for requirement in resolved]
-    if len(names) != len(set(names)):
-        msg = "hook dependency resolution selected multiple versions of one package"
-        raise ValueError(msg)
-    return resolved
+    return [_resolved_line(line) for line in result.stdout.splitlines() if line.strip() and not line.startswith("-e ")]
 
 
 def _root_input(requirement: Requirement) -> str:
@@ -391,27 +526,32 @@ def _resolved_line(line: str) -> Requirement:
     return requirement
 
 
-def _group_edits(source: str, group: _Group, resolved: list[Requirement]) -> list[_Edit]:
+def _group_edits(
+    source: str, group: _Group, resolved: list[Requirement], active: set[_PinKey] | None = None
+) -> list[_Edit]:
     key, sequence, direct, managed, flow_mapping = group
     if managed and not direct and not resolved and len(managed) == len(sequence.value):
         if flow_mapping:
             return [(_start(sequence), _end(sequence), "[]")]
         end = source.find("\n", _last_content_end(sequence.value[-1]))
         return [(_start(key), end + 1 if end >= 0 else len(source), f"{key.value}: []\n")]
-    roots = {canonicalize_name(requirement.name) for _, requirement in direct}
-    unpinned = {canonicalize_name(requirement.name) for _, requirement in direct if not _exact_pin(requirement)}
+    roots = {_pin_key(requirement) for _, requirement in direct}
+    unpinned = {_pin_key(requirement) for _, requirement in direct if not _exact_pin(requirement)}
+    root_names = {name for name, _ in roots}
+    unpinned_names = {name for name, _ in unpinned}
     transitive = [
         item
         for item in resolved
-        if canonicalize_name(item.name) not in roots or canonicalize_name(item.name) in unpinned
+        if canonicalize_name(item.name) not in root_names
+        or _pin_key(item) in unpinned
+        or (item.marker is None and canonicalize_name(item.name) in unpinned_names)
     ]
-    versions = {
-        canonicalize_name(item.name): next(iter(item.specifier)).version
-        for item in resolved
-        if canonicalize_name(item.name) in roots
-    }
-    if missing := roots - versions.keys():
-        msg = f"hook dependency resolution omitted direct packages: {', '.join(sorted(missing))}"
+    resolved_pins = _pins(resolved)
+    versions = {key: version for key in roots if (version := _resolved_version(resolved_pins, key)) is not None}
+    if missing := {
+        key for key in (roots if active is None else active) if _resolved_version(resolved_pins, key) is None
+    }:
+        msg = f"hook dependency resolution omitted direct packages: {', '.join(sorted({name for name, _ in missing}))}"
         raise ValueError(msg)
     if flow_mapping and (transitive or managed):
         return [_flow_mapping_edit(source, group, versions, transitive)]
@@ -425,14 +565,12 @@ def _group_edits(source: str, group: _Group, resolved: list[Requirement]) -> lis
 
 
 def _flow_mapping_edit(
-    source: str, group: _Group, versions: dict[NormalizedName, str], transitive: list[Requirement]
+    source: str, group: _Group, versions: dict[_PinKey, str], transitive: list[Requirement]
 ) -> _Edit:
     key, sequence, direct, _, _ = group
     values = [
         (
-            _replace_scalar(
-                source[_start(node) : _end(node)], requirement, versions[canonicalize_name(requirement.name)]
-            ),
+            _replace_scalar(source[_start(node) : _end(node)], requirement, versions.get(_pin_key(requirement))),
             False,
             _direct_comment(source, node, sequence),
         )
@@ -460,7 +598,7 @@ def _direct_comment(source: str, node: ScalarNode, sequence: SequenceNode) -> st
 def _inline_edit(
     source: str,
     group: _Group,
-    versions: dict[NormalizedName, str],
+    versions: dict[_PinKey, str],
     transitive: list[Requirement],
 ) -> _Edit:
     key, sequence, direct, _, _ = group
@@ -468,9 +606,7 @@ def _inline_edit(
     existing = []
     for node, requirement in direct:
         scalar = source[_start(node) : _end(node)]
-        existing.append(
-            f"{indent}  - {_replace_scalar(scalar, requirement, versions[canonicalize_name(requirement.name)])}\n"
-        )
+        existing.append(f"{indent}  - {_replace_scalar(scalar, requirement, versions.get(_pin_key(requirement)))}\n")
     generated = [f"{indent}  - {json.dumps(str(item))} # release-creator managed\n" for item in transitive]
     line_end = source.find("\n", _end(sequence))
     if line_end < 0:
@@ -480,8 +616,8 @@ def _inline_edit(
     return _start(key), line_end + 1 if line_end < len(source) else line_end, replacement
 
 
-def _replace_scalar(scalar: str, requirement: Requirement, version: str) -> str:
-    if not _exact_pin(requirement):
+def _replace_scalar(scalar: str, requirement: Requirement, version: str | None) -> str:
+    if not _exact_pin(requirement) or version is None:
         return scalar
     old_version = next(iter(requirement.specifier)).version
     if old_version == version:
@@ -494,14 +630,14 @@ def _replace_scalar(scalar: str, requirement: Requirement, version: str) -> str:
 def _block_edits(
     source: str,
     group: _Group,
-    versions: dict[NormalizedName, str],
+    versions: dict[_PinKey, str],
     transitive: list[Requirement],
 ) -> list[_Edit]:
     _, sequence, direct, managed, _ = group
     edits: list[_Edit] = []
     for node, requirement in direct:
         scalar = source[_start(node) : _end(node)]
-        updated = _replace_scalar(scalar, requirement, versions[canonicalize_name(requirement.name)])
+        updated = _replace_scalar(scalar, requirement, versions.get(_pin_key(requirement)))
         if scalar != updated:
             edits.append((_start(node), _end(node), updated))
     for node in managed:
@@ -520,18 +656,37 @@ def _block_edits(
     return edits
 
 
-def _new_group_edit(source: str, hook: MappingNode, resolved: list[Requirement]) -> _Edit:
+def _new_group_edit(
+    source: str, hook: MappingNode, resolved: list[Requirement], manifest_dependencies: list[Requirement]
+) -> _Edit:
     if source[_start(hook)] == "{":
         msg = "cannot add managed dependencies to a flow-style hook"
         raise ValueError(msg)
     end = source.find("\n", _last_content_end(hook.value[-1][1]))
     position = end + 1 if end >= 0 else len(source)
     indent = " " * cast("Mark", hook.value[0][0].start_mark).column
-    generated = "".join(f"{indent}  - {json.dumps(str(item))} # release-creator managed\n" for item in resolved)
+    roots = {_pin_key(requirement) for requirement in manifest_dependencies}
+    unpinned = {_pin_key(requirement) for requirement in manifest_dependencies if not _exact_pin(requirement)}
+    root_names = {name for name, _ in roots}
+    unpinned_names = {name for name, _ in unpinned}
+    versions = _pins(resolved)
+    direct_lines: list[str] = []
+    for requirement in manifest_dependencies:
+        version = _resolved_version(versions, _pin_key(requirement))
+        direct_lines.append(f"{indent}  - {json.dumps(_replace_scalar(str(requirement), requirement, version))}\n")
+    direct = "".join(direct_lines)
+    generated = "".join(
+        f"{indent}  - {json.dumps(str(item))} # release-creator managed\n"
+        for item in resolved
+        if canonicalize_name(item.name) not in root_names
+        or _pin_key(item) in unpinned
+        or (item.marker is None and canonicalize_name(item.name) in unpinned_names)
+    )
     prefix = "\n" if end < 0 else ""
-    return position, position, f"{prefix}{indent}additional_dependencies:\n{generated}"
+    return position, position, f"{prefix}{indent}additional_dependencies:\n{direct}{generated}"
 
 
 __all__ = [
+    "check_pins",
     "update_pins",
 ]

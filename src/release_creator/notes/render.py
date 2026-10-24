@@ -63,7 +63,7 @@ _RE_GITHUB_PATH: Final = re.compile(
 )
 _RE_PULL_LABEL: Final = re.compile(
     r"""
-    (?:PR\ )?\#(?P<number>\d+)  # Displayed pull request number
+    (?:PR\ \#?|\#)(?P<number>\d+)  # Displayed pull request number
     """,
     re.VERBOSE | re.IGNORECASE,
 )
@@ -307,7 +307,7 @@ def _visible_lines(notes: str, repository: str) -> Iterator[str]:
             elif child.type == "text":
                 parts.append(child.content)
             elif child.type in {"softbreak", "hardbreak"}:
-                parts.append("\n")
+                parts.append(" " if child.type == "softbreak" else "\n")
             elif child.type == "html_inline":
                 parser.feed(child.content)
                 parts.append(parser.take_text())
@@ -320,10 +320,11 @@ def _visible_lines(notes: str, repository: str) -> Iterator[str]:
 def _visible_link(label: str, url: str, repository: str) -> str:
     if (profile := _RE_PROFILE_LABEL.fullmatch(label)) is not None:
         parsed = urlsplit(url)
+        handle = profile["handle"].casefold()
         if (
             parsed.scheme != "https"
             or parsed.netloc.casefold() not in {"github.com", "www.github.com"}
-            or parsed.path.casefold() not in {f"/{profile['handle']}", f"/{profile['handle']}/"}
+            or parsed.path.casefold() not in {f"/{handle}", f"/{handle}/"}
             or parsed.query
             or parsed.fragment
         ):
@@ -345,7 +346,9 @@ def _visible_link(label: str, url: str, repository: str) -> str:
         destination = path["number"] if current_pull else "another URL"
         msg = f"pull request label #{number['number']} points to #{destination}"
         raise ValueError(msg)
-    return f" https://github.com/{repository}/pull/{path['number']} " if current_pull else " "
+    if not current_pull:
+        return " "
+    return f" https://github.com/{repository}/{path['kind']}/{path['number']} "
 
 
 def _pull_references(line: str, repository: str, known_numbers: set[str]) -> list[re.Match[str]]:
@@ -357,7 +360,42 @@ def _pull_references(line: str, repository: str, known_numbers: set[str]) -> lis
         and not _reference_in_url(line, match)
     ]
     known = known_numbers | {match["number"] for match in candidates if match["kind"] == "pull"}
-    return [match for match in candidates if match["kind"] == "pull" or match["number"] in known]
+    relevant = [match for match in candidates if match["kind"] == "pull" or match["number"] in known]
+    sources: list[re.Match[str]] = []
+    for index, match in enumerate(relevant):
+        following = line[match.end() : relevant[index + 1].start() if index + 1 < len(relevant) else None]
+        if not _contextual_pull_url(line[: match.start()], match, sources, following):
+            sources.append(match)
+    return sources
+
+
+def _contextual_pull_url(prefix: str, match: re.Match[str], sources: list[re.Match[str]], following: str) -> bool:
+    return (
+        match["repository"] is not None
+        and bool(sources)
+        and re.search(
+            r"""
+            (?<![A-Za-z0-9_])(?P<verb>see|compare)\s+$  # Reference introduced by a separate source link
+            """,
+            prefix,
+            re.VERBOSE | re.IGNORECASE,
+        )
+        is not None
+        and not _has_contextual_credit(following)
+    )
+
+
+def _has_contextual_credit(text: str) -> bool:
+    return any(
+        (credit := _entry_credit(f" {text[marker.start() :]}", named=True)) is not None and credit[1]
+        for marker in re.finditer(
+            r"""
+            (?<![A-Za-z0-9_])(?P<credit>by)\s+  # Candidate credit after punctuation
+            """,
+            text,
+            re.VERBOSE | re.IGNORECASE,
+        )
+    )
 
 
 def _reference_in_url(line: str, match: re.Match[str]) -> bool:

@@ -32,6 +32,7 @@ dependencies = [
   "mdformat-gfm>=1,<2",
   "packaging>=26",
   "pyyaml>=6",
+  "tomli-w>=1.2",
   "towncrier>=26.9"
 ]
 urls.Changelog = "https://release-creator.readthedocs.io/en/latest/changelog.html"
@@ -49,7 +50,7 @@ test = [
   "graphql-core>=3",
   "pytest>=9",
   "pytest-cov>=7",
-  "pytest-mock>=3.17",
+  "pytest-mock>=3.16",
   "pytest-xdist>=3",
   { include-group = "release-prepare" },
 ]
