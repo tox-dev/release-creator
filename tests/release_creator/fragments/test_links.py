@@ -185,7 +185,10 @@ def test_add_pull_request_links_renders_oxford_author_credit(tmp_path: Path) -> 
         ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
         "* Add a feature by @alice in https://github.com/tox-dev/example/pull/42\n",
     )
-    assert ("Add a feature by @bob, @carol, and @alice ([#42](https://github.com/tox-dev/example/pull/42)).") in notes
+    assert (
+        "Add a feature by [@bob](https://github.com/bob), [@carol](https://github.com/carol), "
+        "and [@alice](https://github.com/alice) ([#42](https://github.com/tox-dev/example/pull/42))."
+    ) in notes
 
 
 def test_add_pull_request_links_renders_rst_oxford_author_credit(tmp_path: Path) -> None:
@@ -203,7 +206,10 @@ def test_add_pull_request_links_renders_rst_oxford_author_credit(tmp_path: Path)
     assert "([#42](https://github.com/tox-dev/example/pull/42))" in notes
 
 
-@pytest.mark.parametrize("break_text", ["\n", "  \n"], ids=["soft", "hard"])
+@pytest.mark.parametrize(
+    "break_text",
+    [pytest.param("\n", id="soft"), pytest.param("  \n", id="hard")],
+)
 def test_add_pull_request_links_accepts_credit_after_line_break(tmp_path: Path, break_text: str) -> None:
     fragment = tmp_path / "+first.feature.md"
     fragment.write_text(f"Add a feature by{break_text}[@alice](https://github.com/alice).\n")
@@ -249,6 +255,11 @@ def test_add_pull_request_links_accepts_credit_across_visible_boundary(tmp_path:
         pytest.param("md", "- Fix A.\n  - subdetail\n", id="markdown-nested-list"),
         pytest.param("md", "Fix A.\n\n## Details\n", id="markdown-heading"),
         pytest.param("md", "Fix A.\n\n| A | B |\n|---|---|\n| 1 | 2 |\n", id="markdown-table"),
+        pytest.param("md", "<!-- hidden -->\n", id="markdown-comment-only"),
+        pytest.param("md", "---\n", id="markdown-thematic-only"),
+        pytest.param("md", "```sh\necho x\n```\n", id="markdown-code-only"),
+        pytest.param("md", "    echo x\n", id="markdown-indented-code-only"),
+        pytest.param("md", "<div>Hidden</div>\n", id="markdown-html-only"),
         pytest.param("rst", "- Fix A.\n- Fix B.\n", id="rst-bullets"),
         pytest.param("rst", "  - Fix A.\n  - Fix B.\n", id="rst-indented-bullets"),
         pytest.param("rst", "1. Fix A.\n2. Fix B.\n", id="rst-numbered"),
@@ -258,6 +269,9 @@ def test_add_pull_request_links_accepts_credit_across_visible_boundary(tmp_path:
         pytest.param("rst", "Fix A.\n\nDetails\n=======\n\nMore info.\n", id="rst-heading"),
         pytest.param("rst", "Fix A.\n\n+---+---+\n| A | B |\n+===+===+\n| 1 | 2 |\n+---+---+\n", id="rst-table"),
         pytest.param("rst", "Fix A.\n\n.. raw:: html\n\n   <b>x</b>\n", id="rst-raw"),
+        pytest.param("rst", "Fix A.\n\n.. hidden comment\n\nMore detail.\n", id="rst-comment"),
+        pytest.param("rst", ".. hidden comment\n", id="rst-comment-only"),
+        pytest.param("rst", ".. code:: sh\n\n  echo x\n", id="rst-code-only"),
         pytest.param(
             "rst",
             "Fix A.\n\n.. code-block:: text\n  :caption: example\n\n  sample\n",
@@ -519,42 +533,28 @@ def test_add_pull_request_links_after_earlier_fence_before_final_fence(tmp_path:
     )
 
 
-@pytest.mark.parametrize(
-    ("extension", "code"),
-    [
-        pytest.param("md", "```sh\necho yes\n```", id="markdown-fence"),
-        pytest.param("md", "```sh\necho yes\n````", id="markdown-longer-closing-fence"),
-        pytest.param("md", "````sh\n```\necho yes\n````", id="markdown-long-fence"),
-        pytest.param("rst", ".. code:: sh\n\n  echo yes", id="rst-directive"),
-        pytest.param("md", "    echo yes", id="markdown-indented"),
-    ],
-)
-def test_add_pull_request_links_after_code_only(tmp_path: Path, extension: str, code: str) -> None:
-    fragment = tmp_path / f"+first.feature.{extension}"
-    fragment.write_text(f"{code}\n")
+def test_add_pull_request_links_after_earlier_fence_and_final_prose(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    fragment.write_text("Example.\n\n```sh\nfirst\n```\n\nMore details.\n")
 
     _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
 
-    link = (
-        "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice)"
-        if extension == "md"
-        else "(:pr:`42`) by :user:`alice`"
+    assert fragment.read_text() == (
+        "Example.\n\n```sh\nfirst\n```\n\nMore details "
+        "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n"
     )
-    assert fragment.read_text() == f"{code}\n\n{link}.\n"
 
 
-def test_add_pull_request_links_after_bot_code_only(tmp_path: Path) -> None:
+def test_add_pull_request_links_ignores_other_fence_inside_trailing_code(tmp_path: Path) -> None:
     fragment = tmp_path / "+first.feature.md"
-    fragment.write_text("```sh\necho yes\n```\n")
+    fragment.write_text("Example.\n\n```sh\necho ~~~\n~~~\n```\n")
 
-    _link(
-        tmp_path,
-        "tox-dev/example",
-        {fragment.name: "Add release notes (#42)"},
-        {"42": PullRequestAuthor(handle="dependabot", is_bot=True)},
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == (
+        "Example ([#42](https://github.com/tox-dev/example/pull/42)) "
+        "by [@alice](https://github.com/alice).\n\n```sh\necho ~~~\n~~~\n```\n"
     )
-
-    assert fragment.read_text() == ("```sh\necho yes\n```\n\n([#42](https://github.com/tox-dev/example/pull/42)).\n")
 
 
 @pytest.mark.parametrize(
@@ -665,25 +665,6 @@ def test_add_pull_request_links_keeps_prose_after_rst_literal(tmp_path: Path) ->
     _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
 
     assert fragment.read_text() == ("Add a feature::\n\n  code output\n\nContinue here (:pr:`42`) by :user:`alice`.\n")
-
-
-@pytest.mark.parametrize(
-    "hidden",
-    [
-        pytest.param(".. Maintainer note by :user:`alice`", id="author"),
-        pytest.param(".. Maintainer note :pr:`42`", id="pull-request"),
-        pytest.param(".. Maintainer note\n   by :user:`bob`", id="continuation"),
-        pytest.param("..\n   by :user:`alice`", id="standalone-author"),
-        pytest.param("..\n   :pr:`42`", id="standalone-pull-request"),
-    ],
-)
-def test_add_pull_request_links_ignores_rst_comment(tmp_path: Path, hidden: str) -> None:
-    fragment = tmp_path / "+first.feature.rst"
-    fragment.write_text(f"Add parser.\n\n{hidden}\n")
-
-    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
-
-    assert fragment.read_text() == f"Add parser (:pr:`42`) by :user:`alice`.\n\n{hidden}\n"
 
 
 @pytest.mark.parametrize(
@@ -843,7 +824,7 @@ def test_add_pull_request_links_maps_repeated_images(tmp_path: Path) -> None:
     )
 
 
-@pytest.mark.parametrize("tag", ["code", "span"], ids=str)
+@pytest.mark.parametrize("tag", [pytest.param("code", id="code"), pytest.param("span", id="span")])
 def test_add_pull_request_links_ignores_html_tag_in_image_alt(tmp_path: Path, tag: str) -> None:
     fragment = tmp_path / "+first.feature.md"
     source = f"Add <{tag}>foo</{tag}> and ![example <{tag}> text](image.png) feature.\n"
@@ -914,7 +895,18 @@ def test_add_pull_request_links_rejects_credit_after_backslash_code_closer(tmp_p
 
 
 @pytest.mark.parametrize(
-    "tag", ["code", "kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript"], ids=str
+    "tag",
+    [
+        pytest.param("code", id="code"),
+        pytest.param("kbd", id="kbd"),
+        pytest.param("pre", id="pre"),
+        pytest.param("samp", id="samp"),
+        pytest.param("script", id="script"),
+        pytest.param("style", id="style"),
+        pytest.param("textarea", id="textarea"),
+        pytest.param("template", id="template"),
+        pytest.param("noscript", id="noscript"),
+    ],
 )
 def test_add_pull_request_links_ignores_html_literal_reference(tmp_path: Path, tag: str) -> None:
     fragment = tmp_path / "+first.feature.md"
@@ -941,7 +933,10 @@ def test_add_pull_request_links_ignores_reference_in_quoted_html_tag(tmp_path: P
     )
 
 
-@pytest.mark.parametrize("tag", ["code", "kbd", "pre"], ids=str)
+@pytest.mark.parametrize(
+    "tag",
+    [pytest.param("code", id="code"), pytest.param("kbd", id="kbd"), pytest.param("pre", id="pre")],
+)
 def test_add_pull_request_links_rejects_self_closing_literal(tmp_path: Path, tag: str) -> None:
     fragment = tmp_path / "+first.feature.md"
     source = f'Add <{tag} title="x > y"/> by [@mallory](https://github.com/mallory).\n'
@@ -983,7 +978,10 @@ def test_add_pull_request_links_recognizes_link_after_unmatched_html_close(tmp_p
     assert fragment.read_text() == f"Add parser </code> ({link}) by [@alice](https://github.com/alice).\n"
 
 
-@pytest.mark.parametrize("suffix", ["[docs](unterminated", "](unfinished"], ids=["open-link", "bare-target"])
+@pytest.mark.parametrize(
+    "suffix",
+    [pytest.param("[docs](unterminated", id="open-link"), pytest.param("](unfinished", id="bare-target")],
+)
 def test_add_pull_request_links_keeps_credit_after_malformed_target(tmp_path: Path, suffix: str) -> None:
     fragment = tmp_path / "+first.feature.md"
     fragment.write_text(f"Add parser {suffix} by [@alice](https://github.com/alice).\n")
@@ -1005,25 +1003,6 @@ def test_add_pull_request_links_keeps_credit_before_unclosed_target(tmp_path: Pa
     assert fragment.read_text() == (
         "Add parser by [@alice](https://github.com/alice) and document ](unfinished "
         "([#42](https://github.com/tox-dev/example/pull/42)).\n"
-    )
-
-
-@pytest.mark.parametrize(
-    "source",
-    [
-        pytest.param("<div>\nAdd parser\n</div>\n", id="html-block"),
-        pytest.param("<!-- Add parser -->\n", id="html-comment"),
-    ],
-)
-def test_add_pull_request_links_after_html_block(tmp_path: Path, source: str) -> None:
-    fragment = tmp_path / "+first.feature.md"
-    fragment.write_text(source)
-
-    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
-
-    assert fragment.read_text() == (
-        f"{source.rstrip()}\n\n"
-        "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n"
     )
 
 
@@ -1166,7 +1145,10 @@ def test_add_pull_request_links_reports_deleted_author_credit(tmp_path: Path) ->
         )
 
 
-@pytest.mark.parametrize("second_name", ["+second.feature.md", "43.feature.md"], ids=["named", "numbered"])
+@pytest.mark.parametrize(
+    "second_name",
+    [pytest.param("+second.feature.md", id="named"), pytest.param("43.feature.md", id="numbered")],
+)
 def test_add_pull_request_links_rejects_a_mismatched_author_without_partial_writes(
     tmp_path: Path, second_name: str
 ) -> None:

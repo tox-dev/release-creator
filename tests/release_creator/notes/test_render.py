@@ -12,6 +12,10 @@ from release_creator.notes.render import ReleaseContext, render_markdown, render
 
 
 def test_render_markdown_maps_categories_and_credits() -> None:
+    entry = (
+        "- New option ([#42](https://github.com/tox-dev/example/pull/42)) by "
+        "[@alice](https://github.com/alice), [@bob](https://github.com/bob) and [@carol](https://github.com/carol)."
+    )
     changelog = dedent("""\
         <a name="release-1-2-3"></a>
 
@@ -21,8 +25,7 @@ def test_render_markdown_maps_categories_and_credits() -> None:
 
         ### Added
 
-        - New option ([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice),
-          [@bob](https://github.com/bob) and [@carol](https://github.com/carol).
+        @ENTRY@
 
         <a name="release-1-2-2"></a>
 
@@ -31,7 +34,7 @@ def test_render_markdown_maps_categories_and_credits() -> None:
         ### Fixed
 
         - Old change.
-        """)
+        """).replace("@ENTRY@", entry)
     context = ReleaseContext(
         tag="1.2.3",
         repository="tox-dev/example",
@@ -44,12 +47,12 @@ def test_render_markdown_maps_categories_and_credits() -> None:
 
         ### Features
 
-        - New option ([#42](https://github.com/tox-dev/example/pull/42)) by @alice, @bob and @carol.
+        @ENTRY@
 
         [PyPI release](https://pypi.org/project/example/1.2.3/)
 
         [Full Changelog](https://github.com/tox-dev/example/compare/1.2.2...1.2.3)
-        """)
+        """).replace("@ENTRY@", entry)
 
 
 def test_render_markdown_rejects_markup_inside_anchor() -> None:
@@ -348,7 +351,7 @@ def test_render_markdown_cross_checks_pull_request_authors() -> None:
         generated,
     )
 
-    assert "by @alice" in result
+    assert "by [@alice](https://github.com/alice)" in result
 
 
 def test_render_rst_checks_credit_before_pull_request() -> None:
@@ -658,7 +661,7 @@ def test_render_markdown_ignores_contextual_pull_url(entry: str) -> None:
     assert "https://github.com/tox-dev/example/pull/43 for the earlier attempt" in result
 
 
-@pytest.mark.parametrize("phrase", ["by default", "by design"], ids=["default", "design"])
+@pytest.mark.parametrize("phrase", [pytest.param("by default", id="default"), pytest.param("by design", id="design")])
 def test_render_markdown_ignores_contextual_url_before_noncredit_by(phrase: str) -> None:
     changelog = (
         "## 1.2.3 (today)\n\n### Fixed\n\n"
@@ -1012,7 +1015,7 @@ def test_render_markdown_ignores_pull_links_inside_generated_titles() -> None:
 
     result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
-    assert "by @bob" in result
+    assert "by [@bob](https://github.com/bob)" in result
 
 
 def test_render_markdown_rejects_credit_link_to_another_profile() -> None:
@@ -1042,7 +1045,7 @@ def test_render_markdown_accepts_canonical_profile_variants(profile: str) -> Non
 
     result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
-    assert "by @alice." in result
+    assert f"by [@alice]({profile})." in result
 
 
 @pytest.mark.parametrize(
@@ -1140,7 +1143,18 @@ def test_render_markdown_matches_author_handle_case_insensitively() -> None:
 
 
 @pytest.mark.parametrize(
-    "tag", ["code", "kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript"], ids=str
+    "tag",
+    [
+        pytest.param("code", id="code"),
+        pytest.param("kbd", id="kbd"),
+        pytest.param("pre", id="pre"),
+        pytest.param("samp", id="samp"),
+        pytest.param("script", id="script"),
+        pytest.param("style", id="style"),
+        pytest.param("textarea", id="textarea"),
+        pytest.param("template", id="template"),
+        pytest.param("noscript", id="noscript"),
+    ],
 )
 def test_render_markdown_ignores_hidden_html_credit_and_reference(tag: str) -> None:
     changelog = (
@@ -1159,7 +1173,18 @@ def test_render_markdown_ignores_hidden_html_credit_and_reference(tag: str) -> N
 
 
 @pytest.mark.parametrize(
-    "tag", ["code", "kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript"], ids=str
+    "tag",
+    [
+        pytest.param("code", id="code"),
+        pytest.param("kbd", id="kbd"),
+        pytest.param("pre", id="pre"),
+        pytest.param("samp", id="samp"),
+        pytest.param("script", id="script"),
+        pytest.param("style", id="style"),
+        pytest.param("textarea", id="textarea"),
+        pytest.param("template", id="template"),
+        pytest.param("noscript", id="noscript"),
+    ],
 )
 def test_render_markdown_rejects_credit_only_inside_html_literal(tag: str) -> None:
     changelog = f"## 1.2.3 (today)\n\n### Fixed\n\n- Change (#5) <{tag}>by @alice</{tag}>.\n"
@@ -1184,6 +1209,31 @@ def test_render_markdown_rejects_credit_only_inside_html_block() -> None:
 
     with pytest.raises(ValueError, match="pull request #5 does not include @alice"):
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+@pytest.mark.parametrize(
+    ("entry", "expected"),
+    [
+        pytest.param(
+            "- Show `[@alice](https://github.com/alice)` literally.\n",
+            "- Show `[@alice](https://github.com/alice)` literally.\n",
+            id="inline",
+        ),
+        pytest.param(
+            "- Show example:\n\n  ```md\n  [@alice](https://github.com/alice)\n  ```\n",
+            "- Show example:\n\n  ```md\n  [@alice](https://github.com/alice)\n  ```\n",
+            id="fenced",
+        ),
+    ],
+)
+def test_render_markdown_keeps_author_links_in_code(entry: str, expected: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Fixed\n\n{entry}"
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert (
+        result == f"### Bug fixes\n\n{expected}\n[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+    )
 
 
 @pytest.mark.parametrize(
@@ -1360,7 +1410,7 @@ def test_render_markdown_accepts_multiple_profile_credit_links() -> None:
 
     result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
-    assert "by @alice and @bob" in result
+    assert "by [@alice](https://github.com/alice) and [@bob](https://github.com/bob)" in result
 
 
 def test_render_markdown_accepts_reference_profile_credit_link() -> None:
@@ -1397,7 +1447,10 @@ def test_render_markdown_uses_source_credit_when_generated_notes_omit_pull_reque
 
     result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
-    assert "- Add Python support ([#42](https://github.com/tox-dev/example/pull/42)) by @alice." in result
+    assert (
+        "- Add Python support ([#42](https://github.com/tox-dev/example/pull/42)) "
+        "by [@alice](https://github.com/alice)."
+    ) in result
 
 
 def test_render_rst_keeps_named_credit_when_generated_author_is_unavailable() -> None:
@@ -1560,7 +1613,7 @@ def test_render_markdown_keeps_human_new_contributors(reference: str, heading: s
     result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
     assert result == (
-        "### Features\n\n- New option by @alice.\n\n"
+        "### Features\n\n- New option by [@alice](https://github.com/alice).\n\n"
         '<a name="release-1-2-3-new-contributors"></a>\n\n'
         f"### New Contributors\n\n- @alice made their first contribution in [#42]({pull_url})\n"
         "- @bob made their first contribution in [#44](https://github.com/tox-dev/example/pull/44)\n\n"
@@ -1752,6 +1805,25 @@ def test_render_rst_keeps_nested_bullets() -> None:
         "  - setuptools to `68.1.2` from `68.1.0` on `3.8+`\n"
         "  - wheel to `0.41.2` from `0.41.1` on `3.7+` ([#2628](https://github.com/pypa/virtualenv/pull/2628))\n\n"
         "[Full Changelog](https://github.com/pypa/virtualenv/commits/20.24.4)\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "detail",
+    [
+        pytest.param("by design, it is read-only.", id="ordinary-prose"),
+        pytest.param("by @design.", id="unlinked-handle"),
+    ],
+)
+def test_render_rst_keeps_nested_by_design_bullet(detail: str) -> None:
+    changelog = f"1.2.3 (today)\n==============\n\nAdded\n-----\n\n- Introduce safe mode.\n\n  - {detail}\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert result == (
+        '<a name="release-1-2-3-added"></a>\n\n### Features\n\n'
+        f"- Introduce safe mode.\n  - {detail}\n\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 

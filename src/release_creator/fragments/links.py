@@ -63,7 +63,12 @@ _RE_HTML_BREAK: Final = re.compile(
     """,
     re.VERBOSE | re.IGNORECASE,
 )
-_RE_RST_INLINE_LITERAL: Final = re.compile(r"``.*?``", re.DOTALL)
+_RE_RST_INLINE_LITERAL: Final = re.compile(
+    r"""
+    ``(?P<text>.*?)``  # RST inline literal, including escaped role syntax
+    """,
+    re.DOTALL | re.VERBOSE,
+)
 type _LinkMode = Literal["towncrier", "knope"]
 
 
@@ -228,8 +233,6 @@ def _rst_hidden_lines(lines: list[str]) -> set[int]:
         cursor = index + 1
         while cursor < len(lines) and not lines[cursor].strip():
             cursor += 1
-        if cursor >= len(lines) or _indent_width(lines[cursor]) <= _indent_width(line):
-            continue
         while cursor < len(lines) and (not lines[cursor].strip() or _indent_width(lines[cursor]) > _indent_width(line)):
             hidden.add(cursor)
             cursor += 1
@@ -237,8 +240,6 @@ def _rst_hidden_lines(lines: list[str]) -> set[int]:
 
 
 def _rst_comment(line: str) -> bool:
-    if line.strip() == "..":
-        return True
     if not line.startswith(".. "):
         return False
     first = line[3:].split(maxsplit=1)
@@ -287,8 +288,7 @@ def _markdown_credit_blocks(content: str) -> list[tuple[str, int]]:
         else:
             children.append(child)
             end_line = line
-    if children:
-        blocks.append((_markdown_credit_children(children), end_line))
+    blocks.append((_markdown_credit_children(children), end_line))
     return blocks
 
 
@@ -329,13 +329,9 @@ def _append_pull_request_link(
         before = content[:anchor].rstrip()
         after = content[len(before) :]
     if not before:
-        suffix = f"{link}"
-        if author is not None:
-            suffix += f" by {_author_credit(author, target.fragment.suffix)}"
         opening, _, body = after.partition("\n")
-        if target.fragment.suffix == ".rst" and opening.endswith("::") and not opening.lstrip().startswith(".. "):
-            return f"{opening[:-2]} {suffix}::\n{body.rstrip()}"
-        return f"{after.rstrip()}\n\n{suffix}{'' if target.knope else '.'}"
+        suffix = f"{link} by {_author_credit(author, target.fragment.suffix)}" if author is not None else link
+        return f"{opening[:-2]} {suffix}::\n{body.rstrip()}"
     content = f"{before.removesuffix('.')} {link}"
     if author is not None:
         content += f" by {_author_credit(author, target.fragment.suffix)}"
@@ -356,8 +352,6 @@ def _split_trailing_code(content: str, suffix: str) -> tuple[str, str]:
             position = sum(map(len, lines[: visible_ends[-1]]))
             before = content[:position].rstrip()
             return before, content[len(before) :]
-        if not visible_ends and content.strip():
-            return "", content
     if suffix == ".rst" and (opening := _trailing_rst_code_opening(lines)) is not None:
         position = sum(map(len, lines[:opening]))
         before = content[:position].rstrip()

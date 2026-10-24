@@ -36,7 +36,7 @@ def render_rst_section(source: str, tag: str, repository: str) -> str:
 
 
 def register_roles() -> None:
-    """Register the RST roles supported by release notes and fragments."""
+    """Use the same GitHub roles in fragments and release notes."""
 
     def github_role(
         name: str,
@@ -277,7 +277,7 @@ def _is_credit(item: nodes.Node) -> bool:
         isinstance(item, nodes.list_item)
         and len(item) == 1
         and isinstance(item[0], nodes.paragraph)
-        and item[0].astext().startswith("by ")
+        and item[0].rawsource.startswith("by :user:`")
     )
 
 

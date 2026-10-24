@@ -60,6 +60,9 @@ def news_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
             "fragment must be prose",
             id="towncrier-table",
         ),
+        pytest.param("+topic.feature.md", "<!-- hidden -->\n", 0, "fragment must be prose", id="comment-only"),
+        pytest.param("+topic.feature.md", "---\n", 0, "fragment must be prose", id="thematic-only"),
+        pytest.param("+topic.feature.md", "<div>Hidden</div>\n", 0, "fragment must be prose", id="html-only"),
         pytest.param("42.feature.md", "Add a feature.\n", 1, "", id="numbered"),
         pytest.param("+topic.feature.1.md", "Add a feature.\n", 1, "", id="multiple-entries"),
         pytest.param("42.feature.2.md", "Add a feature.\n", 1, "", id="numbered-counter"),
@@ -113,6 +116,8 @@ def test_changed_fragments(news_repository: Path, filename: str, content: str, c
         pytest.param("Fix A.\n\n.. raw:: html\n\n   <b>x</b>\n", id="raw-directive"),
         pytest.param("Fix A.\n\nDetails\n=======\n", id="section"),
         pytest.param("=== ===\nA   B\n=== ===\n1   2\n=== ===\n", id="table"),
+        pytest.param("Fix A.\n\n.. hidden comment\n\nMore detail.\n", id="embedded-comment"),
+        pytest.param(".. hidden comment\n", id="comment-only"),
     ],
 )
 def test_changed_fragments_rejects_rst_structure(news_repository: Path, content: str) -> None:

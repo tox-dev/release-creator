@@ -17,7 +17,7 @@ lazy from packaging.version import InvalidVersion, Version
 
 lazy from release_creator.anchors.names import release_anchor
 lazy from release_creator.categories import RELEASE_CATEGORIES
-lazy from release_creator.github import MARKDOWN_AUTHOR, validate_repository
+lazy from release_creator.github import validate_repository
 lazy from release_creator.notes.rst import render_rst_section
 
 _RE_RELEASE_PULL: Final = re.compile(
@@ -650,7 +650,7 @@ def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
         ):
             msg = f"release text outside an item: {source_line}"
             raise ValueError(msg)
-        body.append(MARKDOWN_AUTHOR.sub(lambda match: f"@{match['handle']}", line))
+        body.append(line)
 
     if in_category and not category_has_item:
         msg = "empty changelog category"
