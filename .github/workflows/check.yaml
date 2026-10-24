@@ -80,7 +80,7 @@ jobs:
     steps:
       - uses: tox-dev/github-workflows/check-hook-update-cooldown@74472c1a3602ca9b66db058ea31578865e1d208b # v1.0.5
   gate:
-    name: Required checks pass
+    name: ${{ github.event_name == 'pull_request' && 'Required checks pass' || 'Required checks pass (non-PR)' }}
     if: always()
     needs: [test, check, hook-update-cooldown]
     runs-on: ubuntu-26.04
