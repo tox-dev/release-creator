@@ -7,7 +7,7 @@ lazy import re
 lazy from dataclasses import dataclass
 lazy from io import StringIO
 lazy from pathlib import Path
-lazy from typing import Final, Literal, cast
+lazy from typing import Final, Literal
 
 lazy from docutils import nodes
 lazy from docutils.core import publish_doctree
@@ -97,12 +97,8 @@ def _link_fragment(
         msg = f"no pull request data for {fragment}"
         raise ValueError(msg)
     content = fragment.read_text(encoding="utf-8")
-    if (
-        mode == "towncrier"
-        and (_primary_change_items(content) if fragment.suffix == ".md" else len(_rst_primary_items(content))) > 1
-    ):
-        msg = f"split multiple change items into separate fragments: {fragment}"
-        raise ValueError(msg)
+    if mode == "towncrier":
+        _validate_towncrier_fragment(content, fragment)
     target = _LinkTarget(
         fragment=fragment,
         repository=repository,
@@ -116,38 +112,30 @@ def _link_fragment(
     return f"{_link_text(content.rstrip(), target)}\n"
 
 
-def _primary_change_items(content: str) -> int:
-    items = 0
-    depth = 0
-    for token in MarkdownIt().parse(content):
-        if token.type == "list_item_open":
-            if depth == 0:
-                items += 1
-            depth += 1
-        elif token.type == "list_item_close":
-            depth -= 1
-    return items
-
-
-def _rst_primary_items(content: str) -> list[nodes.list_item]:
-    document = publish_doctree(
-        content,
-        settings_overrides={
-            "file_insertion_enabled": False,
-            "halt_level": 6,
-            "raw_enabled": False,
-            "report_level": 5,
-            "warning_stream": StringIO(),
-        },
-    )
-    items: list[nodes.list_item] = []
-    for item in document.findall(nodes.list_item):
-        parent = item.parent
-        while parent is not None and not isinstance(parent, nodes.list_item):
-            parent = parent.parent
-        if parent is None:
-            items.append(item)
-    return items
+def _validate_towncrier_fragment(content: str, fragment: Path) -> None:
+    if fragment.suffix == ".md":
+        structured = any(
+            token.type in {"bullet_list_open", "ordered_list_open", "blockquote_open"}
+            for token in MarkdownIt().parse(content)
+        )
+    else:
+        document = publish_doctree(
+            content,
+            settings_overrides={
+                "file_insertion_enabled": False,
+                "halt_level": 6,
+                "raw_enabled": False,
+                "report_level": 5,
+                "warning_stream": StringIO(),
+            },
+        )
+        structured = any(
+            isinstance(node, (nodes.bullet_list, nodes.enumerated_list, nodes.block_quote))
+            for node in document.findall()
+        )
+    if structured:
+        msg = f"fragment must be prose; the Towncrier template adds its list item: {fragment}"
+        raise ValueError(msg)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -198,14 +186,7 @@ def _link_text(
             return content
         suffix = "" if target.knope else "."
         return f"{before.removesuffix('.')} by {_author_credit(handle, fragment.suffix)}{suffix}{after}"
-    return _append_pull_request_link(
-        content,
-        target,
-        handle,
-        anchor=(
-            _markdown_primary_item_anchor(content) if fragment.suffix == ".md" else _rst_primary_item_anchor(content)
-        ),
-    )
+    return _append_pull_request_link(content, target, handle)
 
 
 def _has_pull_request_link(content: str, repository: str, number: str, extension: str) -> bool:
@@ -318,33 +299,6 @@ def _markdown_credit_anchor(content: str, author: str) -> int:
             if any(match["handle"].casefold() == author.casefold() for match in MARKDOWN_AUTHOR.finditer(block))
         )
     )
-    return sum(map(len, content.splitlines(keepends=True)[:end_line]))
-
-
-def _markdown_primary_item_anchor(content: str) -> int | None:
-    depth = 0
-    for token in MarkdownIt().parse(content):
-        if token.type == "inline" and depth == 0:
-            return None
-        if token.type == "list_item_open":
-            depth += 1
-        elif token.type == "list_item_close":
-            depth -= 1
-            if depth == 0:
-                msg = "primary change item has no text"
-                raise ValueError(msg)
-        elif token.type == "inline" and depth == 1 and token.map is not None:
-            return sum(map(len, content.splitlines(keepends=True)[: token.map[1]]))
-    return None
-
-
-def _rst_primary_item_anchor(content: str) -> int | None:
-    if not (items := _rst_primary_items(content)):
-        return None
-    if (paragraph := next((child for child in items[0].children if isinstance(child, nodes.paragraph)), None)) is None:
-        msg = "primary change item has no text"
-        raise ValueError(msg)
-    end_line = cast("int", paragraph.line) + len(paragraph.rawsource.splitlines()) - 1
     return sum(map(len, content.splitlines(keepends=True)[:end_line]))
 
 

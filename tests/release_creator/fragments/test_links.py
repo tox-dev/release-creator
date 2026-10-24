@@ -8,7 +8,7 @@ import pytest
 
 from release_creator.fragments.links import add_pull_request_links
 from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor
-from release_creator.notes.render import ReleaseContext, render_markdown
+from release_creator.notes.render import ReleaseContext, render_markdown, render_rst
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -171,6 +171,38 @@ def test_add_pull_request_links_preserves_shared_credits(tmp_path: Path) -> None
     )
 
 
+def test_add_pull_request_links_renders_oxford_author_credit(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    fragment.write_text(
+        "Add a feature by [@bob](https://github.com/bob), [@carol](https://github.com/carol), "
+        "and [@alice](https://github.com/alice).\n"
+    )
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add a feature (#42)"})
+
+    notes = render_markdown(
+        f"## 1.2.3 (today)\n\n### Added\n\n- {fragment.read_text()}",
+        ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
+        "* Add a feature by @alice in https://github.com/tox-dev/example/pull/42\n",
+    )
+    assert ("Add a feature by @bob, @carol, and @alice ([#42](https://github.com/tox-dev/example/pull/42)).") in notes
+
+
+def test_add_pull_request_links_renders_rst_oxford_author_credit(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.rst"
+    fragment.write_text("Add a feature by :user:`bob`, :user:`carol`, and :user:`alice`.\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add a feature (#42)"})
+
+    notes = render_rst(
+        "1.2.3 (today)\n==============\n\nAdded\n-----\n\n- " + fragment.read_text(),
+        ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
+        "* Add a feature by @alice in https://github.com/tox-dev/example/pull/42\n",
+    )
+    assert "by @bob, @carol, and @alice." in notes
+    assert "([#42](https://github.com/tox-dev/example/pull/42))" in notes
+
+
 @pytest.mark.parametrize("break_text", ["\n", "  \n"], ids=["soft", "hard"])
 def test_add_pull_request_links_accepts_credit_after_line_break(tmp_path: Path, break_text: str) -> None:
     fragment = tmp_path / "+first.feature.md"
@@ -196,7 +228,6 @@ def test_add_pull_request_links_accepts_credit_after_line_break(tmp_path: Path, 
         ),
         pytest.param("Change behavior.<hr>by [@alice](https://github.com/alice).\n", id="html-rule"),
         pytest.param("Change behavior.\n\n---\n\nby [@alice](https://github.com/alice).\n", id="horizontal-rule"),
-        pytest.param("> Change behavior.\n> by [@alice](https://github.com/alice).\n", id="blockquote"),
     ],
 )
 def test_add_pull_request_links_accepts_credit_across_visible_boundary(tmp_path: Path, source: str) -> None:
@@ -210,124 +241,28 @@ def test_add_pull_request_links_accepts_credit_across_visible_boundary(tmp_path:
 
 
 @pytest.mark.parametrize(
-    "source",
+    ("extension", "source"),
     [
-        pytest.param("- Fix A.\n- Fix B.\n", id="bullets"),
-        pytest.param("1. Fix A.\n2. Fix B.\n", id="numbered"),
-        pytest.param("> - Fix A.\n> - Fix B.\n", id="blockquote"),
+        pytest.param("md", "- Fix A.\n- Fix B.\n", id="markdown-bullets"),
+        pytest.param("md", "1. Fix A.\n2. Fix B.\n", id="markdown-numbered"),
+        pytest.param("md", "> Fix A.\n", id="markdown-blockquote"),
+        pytest.param("md", "- Fix A.\n  - subdetail\n", id="markdown-nested-list"),
+        pytest.param("rst", "- Fix A.\n- Fix B.\n", id="rst-bullets"),
+        pytest.param("rst", "  - Fix A.\n  - Fix B.\n", id="rst-indented-bullets"),
+        pytest.param("rst", "1. Fix A.\n2. Fix B.\n", id="rst-numbered"),
+        pytest.param("rst", "1. Fix A.\n\n   1. subdetail\n", id="rst-nested-numbered"),
+        pytest.param("rst", "Fix A.\n\n  - subdetail\n", id="rst-nested-bullet"),
+        pytest.param("rst", "Fix A.\n\n  Quoted detail.\n", id="rst-blockquote"),
     ],
 )
-def test_add_pull_request_links_rejects_multiple_change_items(tmp_path: Path, source: str) -> None:
-    fragment = tmp_path / "+first.bugfix.md"
-    fragment.write_text(source)
-
-    with pytest.raises(ValueError, match="split multiple change items into separate fragments"):
-        _link(tmp_path, "tox-dev/example", {fragment.name: "Fix both (#42)"})
-
-    assert fragment.read_text() == source
-
-
-@pytest.mark.parametrize(
-    "source",
-    [
-        pytest.param("- Fix A.\n- Fix B.\n", id="bullets"),
-        pytest.param("  - Fix A.\n  - Fix B.\n", id="indented-bullets"),
-        pytest.param("1. Fix A.\n2. Fix B.\n", id="numbered"),
-    ],
-)
-def test_add_pull_request_links_rejects_multiple_rst_change_items(tmp_path: Path, source: str) -> None:
-    fragment = tmp_path / "+first.bugfix.rst"
-    fragment.write_text(source)
-
-    with pytest.raises(ValueError, match="split multiple change items into separate fragments"):
-        _link(tmp_path, "tox-dev/example", {fragment.name: "Fix both (#42)"})
-
-    assert fragment.read_text() == source
-
-
-@pytest.mark.parametrize(
-    ("detail", "expected"),
-    [
-        pytest.param("  - subdetail", "  - subdetail", id="nested-list"),
-        pytest.param("  > subdetail", "  > subdetail", id="nested-blockquote"),
-    ],
-)
-def test_add_pull_request_links_places_credit_on_primary_item(tmp_path: Path, detail: str, expected: str) -> None:
-    fragment = tmp_path / "+first.bugfix.md"
-    fragment.write_text(f"- Fix A by [@alice](https://github.com/alice).\n{detail}\n")
-
-    _link(tmp_path, "tox-dev/example", {fragment.name: "Fix A (#42)"})
-
-    assert fragment.read_text() == (
-        "- Fix A by [@alice](https://github.com/alice) "
-        "([#42](https://github.com/tox-dev/example/pull/42)).\n"
-        f"{expected}\n"
-    )
-    notes = render_markdown(
-        f"## 1.2.3 (today)\n\n### Fixed\n\n{fragment.read_text()}",
-        ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
-        "* Fix A by @alice in https://github.com/tox-dev/example/pull/42\n",
-    )
-    assert "Fix A by @alice ([#42](https://github.com/tox-dev/example/pull/42))." in notes
-
-
-def test_add_pull_request_links_places_generated_credit_on_primary_item(tmp_path: Path) -> None:
-    fragment = tmp_path / "+first.bugfix.md"
-    fragment.write_text("- Fix A.\n  - subdetail\n")
-
-    _link(tmp_path, "tox-dev/example", {fragment.name: "Fix A (#42)"})
-
-    assert fragment.read_text() == (
-        "- Fix A ([#42](https://github.com/tox-dev/example/pull/42)) "
-        "by [@alice](https://github.com/alice).\n"
-        "  - subdetail\n"
-    )
-
-
-@pytest.mark.parametrize(
-    ("source", "expected"),
-    [
-        pytest.param(
-            "- Fix A.\n\n  - subdetail\n",
-            "- Fix A (:pr:`42`) by :user:`alice`.\n\n  - subdetail\n",
-            id="nested-list",
-        ),
-        pytest.param(
-            "- Fix A with wrapped\n  details.\n\n  - subdetail\n",
-            "- Fix A with wrapped\n  details (:pr:`42`) by :user:`alice`.\n\n  - subdetail\n",
-            id="wrapped-item",
-        ),
-    ],
-)
-def test_add_pull_request_links_places_generated_rst_credit_on_primary_item(
-    tmp_path: Path, source: str, expected: str
+def test_add_pull_request_links_rejects_structured_towncrier_fragment(
+    tmp_path: Path, extension: str, source: str
 ) -> None:
-    fragment = tmp_path / "+first.bugfix.rst"
+    fragment = tmp_path / f"+first.bugfix.{extension}"
     fragment.write_text(source)
 
-    _link(tmp_path, "tox-dev/example", {fragment.name: "Fix A (#42)"})
-
-    assert fragment.read_text() == expected
-
-
-def test_add_pull_request_links_rejects_empty_primary_item(tmp_path: Path) -> None:
-    fragment = tmp_path / "+first.bugfix.md"
-    source = "- \n  - subdetail\n"
-    fragment.write_text(source)
-
-    with pytest.raises(ValueError, match="primary change item has no text"):
-        _link(tmp_path, "tox-dev/example", {fragment.name: "Fix A (#42)"})
-
-    assert fragment.read_text() == source
-
-
-def test_add_pull_request_links_rejects_empty_rst_primary_item(tmp_path: Path) -> None:
-    fragment = tmp_path / "+first.bugfix.rst"
-    source = "-\n\n  - subdetail\n"
-    fragment.write_text(source)
-
-    with pytest.raises(ValueError, match="primary change item has no text"):
-        _link(tmp_path, "tox-dev/example", {fragment.name: "Fix A (#42)"})
+    with pytest.raises(ValueError, match="fragment must be prose; the Towncrier template adds its list item"):
+        _link(tmp_path, "tox-dev/example", {fragment.name: "Fix both (#42)"})
 
     assert fragment.read_text() == source
 
@@ -342,11 +277,6 @@ def test_add_pull_request_links_rejects_empty_rst_primary_item(tmp_path: Path) -
         pytest.param(
             "Change A by [@alice](https://github.com/alice); change B by [@bob](https://github.com/bob).\n",
             id="same-paragraph",
-        ),
-        pytest.param(
-            "- Change.\n  - Detail A by [@alice](https://github.com/alice).\n"
-            "  - Detail B by [@bob](https://github.com/bob).\n",
-            id="nested-list",
         ),
     ],
 )
@@ -578,22 +508,6 @@ def test_add_pull_request_links_recognizes_reference_after_unclosed_rst_literal(
     _link(tmp_path, "tox-dev/example", {fragment.name: "Document this example (#42)"})
 
     assert fragment.read_text() == "Document malformed ``literal and :pr:`42` by :user:`alice`.\n"
-
-
-@pytest.mark.parametrize(
-    "code",
-    [
-        pytest.param(".. code-block:: python\n\n      print(1)", id="nested-directive"),
-        pytest.param(".. code-block:: cpp\n\n      using std::\n        continuation", id="nested-colons"),
-    ],
-)
-def test_add_pull_request_links_to_list_item_before_nested_code(tmp_path: Path, code: str) -> None:
-    fragment = tmp_path / "+first.feature.rst"
-    fragment.write_text(f"- Item\n\n  {code}\n")
-
-    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
-
-    assert fragment.read_text() == f"- Item (:pr:`42`) by :user:`alice`.\n\n  {code}\n"
 
 
 def test_add_pull_request_links_after_nonindented_rst_literal_marker(tmp_path: Path) -> None:

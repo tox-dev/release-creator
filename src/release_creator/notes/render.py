@@ -72,7 +72,7 @@ _RE_CREDIT_HANDLES: Final = re.compile(
     r"""
     ^\s*(?P<handles>
         @[A-Za-z0-9-]+  # First credited author
-        (?:(?:\s*,\s*|\s+and\s+)@[A-Za-z0-9-]+)*  # Additional authors
+        (?:(?:\s*,\s*(?:and\s+)?|\s+and\s+)@[A-Za-z0-9-]+)*  # Additional authors
     )
     (?:[.,;)\s]|$)  # Credit ends before other prose
     """,
