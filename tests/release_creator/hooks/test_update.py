@@ -683,13 +683,18 @@ def test_updates_multiline_flow_hook_without_stale_pins(tmp_path: Path, mocker: 
     assert config.read_text(encoding="utf-8") == first
 
 
-def test_flow_mapping_marks_transitive_dependencies(tmp_path: Path, mocker: MockerFixture) -> None:
+@pytest.mark.parametrize(
+    "trailing_newline", [pytest.param(False, id="no-final-newline"), pytest.param(True, id="final-newline")]
+)
+def test_flow_mapping_marks_transitive_dependencies(
+    tmp_path: Path, mocker: MockerFixture, trailing_newline: bool
+) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
-    config.write_text(
+    source = (
         "repos:\n  - repo: local\n    hooks:\n"
-        "      - {id: format, language: python, additional_dependencies: [black==1]}\n",
-        encoding="utf-8",
+        "      - {id: format, language: python, additional_dependencies: [black==1]}"
     )
+    config.write_text(f"{source}{'\n' if trailing_newline else ''}", encoding="utf-8")
     mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
     mocker.patch(
         "release_creator.hooks.update.run_text",
@@ -703,6 +708,27 @@ def test_flow_mapping_marks_transitive_dependencies(tmp_path: Path, mocker: Mock
     assert safe_load(first)["repos"][0]["hooks"][0]["additional_dependencies"] == ["black==2", "click==8"]
     assert first.count("# release-creator managed") == 1
     assert config.read_text(encoding="utf-8") == first
+
+
+def test_flow_mapping_keeps_direct_dependency_comment(tmp_path: Path, mocker: MockerFixture) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(
+        "repos:\n  - repo: local\n    hooks:\n"
+        "      - {id: format, language: python, additional_dependencies: [\n"
+        "          black==1, # keep human note\n        ]}\n",
+        encoding="utf-8",
+    )
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch(
+        "release_creator.hooks.update.run_text",
+        return_value=subprocess.CompletedProcess([], 0, "black==2\nclick==8\n", ""),
+    )
+
+    update_pins(config, "7 days", "3.15")
+
+    updated = config.read_text(encoding="utf-8")
+    assert "black==2, # keep human note\n" in updated
+    assert safe_load(updated)["repos"][0]["hooks"][0]["additional_dependencies"] == ["black==2", "click==8"]
 
 
 def test_flow_mapping_removes_orphaned_managed_dependency(tmp_path: Path) -> None:
@@ -860,6 +886,24 @@ def test_preserves_upper_bound_on_next_hook_update(tmp_path: Path, mocker: Mocke
     assert all(call.kwargs["stdin"] == "toml-fmt-common<1.3.3,>=1.3.2\n" for call in run.call_args_list)
 
 
+def test_preserves_wildcard_cap_on_next_hook_update(tmp_path: Path, mocker: MockerFixture) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text("additional_dependencies: [example==1.*]\n", encoding="utf-8")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
+    run = mocker.patch(
+        "release_creator.hooks.update.run_text",
+        return_value=subprocess.CompletedProcess([], 0, "example==1.9\n", ""),
+    )
+
+    update_pins(config, "7 days", "3.15")
+    first = config.read_text(encoding="utf-8")
+    update_pins(config, "7 days", "3.15")
+
+    assert safe_load(first)["additional_dependencies"] == ["example==1.*", "example==1.9"]
+    assert config.read_text(encoding="utf-8") == first
+    assert all(call.kwargs["stdin"] == "example==1.*\n" for call in run.call_args_list)
+
+
 def test_resolves_each_hook_with_its_python_version(tmp_path: Path, mocker: MockerFixture) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_text(
@@ -949,6 +993,12 @@ def test_rejects_unsupported_hook_python_version(tmp_path: Path) -> None:
         ),
         pytest.param(
             "repos:\n  - repo: local\n    hooks:\n"
+            "      - id: first\n        language: python\n        args: &deps\n"
+            "          - black==1\n        additional_dependencies: *deps\n",
+            id="unrelated-anchored-block-list",
+        ),
+        pytest.param(
+            "repos:\n  - repo: local\n    hooks:\n"
             "      - id: first\n        language: python\n        additional_dependencies: [&dep black==1]\n"
             "      - id: second\n        language: python\n        additional_dependencies: [*dep]\n",
             id="shared-scalar",
@@ -1004,6 +1054,41 @@ def test_rejects_hook_merge_with_hidden_dependencies(tmp_path: Path) -> None:
         update_pins(config, "7 days", "3.15")
 
     assert config.read_text(encoding="utf-8") == source
+
+
+@pytest.mark.parametrize(
+    "duplicate",
+    [
+        pytest.param(
+            "additional_dependencies: [safe==1]\n        additional_dependencies: [untrusted]", id="dependencies"
+        ),
+        pytest.param("language: system\n        language: python", id="language"),
+    ],
+)
+def test_rejects_duplicate_hook_keys(tmp_path: Path, mocker: MockerFixture, duplicate: str) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    source = f"repos:\n  - repo: local\n    hooks:\n      - id: check\n        {duplicate}\n"
+    config.write_text(source, encoding="utf-8")
+    run = mocker.patch("release_creator.hooks.update.run_text")
+
+    with pytest.raises(ValueError, match="duplicate YAML key"):
+        update_pins(config, "7 days", "3.15")
+
+    assert config.read_text(encoding="utf-8") == source
+    run.assert_not_called()
+
+
+def test_rejects_non_scalar_yaml_key(tmp_path: Path, mocker: MockerFixture) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    source = "? [unsafe, key]\n: value\nadditional_dependencies: [black==1]\n"
+    config.write_text(source, encoding="utf-8")
+    run = mocker.patch("release_creator.hooks.update.run_text")
+
+    with pytest.raises(TypeError, match="keys must be YAML scalars"):
+        update_pins(config, "7 days", "3.15")
+
+    assert config.read_text(encoding="utf-8") == source
+    run.assert_not_called()
 
 
 def test_rejects_resolver_failure(tmp_path: Path, mocker: MockerFixture) -> None:

@@ -72,7 +72,31 @@ def _config_root(source: str) -> MappingNode:
     if not isinstance(root, MappingNode):
         msg = "pre-commit configuration must be a YAML mapping"
         raise TypeError(msg)
+    _reject_duplicate_keys(root)
     return root
+
+
+def _reject_duplicate_keys(root: MappingNode) -> None:
+    seen: set[int] = set()
+    pending: list[Node] = [root]
+    while pending:
+        node = pending.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        if isinstance(node, MappingNode):
+            keys: set[str] = set()
+            for key, value in node.value:
+                if not isinstance(key, ScalarNode):
+                    msg = "pre-commit configuration keys must be YAML scalars"
+                    raise TypeError(msg)
+                if key.value in keys:
+                    msg = f"duplicate YAML key in pre-commit configuration: {key.value}"
+                    raise ValueError(msg)
+                keys.add(key.value)
+                pending.append(value)
+        elif isinstance(node, SequenceNode):
+            pending.extend(node.value)
 
 
 def _reject_shared_edits(root: MappingNode, edits: list[_Edit]) -> None:
@@ -330,12 +354,16 @@ def _root_input(requirement: Requirement) -> str:
 
 
 def _exact_pin(requirement: Requirement) -> bool:
-    return len(requirement.specifier) == 1 and next(iter(requirement.specifier)).operator == "=="
+    return (
+        len(requirement.specifier) == 1
+        and (specifier := next(iter(requirement.specifier))).operator == "=="
+        and "*" not in specifier.version
+    )
 
 
 def _resolved_line(line: str) -> Requirement:
     requirement = Requirement(line)
-    if requirement.url is not None or not _exact_pin(requirement) or "*" in next(iter(requirement.specifier)).version:
+    if requirement.url is not None or not _exact_pin(requirement):
         msg = f"hook dependency resolution did not return an exact index pin: {line}"
         raise ValueError(msg)
     return requirement
@@ -384,17 +412,27 @@ def _flow_mapping_edit(
                 source[_start(node) : _end(node)], requirement, versions[canonicalize_name(requirement.name)]
             ),
             False,
+            _direct_comment(source, node, sequence),
         )
         for node, requirement in direct
     ]
-    values.extend((json.dumps(str(item)), True) for item in transitive)
+    values.extend((json.dumps(str(item)), True, "") for item in transitive)
     indent = " " * (cast("Mark", key.start_mark).column + 2)
     closing = " " * cast("Mark", key.start_mark).column
     lines = [
-        f"{indent}{value}{',' if index < len(values) - 1 else ''}{' # release-creator managed' if managed else ''}"
-        for index, (value, managed) in enumerate(values)
+        f"{indent}{value}{',' if index < len(values) - 1 else ''}{' # release-creator managed' if managed else comment}"
+        for index, (value, managed, comment) in enumerate(values)
     ]
     return _start(sequence), _end(sequence), f"[\n{'\n'.join(lines)}\n{closing}]"
+
+
+def _direct_comment(source: str, node: ScalarNode, sequence: SequenceNode) -> str:
+    end = min(source.find("\n", _end(node)), _end(sequence))
+    if end < 0:
+        end = _end(sequence)
+    trailing = source[_end(node) : end]
+    before, marker, comment = trailing.partition("#")
+    return f" #{comment.rstrip()}" if marker and not before.strip(" ,") else ""
 
 
 def _inline_edit(
