@@ -12,6 +12,7 @@ lazy from urllib.parse import urlsplit
 
 lazy import mdformat
 lazy from markdown_it import MarkdownIt
+lazy from markdown_it.token import Token
 lazy from packaging.version import InvalidVersion, Version
 
 lazy from release_creator.anchors.names import release_anchor
@@ -288,33 +289,35 @@ def _visible_lines(notes: str, repository: str) -> Iterator[str]:
         if token.type == "html_block":
             parser.feed(token.content)
             yield from parser.take_text().splitlines()
-        if token.type != "inline":
-            continue
-        parts: list[str] = []
-        children = token.children or []
-        index = 0
-        while index < len(children):
-            child = children[index]
-            if child.type == "link_open":
-                end = next(
-                    position for position in range(index + 1, len(children)) if children[position].type == "link_close"
-                )
-                label = "".join(
-                    item.content for item in children[index + 1 : end] if item.type in {"text", "code_inline"}
-                )
-                parts.append(_visible_link(label, str(child.attrGet("href") or ""), repository))
-                index = end
-            elif child.type == "text":
-                parts.append(child.content)
-            elif child.type in {"softbreak", "hardbreak"}:
-                parts.append(" " if child.type == "softbreak" else "\n")
-            elif child.type == "html_inline":
-                parser.feed(child.content)
-                parts.append(parser.take_text())
-            elif child.type == "code_inline":
-                parts.append(" ")
-            index += 1
-        yield from "".join(parts).splitlines()
+        elif token.type == "inline":
+            yield from _visible_inline(token.children or [], parser, repository).splitlines()
+
+
+def _visible_inline(children: list[Token], parser: _RawHtmlLinkParser, repository: str) -> str:
+    parts: list[str] = []
+    index = 0
+    while index < len(children):
+        child = children[index]
+        if child.type == "html_inline":
+            parser.feed(child.content)
+            parts.append(parser.take_text())
+        elif parser.in_literal():
+            pass
+        elif child.type == "link_open":
+            end = next(
+                position for position in range(index + 1, len(children)) if children[position].type == "link_close"
+            )
+            label = "".join(item.content for item in children[index + 1 : end] if item.type in {"text", "code_inline"})
+            parts.append(_visible_link(label, str(child.attrGet("href") or ""), repository))
+            index = end
+        elif child.type == "text":
+            parts.append(child.content)
+        elif child.type in {"softbreak", "hardbreak"}:
+            parts.append(" " if child.type == "softbreak" else "\n")
+        elif child.type == "code_inline":
+            parts.append(" ")
+        index += 1
+    return "".join(parts)
 
 
 def _visible_link(label: str, url: str, repository: str) -> str:
@@ -642,6 +645,10 @@ class _RawHtmlLinkParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self._text: list[str] = []
+        self._literal_tags: list[str] = []
+
+    def in_literal(self) -> bool:
+        return bool(self._literal_tags)
 
     def take_text(self) -> str:
         content = "".join(self._text)
@@ -650,13 +657,21 @@ class _RawHtmlLinkParser(HTMLParser):
 
     @override
     def handle_data(self, data: str) -> None:
-        self._text.append(data)
+        if not self.in_literal():
+            self._text.append(data)
 
     @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag == "a" and any(name == "href" for name, _ in attrs):
+        if tag in {"code", "kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript"}:
+            self._literal_tags.append(tag)
+        elif not self.in_literal() and tag == "a" and any(name == "href" for name, _ in attrs):
             msg = "raw HTML links are unsupported in release notes"
             raise ValueError(msg)
+
+    @override
+    def handle_endtag(self, tag: str) -> None:
+        if self._literal_tags and self._literal_tags[-1] == tag:
+            self._literal_tags.pop()
 
 
 def _is_comparison_line(line: str) -> bool:

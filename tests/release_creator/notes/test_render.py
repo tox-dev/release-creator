@@ -1147,6 +1147,45 @@ def test_render_markdown_matches_author_handle_case_insensitively() -> None:
     assert "by @alice" in result
 
 
+@pytest.mark.parametrize("tag", ["code", "kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript"])
+def test_render_markdown_ignores_hidden_html_credit_and_reference(tag: str) -> None:
+    changelog = (
+        "## 1.2.3 (today)\n\n### Fixed\n\n"
+        f'- Change <{tag} title="x > y">#5 by @mallory</{tag}> and fix (#5) by @alice.\n'
+    )
+    generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert f'<{tag} title="x > y">#5 by @mallory</{tag}>' in result
+
+
+@pytest.mark.parametrize("tag", ["code", "kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript"])
+def test_render_markdown_rejects_credit_only_inside_html_literal(tag: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Fixed\n\n- Change (#5) <{tag}>by @alice</{tag}>.\n"
+    generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
+
+    with pytest.raises(ValueError, match="pull request #5 does not include @alice"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+def test_render_markdown_rejects_credit_only_inside_html_block() -> None:
+    changelog = dedent("""\
+        ## 1.2.3 (today)
+
+        ### Fixed
+
+        - Change (#5).
+          <pre>
+          by @alice
+          </pre>
+        """)
+    generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
+
+    with pytest.raises(ValueError, match="pull request #5 does not include @alice"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
 def test_render_markdown_rejects_raw_html_credit_link() -> None:
     changelog = dedent("""\
         ## 1.2.3 (today)

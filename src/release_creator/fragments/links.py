@@ -49,15 +49,15 @@ _RE_AUTHOR_SEPARATOR: Final = re.compile(
 )
 _RE_HTML_TAG: Final = re.compile(
     r"""
-    <\s*(?P<closing>/)?\s*(?P<name>code|kbd|pre|samp)\b[^>]*>  # Hidden HTML literal element
+    <\s*(?P<closing>/)?\s*(?P<name>code|kbd|pre|samp|script|style|textarea|template|noscript)\b  # Hidden HTML element
+    (?P<attributes>(?:[^>"']|"[^"]*"|'[^']*')*)>         # Attributes may contain quoted >
     """,
     re.VERBOSE | re.IGNORECASE,
 )
 _RE_HTML_BREAK: Final = re.compile(
     r"""
     <(?P<name>br|hr)  # HTML line or horizontal break
-    (?:\s+[^>]*)?     # Optional attributes
-    \s*/?>            # Optional self-closing slash
+    (?P<attributes>(?:[^>"']|"[^"]*"|'[^']*')*)>  # Attributes may contain quoted >
     """,
     re.VERBOSE | re.IGNORECASE,
 )
@@ -94,6 +94,13 @@ def _link_fragment(
         msg = f"no pull request data for {fragment}"
         raise ValueError(msg)
     content = fragment.read_text(encoding="utf-8")
+    if (
+        mode == "towncrier"
+        and fragment.suffix == ".md"
+        and sum(token.type == "list_item_open" and token.level == 1 for token in MarkdownIt().parse(content)) > 1
+    ):
+        msg = f"split multiple change items into separate fragments: {fragment}"
+        raise ValueError(msg)
     target = _LinkTarget(
         fragment=fragment,
         repository=repository,

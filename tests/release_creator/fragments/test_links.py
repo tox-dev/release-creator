@@ -190,9 +190,11 @@ def test_add_pull_request_links_accepts_credit_after_line_break(tmp_path: Path, 
         pytest.param("Change behavior.<br>by [@alice](https://github.com/alice).\n", id="html-break"),
         pytest.param("Change behavior.<br />by [@alice](https://github.com/alice).\n", id="html-break-spaced"),
         pytest.param('Change behavior.<br class="x">by [@alice](https://github.com/alice).\n', id="html-break-attrs"),
+        pytest.param(
+            'Change behavior.<br title="x > y">by [@alice](https://github.com/alice).\n', id="html-break-quote"
+        ),
         pytest.param("Change behavior.<hr>by [@alice](https://github.com/alice).\n", id="html-rule"),
         pytest.param("Change behavior.\n\n---\n\nby [@alice](https://github.com/alice).\n", id="horizontal-rule"),
-        pytest.param("- Change behavior.\n- by [@alice](https://github.com/alice).\n", id="list"),
         pytest.param("> Change behavior.\n> by [@alice](https://github.com/alice).\n", id="blockquote"),
     ],
 )
@@ -204,6 +206,17 @@ def test_add_pull_request_links_accepts_credit_across_visible_boundary(tmp_path:
 
     assert fragment.read_text().count("by [@alice](https://github.com/alice)") == 1
     assert "([#42](https://github.com/tox-dev/example/pull/42))" in fragment.read_text()
+
+
+@pytest.mark.parametrize("source", ["- Fix A.\n- Fix B.\n", "1. Fix A.\n2. Fix B.\n"])
+def test_add_pull_request_links_rejects_multiple_change_items(tmp_path: Path, source: str) -> None:
+    fragment = tmp_path / "+first.bugfix.md"
+    fragment.write_text(source)
+
+    with pytest.raises(ValueError, match="split multiple change items into separate fragments"):
+        _link(tmp_path, "tox-dev/example", {fragment.name: "Fix both (#42)"})
+
+    assert fragment.read_text() == source
 
 
 def test_add_pull_request_links_rejects_formatted_wrong_author_credit(tmp_path: Path) -> None:
@@ -638,6 +651,11 @@ def test_add_pull_request_links_ignores_rst_comment(tmp_path: Path, hidden: str)
         ),
         pytest.param('<span title="x by [@alice](https://github.com/alice)">docs</span>', id="html-attribute"),
         pytest.param("<code>by [@alice](https://github.com/alice)</code>", id="html-code"),
+        pytest.param('<code title="x > y">by [@mallory](https://github.com/mallory)</code>', id="html-quoted-tag"),
+        *[
+            pytest.param(f"<{tag}>by [@mallory](https://github.com/mallory)</{tag}>", id=f"html-{tag}")
+            for tag in ("kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript")
+        ],
     ],
 )
 def test_add_pull_request_links_ignores_hidden_markdown_credit(tmp_path: Path, hidden: str) -> None:
@@ -837,7 +855,7 @@ def test_add_pull_request_links_rejects_credit_after_backslash_code_closer(tmp_p
     assert fragment.read_text() == source
 
 
-@pytest.mark.parametrize("tag", ["code", "kbd"])
+@pytest.mark.parametrize("tag", ["code", "kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript"])
 def test_add_pull_request_links_ignores_html_literal_reference(tmp_path: Path, tag: str) -> None:
     fragment = tmp_path / "+first.feature.md"
     fragment.write_text(f"Add <{tag}>https://github.com/tox-dev/example/pull/42</{tag}> support.\n")
@@ -847,6 +865,19 @@ def test_add_pull_request_links_ignores_html_literal_reference(tmp_path: Path, t
     assert fragment.read_text() == (
         f"Add <{tag}>https://github.com/tox-dev/example/pull/42</{tag}> support "
         "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n"
+    )
+
+
+def test_add_pull_request_links_ignores_reference_in_quoted_html_tag(tmp_path: Path) -> None:
+    fragment = tmp_path / "42.feature.md"
+    source = '<code title="x > y">https://github.com/tox-dev/example/pull/42</code>'
+    fragment.write_text(f"Add {source} support.\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == (
+        f"Add {source} support ([#42](https://github.com/tox-dev/example/pull/42)) "
+        "by [@alice](https://github.com/alice).\n"
     )
 
 

@@ -70,6 +70,52 @@ def test_markdown_template_keeps_numbered_and_named_pull_requests(
     )
 
 
+def test_markdown_template_links_two_fragments_from_one_pull_request(tmp_path: Path) -> None:
+    directory = tmp_path / "changelog.d"
+    directory.mkdir()
+    (directory / "+first.feature.md").write_text("Add an option by [@alice](https://github.com/alice).\n")
+    (directory / "+second.bugfix.md").write_text("Fix a fallback by [@alice](https://github.com/alice).\n")
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("# Changelog\n\n<!-- towncrier release notes start -->\n")
+    (tmp_path / "pyproject.toml").write_text(
+        dedent("""\
+        [tool.towncrier]
+        name = "example"
+        directory = "changelog.d"
+        filename = "CHANGELOG.md"
+        template = "release_creator.fragments:template.jinja2"
+        title_format = false
+        type = [
+          { directory = "feature", name = "Added", showcontent = true },
+          { directory = "bugfix", name = "Fixed", showcontent = true },
+        ]
+        """)
+    )
+    add_pull_request_links(
+        directory,
+        "tox-dev/example",
+        {
+            name: PullRequest(number="42", author=PullRequestAuthor(handle="alice", is_bot=False))
+            for name in ("+first.feature.md", "+second.bugfix.md")
+        },
+    )
+
+    subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Fixed command and temporary checkout.
+        [str(Path(sys.executable).with_name("towncrier")), "build", "--yes", "--version", "1.2.3"],
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
+    )
+
+    notes = render_markdown(
+        changelog.read_text(),
+        ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
+        "* Add an option by @alice in https://github.com/tox-dev/example/pull/42\n",
+    )
+    assert "Add an option by @alice ([#42](https://github.com/tox-dev/example/pull/42))." in notes
+    assert "Fix a fallback by @alice ([#42](https://github.com/tox-dev/example/pull/42))." in notes
+
+
 @pytest.mark.parametrize(
     "case",
     [
