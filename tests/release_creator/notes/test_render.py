@@ -666,6 +666,22 @@ def test_render_markdown_rejects_credit_link_to_another_profile() -> None:
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
 
+def test_render_rst_rejects_credit_link_to_another_profile() -> None:
+    changelog = dedent("""\
+        1.2.3 (today)
+        =============
+
+        Added
+        -----
+
+        - Add support (:pr:`42`) by `@alice <https://github.com/mallory>`_.
+        """)
+    generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
+
+    with pytest.raises(ValueError, match="credit link for @alice points to another profile"):
+        render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
 def test_render_markdown_accepts_multiple_profile_credit_links() -> None:
     changelog = dedent("""\
         ## 1.2.3 (today)

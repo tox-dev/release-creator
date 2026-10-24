@@ -170,6 +170,7 @@ def render_rst(changelog: str, context: ReleaseContext, generated_notes: str | N
 
 
 def _finish(notes: str, context: ReleaseContext, generated_notes: str | None) -> str:
+    _validate_profile_links(notes)
     if generated_notes is not None:
         _verify_authors(notes, generated_notes, context)
         if contributors := _new_contributors(generated_notes, context):
@@ -498,7 +499,6 @@ def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
     category_has_item = False
     for source_line in lines:
         line = source_line
-        _validate_profile_links(line)
         if source_line.startswith(category_prefix):
             if in_category and not category_has_item:
                 msg = "empty changelog category"
