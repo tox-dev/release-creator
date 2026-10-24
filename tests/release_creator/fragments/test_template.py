@@ -162,19 +162,9 @@ def test_template_does_not_confuse_short_issue_with_longer_pull_request(
     assert f"({issue_format.format(issue='12')})" in changelog.read_text()
 
 
-@pytest.mark.parametrize(
-    ("underlines", "expected_category"),
-    [
-        pytest.param("", "Fixed\n-----", id="default"),
-        pytest.param('underlines = ["*", "=", "-"]', "Fixed\n=====", id="overline"),
-        pytest.param('underlines = ["-", "~"]', "Fixed\n~~~~~", id="dash"),
-    ],
-)
-def test_rst_template_renders_notes_with_stable_anchors(
-    underlines: str, expected_category: str, tmp_path: Path
-) -> None:
+def _build_rst_fragment(tmp_path: Path, source: str, underlines: str = "", filename: str = "1.bugfix.rst") -> str:
     (tmp_path / "changelog.d").mkdir()
-    (tmp_path / "changelog.d" / "1.bugfix.rst").write_text("Fix the loader.\n")
+    (tmp_path / "changelog.d" / filename).write_text(source)
     old_release = (
         "\n********************\n 0.9.0 (2026-01-01)\n********************\n"
         if underlines.startswith('underlines = ["*"')
@@ -199,7 +189,7 @@ def test_rst_template_renders_notes_with_stable_anchors(
     add_pull_request_links(
         tmp_path / "changelog.d",
         "tox-dev/example",
-        {"1.bugfix.rst": PullRequest(number="2", author=PullRequestAuthor(handle="alice", is_bot=False))},
+        {filename: PullRequest(number="2", author=PullRequestAuthor(handle="alice", is_bot=False))},
     )
 
     subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Fixed command and temporary checkout.
@@ -209,7 +199,21 @@ def test_rst_template_renders_notes_with_stable_anchors(
         check=True,
     )
 
-    changelog = (tmp_path / "changelog.rst").read_text()
+    return (tmp_path / "changelog.rst").read_text()
+
+
+@pytest.mark.parametrize(
+    ("underlines", "expected_category"),
+    [
+        pytest.param("", "Fixed\n-----", id="default"),
+        pytest.param('underlines = ["*", "=", "-"]', "Fixed\n=====", id="overline"),
+        pytest.param('underlines = ["-", "~"]', "Fixed\n~~~~~", id="dash"),
+    ],
+)
+def test_rst_template_renders_notes_with_stable_anchors(
+    underlines: str, expected_category: str, tmp_path: Path
+) -> None:
+    changelog = _build_rst_fragment(tmp_path, "Fix the loader.\n", underlines)
     assert expected_category in changelog
     assert render_rst(
         changelog,
@@ -218,6 +222,23 @@ def test_rst_template_renders_notes_with_stable_anchors(
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
         "- Fix the loader ([#2](https://github.com/tox-dev/example/pull/2)) by @alice. "
         "([#1](https://github.com/tox-dev/example/pull/1))\n\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+    )
+
+
+def test_rst_template_renders_literal_marker_credit(tmp_path: Path) -> None:
+    changelog = _build_rst_fragment(tmp_path, "Fix the loader::\n\n  code output\n", filename="+literal.bugfix.rst")
+
+    notes = render_rst(
+        changelog,
+        ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
+        "* Fix the loader by @alice in https://github.com/tox-dev/example/pull/2\n",
+    )
+
+    assert notes == (
+        '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
+        "- Fix the loader ([#2](https://github.com/tox-dev/example/pull/2)) by @alice:\n\n"
+        "  ```\n  code output\n  ```\n\n"
         "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 

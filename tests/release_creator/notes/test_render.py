@@ -1139,7 +1139,9 @@ def test_render_markdown_matches_author_handle_case_insensitively() -> None:
     assert "by @alice" in result
 
 
-@pytest.mark.parametrize("tag", ["code", "kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript"])
+@pytest.mark.parametrize(
+    "tag", ["code", "kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript"], ids=str
+)
 def test_render_markdown_ignores_hidden_html_credit_and_reference(tag: str) -> None:
     changelog = (
         "## 1.2.3 (today)\n\n### Fixed\n\n"
@@ -1149,10 +1151,16 @@ def test_render_markdown_ignores_hidden_html_credit_and_reference(tag: str) -> N
 
     result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
-    assert f'<{tag} title="x > y">#5 by @mallory</{tag}>' in result
+    assert result == (
+        "### Bug fixes\n\n"
+        f'- Change <{tag} title="x > y">#5 by @mallory</{tag}> and fix (#5) by @alice.\n\n'
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+    )
 
 
-@pytest.mark.parametrize("tag", ["code", "kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript"])
+@pytest.mark.parametrize(
+    "tag", ["code", "kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript"], ids=str
+)
 def test_render_markdown_rejects_credit_only_inside_html_literal(tag: str) -> None:
     changelog = f"## 1.2.3 (today)\n\n### Fixed\n\n- Change (#5) <{tag}>by @alice</{tag}>.\n"
     generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
@@ -1178,21 +1186,36 @@ def test_render_markdown_rejects_credit_only_inside_html_block() -> None:
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
 
-@pytest.mark.parametrize("opening", ["<br>", '<br title="x > y">', "<hr>", "<br />"])
+@pytest.mark.parametrize(
+    "opening",
+    [
+        pytest.param("<br>", id="br"),
+        pytest.param('<br title="x > y">', id="br-quoted-attribute"),
+        pytest.param("<hr>", id="hr"),
+        pytest.param("<br />", id="self-closing-br"),
+    ],
+)
 def test_render_markdown_accepts_credit_after_html_break(opening: str) -> None:
     changelog = f"## 1.2.3 (today)\n\n### Fixed\n\n- Fix https://github.com/tox-dev/example/pull/5{opening}by @alice.\n"
     generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
 
     result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
-    assert "by @alice" in result
+    assert result == (
+        "### Bug fixes\n\n"
+        f"- Fix https://github.com/tox-dev/example/pull/5{opening}by @alice.\n\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+    )
 
 
 @pytest.mark.parametrize(
-    "separator",
-    [pytest.param("  \n  ", id="hard-break"), pytest.param("\n\n  ", id="paragraph")],
+    ("separator", "expected_break"),
+    [
+        pytest.param("  \n  ", "\\\n  ", id="hard-break"),
+        pytest.param("\n\n  ", "\n\n  ", id="paragraph"),
+    ],
 )
-def test_render_markdown_accepts_credit_across_one_list_item(separator: str) -> None:
+def test_render_markdown_accepts_credit_across_one_list_item(separator: str, expected_break: str) -> None:
     changelog = (
         f"## 1.2.3 (today)\n\n### Fixed\n\n- Fix [#5](https://github.com/tox-dev/example/pull/5){separator}by @alice.\n"
     )
@@ -1200,7 +1223,11 @@ def test_render_markdown_accepts_credit_across_one_list_item(separator: str) -> 
 
     result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
-    assert "Fix [#5](https://github.com/tox-dev/example/pull/5)" in result
+    assert result == (
+        "### Bug fixes\n\n"
+        f"- Fix [#5](https://github.com/tox-dev/example/pull/5){expected_break}by @alice.\n\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+    )
 
 
 def test_render_markdown_keeps_distinct_list_items_separate() -> None:

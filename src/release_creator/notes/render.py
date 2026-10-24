@@ -74,7 +74,7 @@ _RE_CREDIT_HANDLES: Final = re.compile(
         @[A-Za-z0-9-]+  # First credited author
         (?:(?:\s*,\s*(?:and\s+)?|\s+and\s+)@[A-Za-z0-9-]+)*  # Additional authors
     )
-    (?:[.,;)\s]|$)  # Credit ends before other prose
+    (?:[.,;:)\s]|$)  # Credit ends before other prose or an RST literal marker
     """,
     re.VERBOSE,
 )
@@ -142,6 +142,17 @@ _RE_MARKDOWN_LINK_DEFINITION: Final = re.compile(
     """,
     re.VERBOSE | re.IGNORECASE,
 )
+_LITERAL_HTML_TAGS: Final = frozenset({
+    "code",
+    "kbd",
+    "pre",
+    "samp",
+    "script",
+    "style",
+    "textarea",
+    "template",
+    "noscript",
+})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -669,7 +680,7 @@ class _RawHtmlLinkParser(HTMLParser):
 
     @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in {"code", "kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript"}:
+        if tag in _LITERAL_HTML_TAGS:
             self._literal_tags.append(tag)
         elif not self.in_literal() and tag == "a" and any(name == "href" for name, _ in attrs):
             msg = "raw HTML links are unsupported in release notes"
@@ -679,7 +690,7 @@ class _RawHtmlLinkParser(HTMLParser):
 
     @override
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in {"code", "kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript"}:
+        if tag in _LITERAL_HTML_TAGS:
             msg = "self-closing HTML literal elements are unsupported in release notes"
             raise ValueError(msg)
         super().handle_startendtag(tag, attrs)

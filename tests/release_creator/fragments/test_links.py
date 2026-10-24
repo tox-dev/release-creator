@@ -247,12 +247,24 @@ def test_add_pull_request_links_accepts_credit_across_visible_boundary(tmp_path:
         pytest.param("md", "1. Fix A.\n2. Fix B.\n", id="markdown-numbered"),
         pytest.param("md", "> Fix A.\n", id="markdown-blockquote"),
         pytest.param("md", "- Fix A.\n  - subdetail\n", id="markdown-nested-list"),
+        pytest.param("md", "Fix A.\n\n## Details\n", id="markdown-heading"),
+        pytest.param("md", "Fix A.\n\n| A | B |\n|---|---|\n| 1 | 2 |\n", id="markdown-table"),
         pytest.param("rst", "- Fix A.\n- Fix B.\n", id="rst-bullets"),
         pytest.param("rst", "  - Fix A.\n  - Fix B.\n", id="rst-indented-bullets"),
         pytest.param("rst", "1. Fix A.\n2. Fix B.\n", id="rst-numbered"),
         pytest.param("rst", "1. Fix A.\n\n   1. subdetail\n", id="rst-nested-numbered"),
         pytest.param("rst", "Fix A.\n\n  - subdetail\n", id="rst-nested-bullet"),
         pytest.param("rst", "Fix A.\n\n  Quoted detail.\n", id="rst-blockquote"),
+        pytest.param("rst", "Fix A.\n\nDetails\n=======\n\nMore info.\n", id="rst-heading"),
+        pytest.param("rst", "Fix A.\n\n+---+---+\n| A | B |\n+===+===+\n| 1 | 2 |\n+---+---+\n", id="rst-table"),
+        pytest.param("rst", "Fix A.\n\n.. raw:: html\n\n   <b>x</b>\n", id="rst-raw"),
+        pytest.param(
+            "rst",
+            "Fix A.\n\n.. code-block:: text\n  :caption: example\n\n  sample\n",
+            id="rst-unsupported-directive-option",
+        ),
+        pytest.param("rst", "Document malformed ``literal and :pr:`42`.\n", id="rst-malformed-inline-literal"),
+        pytest.param("rst", "Example::\n\nA new feature.\n", id="rst-unindented-literal"),
     ],
 )
 def test_add_pull_request_links_rejects_structured_towncrier_fragment(
@@ -453,12 +465,6 @@ def test_add_pull_request_links_before_trailing_code(tmp_path: Path, extension: 
             id="markdown-fence",
         ),
         pytest.param("rst", ".. code-block:: text\n\n  :pr:`42`", "(:pr:`42`)", id="rst-code-block"),
-        pytest.param(
-            "rst",
-            ".. code-block:: text\n  :caption: https://github.com/tox-dev/example/pull/42\n\n  sample",
-            "(:pr:`42`)",
-            id="rst-directive-option",
-        ),
     ],
 )
 def test_add_pull_request_links_ignores_reference_in_code(tmp_path: Path, extension: str, code: str, link: str) -> None:
@@ -498,25 +504,6 @@ def test_add_pull_request_links_ignores_inline_code_reference(
     _link(tmp_path, "tox-dev/example", {fragment.name: "Document this example (#42)"})
 
     assert fragment.read_text().startswith(f"Document {literal} behavior {link} by ")
-
-
-def test_add_pull_request_links_recognizes_reference_after_unclosed_rst_literal(tmp_path: Path) -> None:
-    fragment = tmp_path / "42.feature.rst"
-    source = "Document malformed ``literal and :pr:`42`.\n"
-    fragment.write_text(source)
-
-    _link(tmp_path, "tox-dev/example", {fragment.name: "Document this example (#42)"})
-
-    assert fragment.read_text() == "Document malformed ``literal and :pr:`42` by :user:`alice`.\n"
-
-
-def test_add_pull_request_links_after_nonindented_rst_literal_marker(tmp_path: Path) -> None:
-    fragment = tmp_path / "+first.feature.rst"
-    fragment.write_text("Example::\n\nA new feature.\n")
-
-    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
-
-    assert fragment.read_text() == "Example::\n\nA new feature (:pr:`42`) by :user:`alice`.\n"
 
 
 def test_add_pull_request_links_after_earlier_fence_before_final_fence(tmp_path: Path) -> None:
@@ -669,6 +656,15 @@ def test_add_pull_request_links_ignores_reference_in_html_comment(tmp_path: Path
         "Add parser <!-- https://github.com/tox-dev/example/pull/42 --> support "
         "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n"
     )
+
+
+def test_add_pull_request_links_keeps_prose_after_rst_literal(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.rst"
+    fragment.write_text("Add a feature::\n\n  code output\n\nContinue here.\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == ("Add a feature::\n\n  code output\n\nContinue here (:pr:`42`) by :user:`alice`.\n")
 
 
 @pytest.mark.parametrize(
@@ -847,7 +843,7 @@ def test_add_pull_request_links_maps_repeated_images(tmp_path: Path) -> None:
     )
 
 
-@pytest.mark.parametrize("tag", ["code", "span"])
+@pytest.mark.parametrize("tag", ["code", "span"], ids=str)
 def test_add_pull_request_links_ignores_html_tag_in_image_alt(tmp_path: Path, tag: str) -> None:
     fragment = tmp_path / "+first.feature.md"
     source = f"Add <{tag}>foo</{tag}> and ![example <{tag}> text](image.png) feature.\n"
@@ -874,7 +870,14 @@ def test_add_pull_request_links_ignores_nested_link_title_credit(tmp_path: Path)
     )
 
 
-@pytest.mark.parametrize("prefix", ["Add ](", "Add [docs] \\](", "Add \\[docs]("])
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        pytest.param("Add ](", id="bare-target"),
+        pytest.param("Add [docs] \\](", id="escaped-close"),
+        pytest.param("Add \\[docs](", id="escaped-open"),
+    ],
+)
 def test_add_pull_request_links_rejects_visible_credit_after_nonlink_target(tmp_path: Path, prefix: str) -> None:
     fragment = tmp_path / "+first.feature.md"
     source = f'{prefix}https://example.com "x by [@mallory](https://github.com/mallory)") now.\n'
@@ -910,7 +913,9 @@ def test_add_pull_request_links_rejects_credit_after_backslash_code_closer(tmp_p
     assert fragment.read_text() == source
 
 
-@pytest.mark.parametrize("tag", ["code", "kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript"])
+@pytest.mark.parametrize(
+    "tag", ["code", "kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript"], ids=str
+)
 def test_add_pull_request_links_ignores_html_literal_reference(tmp_path: Path, tag: str) -> None:
     fragment = tmp_path / "+first.feature.md"
     fragment.write_text(f"Add <{tag}>https://github.com/tox-dev/example/pull/42</{tag}> support.\n")
@@ -936,7 +941,7 @@ def test_add_pull_request_links_ignores_reference_in_quoted_html_tag(tmp_path: P
     )
 
 
-@pytest.mark.parametrize("tag", ["code", "kbd", "pre"])
+@pytest.mark.parametrize("tag", ["code", "kbd", "pre"], ids=str)
 def test_add_pull_request_links_rejects_self_closing_literal(tmp_path: Path, tag: str) -> None:
     fragment = tmp_path / "+first.feature.md"
     source = f'Add <{tag} title="x > y"/> by [@mallory](https://github.com/mallory).\n'
@@ -978,7 +983,7 @@ def test_add_pull_request_links_recognizes_link_after_unmatched_html_close(tmp_p
     assert fragment.read_text() == f"Add parser </code> ({link}) by [@alice](https://github.com/alice).\n"
 
 
-@pytest.mark.parametrize("suffix", ["[docs](unterminated", "](unfinished"])
+@pytest.mark.parametrize("suffix", ["[docs](unterminated", "](unfinished"], ids=["open-link", "bare-target"])
 def test_add_pull_request_links_keeps_credit_after_malformed_target(tmp_path: Path, suffix: str) -> None:
     fragment = tmp_path / "+first.feature.md"
     fragment.write_text(f"Add parser {suffix} by [@alice](https://github.com/alice).\n")
@@ -1003,7 +1008,13 @@ def test_add_pull_request_links_keeps_credit_before_unclosed_target(tmp_path: Pa
     )
 
 
-@pytest.mark.parametrize("source", ["<div>\nAdd parser\n</div>\n", "<!-- Add parser -->\n"])
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param("<div>\nAdd parser\n</div>\n", id="html-block"),
+        pytest.param("<!-- Add parser -->\n", id="html-comment"),
+    ],
+)
 def test_add_pull_request_links_after_html_block(tmp_path: Path, source: str) -> None:
     fragment = tmp_path / "+first.feature.md"
     fragment.write_text(source)
@@ -1155,7 +1166,7 @@ def test_add_pull_request_links_reports_deleted_author_credit(tmp_path: Path) ->
         )
 
 
-@pytest.mark.parametrize("second_name", ["+second.feature.md", "43.feature.md"])
+@pytest.mark.parametrize("second_name", ["+second.feature.md", "43.feature.md"], ids=["named", "numbered"])
 def test_add_pull_request_links_rejects_a_mismatched_author_without_partial_writes(
     tmp_path: Path, second_name: str
 ) -> None:

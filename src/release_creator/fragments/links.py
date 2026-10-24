@@ -5,18 +5,16 @@ from __future__ import annotations
 
 lazy import re
 lazy from dataclasses import dataclass
-lazy from io import StringIO
 lazy from pathlib import Path
 lazy from typing import Final, Literal
 
-lazy from docutils import nodes
-lazy from docutils.core import publish_doctree
 lazy from markdown_it import MarkdownIt
 lazy from markdown_it.token import Token
 
 lazy from release_creator.fragments.knope import changeset_parts
 lazy from release_creator.fragments.names import fragment_number, pending_changesets, pending_fragments
 lazy from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor
+lazy from release_creator.fragments.shape import validate_towncrier_fragment
 lazy from release_creator.github import MARKDOWN_AUTHOR
 
 _RE_PULL_REQUEST_LINK: Final = re.compile(
@@ -50,6 +48,7 @@ _RE_AUTHOR_SEPARATOR: Final = re.compile(
     """,
     re.VERBOSE,
 )
+# These patterns run for every inline token in each pending fragment.
 _RE_HTML_TAG: Final = re.compile(
     r"""
     <\s*(?P<closing>/)?\s*(?P<name>code|kbd|pre|samp|script|style|textarea|template|noscript)\b  # Hidden HTML element
@@ -64,6 +63,7 @@ _RE_HTML_BREAK: Final = re.compile(
     """,
     re.VERBOSE | re.IGNORECASE,
 )
+_RE_RST_INLINE_LITERAL: Final = re.compile(r"``.*?``", re.DOTALL)
 type _LinkMode = Literal["towncrier", "knope"]
 
 
@@ -98,7 +98,7 @@ def _link_fragment(
         raise ValueError(msg)
     content = fragment.read_text(encoding="utf-8")
     if mode == "towncrier":
-        _validate_towncrier_fragment(content, fragment)
+        validate_towncrier_fragment(content, fragment)
     target = _LinkTarget(
         fragment=fragment,
         repository=repository,
@@ -110,32 +110,6 @@ def _link_fragment(
         frontmatter, heading, remainder = changeset_parts(fragment, content)
         return f"{frontmatter}# {_link_text(heading, target)}{remainder}"
     return f"{_link_text(content.rstrip(), target)}\n"
-
-
-def _validate_towncrier_fragment(content: str, fragment: Path) -> None:
-    if fragment.suffix == ".md":
-        structured = any(
-            token.type in {"bullet_list_open", "ordered_list_open", "blockquote_open"}
-            for token in MarkdownIt().parse(content)
-        )
-    else:
-        document = publish_doctree(
-            content,
-            settings_overrides={
-                "file_insertion_enabled": False,
-                "halt_level": 6,
-                "raw_enabled": False,
-                "report_level": 5,
-                "warning_stream": StringIO(),
-            },
-        )
-        structured = any(
-            isinstance(node, (nodes.bullet_list, nodes.enumerated_list, nodes.block_quote))
-            for node in document.findall()
-        )
-    if structured:
-        msg = f"fragment must be prose; the Towncrier template adds its list item: {fragment}"
-        raise ValueError(msg)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -236,7 +210,7 @@ def _markdown_prose(content: str) -> list[str]:
 def _rst_prose(content: str) -> list[str]:
     lines = content.splitlines()
     hidden = _rst_hidden_lines(lines)
-    return [_without_rst_inline_literals(line) for index, line in enumerate(lines) if index not in hidden]
+    return [_RE_RST_INLINE_LITERAL.sub("", line) for index, line in enumerate(lines) if index not in hidden]
 
 
 def _rst_hidden_lines(lines: list[str]) -> set[int]:
@@ -272,12 +246,12 @@ def _rst_comment(line: str) -> bool:
 
 
 def _credit_prose(content: str, extension: str) -> str:
-    lines = content.splitlines(keepends=True)
     if extension == ".md":
         return _markdown_credit_prose(content)
+    lines = content.splitlines(keepends=True)
     for index in _rst_hidden_lines(lines):
         lines[index] = "\0" * len(lines[index])
-    return _mask_delimited("".join(lines), "``", "``")
+    return _RE_RST_INLINE_LITERAL.sub(lambda match: "\0" * len(match.group()), "".join(lines))
 
 
 def _markdown_credit_prose(content: str) -> str:
@@ -345,30 +319,6 @@ def _markdown_credit_children(children: list[Token]) -> str:
     return "".join(prose)
 
 
-def _mask_delimited(content: str, opening: str, closing: str) -> str:
-    masked = list(content)
-    cursor = 0
-    while (start := content.find(opening, cursor)) >= 0:
-        if (end := content.find(closing, start + len(opening))) < 0:
-            break
-        end += len(closing)
-        masked[start:end] = "\0" * (end - start)
-        cursor = end
-    return "".join(masked)
-
-
-def _without_rst_inline_literals(line: str) -> str:
-    parts: list[str] = []
-    start = 0
-    while (opening := line.find("``", start)) >= 0:
-        if (closing := line.find("``", opening + 2)) < 0:
-            break
-        parts.append(line[start:opening])
-        start = closing + 2
-    parts.append(line[start:])
-    return "".join(parts)
-
-
 def _append_pull_request_link(
     content: str, target: _LinkTarget, author: str | None, *, anchor: int | None = None
 ) -> str:
@@ -425,9 +375,7 @@ def _trailing_rst_code_opening(lines: list[str]) -> int | None:
         ):
             continue
         body = [following for following in lines[index + 1 :] if following.strip()]
-        if (body or _rst_comment(stripped)) and all(
-            _indent_width(following) > _indent_width(line) for following in body
-        ):
+        if all(_indent_width(following) > _indent_width(line) for following in body):
             return index
     return None
 

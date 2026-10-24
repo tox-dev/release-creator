@@ -24,7 +24,7 @@ def render_rst_section(source: str, tag: str, repository: str) -> str:
     :param repository: GitHub owner and repository for role links.
     :returns: Markdown body with release categories and warnings.
     """
-    _register_roles()
+    register_roles()
     body: list[str] = []
     for block in _parse_document(source, repository).children:
         if isinstance(block, nodes.target):
@@ -35,7 +35,9 @@ def render_rst_section(source: str, tag: str, repository: str) -> str:
     return "\n\n".join(body)
 
 
-def _register_roles() -> None:
+def register_roles() -> None:
+    """Register the RST roles supported by release notes and fragments."""
+
     def github_role(
         name: str,
         rawtext: str,
@@ -280,5 +282,6 @@ def _is_credit(item: nodes.Node) -> bool:
 
 
 __all__ = [
+    "register_roles",
     "render_rst_section",
 ]
