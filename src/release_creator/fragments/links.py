@@ -110,7 +110,7 @@ def _link_text(
     if not target.knope and fragment_number(fragment) is None and linked:
         msg = f"pull request already linked in {fragment}"
         raise ValueError(msg)
-    if (match := _RE_AUTHOR_MARKER.search(content)) is not None:
+    if (match := _RE_AUTHOR_MARKER.search(_credit_prose(content, fragment.suffix))) is not None:
         handles = {handle.casefold() for handle in _credited_handles(content[match.end() :], fragment.suffix)}
         handle = target.author.handle.casefold()
         if target.author.handle == "ghost":
@@ -150,7 +150,7 @@ def _markdown_prose(content: str) -> list[str]:
     prose: list[str] = []
     for token in MarkdownIt().parse(content):
         for child in token.children or ():
-            if child.type in {"text", "html_inline"}:
+            if child.type == "text" or (child.type == "html_inline" and not child.content.startswith("<!--")):
                 prose.append(child.content)
             elif child.type == "link_open" and isinstance(destination := child.attrGet("href"), str):
                 prose.append(destination)
@@ -161,15 +161,20 @@ def _markdown_prose(content: str) -> list[str]:
 
 def _rst_prose(content: str) -> list[str]:
     lines = content.splitlines()
+    code = _rst_code_lines(lines)
+    return [_without_rst_inline_literals(line) for index, line in enumerate(lines) if index not in code]
+
+
+def _rst_code_lines(lines: list[str]) -> set[int]:
     code: set[int] = set()
-    prose: list[str] = []
     for index, line in enumerate(lines):
         if index in code:
             continue
         stripped = line.lstrip()
-        if not stripped.startswith((".. code-block::", ".. code::", ".. sourcecode::")):
-            prose.append(_without_rst_inline_literals(line))
-        if not (stripped.startswith((".. code-block::", ".. code::", ".. sourcecode::")) or stripped.endswith("::")):
+        directive = stripped.startswith((".. code-block::", ".. code::", ".. sourcecode::"))
+        if directive:
+            code.add(index)
+        if not (directive or stripped.rstrip().endswith("::")):
             continue
         cursor = index + 1
         while cursor < len(lines) and not lines[cursor].strip():
@@ -179,7 +184,58 @@ def _rst_prose(content: str) -> list[str]:
         while cursor < len(lines) and (not lines[cursor].strip() or _indent_width(lines[cursor]) > _indent_width(line)):
             code.add(cursor)
             cursor += 1
-    return prose
+    return code
+
+
+def _credit_prose(content: str, extension: str) -> str:
+    lines = content.splitlines(keepends=True)
+    if extension == ".md":
+        for token in MarkdownIt().parse(content):
+            if token.type in {"fence", "code_block", "html_block"} and token.map is not None:
+                for index in range(*token.map):
+                    lines[index] = "\0" * len(lines[index])
+        prose = _mask_delimited("".join(lines), "<!--", "-->")
+        return _mask_markdown_code(prose)
+    for index in _rst_code_lines(lines):
+        lines[index] = "\0" * len(lines[index])
+    return _mask_delimited("".join(lines), "``", "``")
+
+
+def _mask_delimited(content: str, opening: str, closing: str) -> str:
+    masked = list(content)
+    cursor = 0
+    while (start := content.find(opening, cursor)) >= 0:
+        if (end := content.find(closing, start + len(opening))) < 0:
+            break
+        end += len(closing)
+        masked[start:end] = "\0" * (end - start)
+        cursor = end
+    return "".join(masked)
+
+
+def _mask_markdown_code(content: str) -> str:
+    masked = list(content)
+    cursor = 0
+    while (start := content.find("`", cursor)) >= 0:
+        if (start - len(content[:start].rstrip("\\"))) % 2:
+            cursor = start + 1
+            continue
+        width = len(content[start:]) - len(content[start:].lstrip("`"))
+        fence = "`" * width
+        end = content.find(fence, start + width)
+        while end >= 0 and (
+            (end > 0 and content[end - 1] == "`")
+            or (end + width < len(content) and content[end + width] == "`")
+            or (end - len(content[:end].rstrip("\\"))) % 2
+        ):
+            end = content.find(fence, end + width)
+        if end < 0:
+            cursor = start + width
+            continue
+        end += width
+        masked[start:end] = "\0" * (end - start)
+        cursor = end
+    return "".join(masked)
 
 
 def _without_rst_inline_literals(line: str) -> str:
@@ -201,6 +257,9 @@ def _append_pull_request_link(content: str, target: _LinkTarget, author: str | N
         suffix = f"{link}"
         if author is not None:
             suffix += f" by {_author_credit(author, target.fragment.suffix)}"
+        opening, _, body = after.partition("\n")
+        if target.fragment.suffix == ".rst" and opening.endswith("::") and not opening.lstrip().startswith(".. "):
+            return f"{opening[:-2]} {suffix}::\n{body.rstrip()}"
         return f"{after.rstrip()}\n\n{suffix}{'' if target.knope else '.'}"
     content = f"{before.removesuffix('.')} {link}"
     if author is not None:

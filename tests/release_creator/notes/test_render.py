@@ -2069,6 +2069,30 @@ def test_render_rst_keeps_role_display(source: str, expected: str) -> None:
     )
 
 
+def test_render_rst_preserves_inline_literal_spaces() -> None:
+    changelog = "1.2.3 (today)\n==============\n\nFixed\n-----\n\n- Keep ``a  b`` valid across\n  wrapped prose.\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert "- Keep `a  b` valid across wrapped prose." in result
+
+
+def test_render_rst_normalizes_spaces_between_literals() -> None:
+    changelog = "1.2.3 (today)\n==============\n\nFixed\n-----\n\n- Keep ``a``  ``b`` valid.\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert "- Keep `a` `b` valid." in result
+
+
+def test_render_rst_preserves_literal_html_entity() -> None:
+    changelog = "1.2.3 (today)\n==============\n\nFixed\n-----\n\n- Print literal &copy; in HTML.\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert r"- Print literal \&copy; in HTML." in result
+
+
 @pytest.mark.parametrize(
     ("source", "expected"),
     [

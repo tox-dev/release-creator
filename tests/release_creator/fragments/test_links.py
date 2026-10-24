@@ -438,6 +438,96 @@ def test_add_pull_request_links_ignores_indented_fence_inside_code(tmp_path: Pat
 
 
 @pytest.mark.parametrize(
+    ("extension", "content", "expected"),
+    [
+        pytest.param(
+            "md",
+            "Add a feature.\n\n```sh\nrun this by [@bob](https://github.com/bob)\n```\n",
+            "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) "
+            "by [@alice](https://github.com/alice).\n\n```sh\nrun this by [@bob](https://github.com/bob)\n```\n",
+            id="markdown-fence",
+        ),
+        pytest.param(
+            "md",
+            "Add a feature using `by [@bob](https://github.com/bob)`.\n",
+            "Add a feature using `by [@bob](https://github.com/bob)` "
+            "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n",
+            id="markdown-inline",
+        ),
+        pytest.param(
+            "md",
+            "Add a feature using `a `` by [@bob](https://github.com/bob) b` literal.\n",
+            "Add a feature using `a `` by [@bob](https://github.com/bob) b` literal "
+            "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n",
+            id="markdown-longer-inner-backticks",
+        ),
+        pytest.param(
+            "md",
+            "Add a feature <!-- by [@alice](https://github.com/alice) --> safely.\n",
+            "Add a feature <!-- by [@alice](https://github.com/alice) --> safely "
+            "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n",
+            id="markdown-comment",
+        ),
+        pytest.param(
+            "rst",
+            "Add a feature.\n\n.. code-block:: sh\n\n  run this by :user:`bob`\n",
+            "Add a feature (:pr:`42`) by :user:`alice`.\n\n.. code-block:: sh\n\n  run this by :user:`bob`\n",
+            id="rst-directive",
+        ),
+        pytest.param(
+            "rst",
+            "Add a feature::\n\n  run this by :user:`bob`\n",
+            "Add a feature (:pr:`42`) by :user:`alice`::\n\n  run this by :user:`bob`\n",
+            id="rst-literal-block",
+        ),
+        pytest.param(
+            "rst",
+            "Add a feature using ``by :user:`bob``` safely.\n",
+            "Add a feature using ``by :user:`bob``` safely (:pr:`42`) by :user:`alice`.\n",
+            id="rst-inline",
+        ),
+    ],
+)
+def test_add_pull_request_links_ignores_credit_inside_code(
+    tmp_path: Path, extension: str, content: str, expected: str
+) -> None:
+    fragment = tmp_path / f"+first.feature.{extension}"
+    fragment.write_text(content)
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == expected
+
+
+def test_add_pull_request_links_ignores_reference_in_html_comment(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    fragment.write_text("Add parser <!-- https://github.com/tox-dev/example/pull/42 --> support.\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == (
+        "Add parser <!-- https://github.com/tox-dev/example/pull/42 --> support "
+        "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "opening",
+    [pytest.param(r"\`", id="escaped"), pytest.param("`", id="unclosed")],
+)
+def test_add_pull_request_links_keeps_credit_after_literal_backtick(tmp_path: Path, opening: str) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    fragment.write_text(f"Add a feature with {opening}symbol by [@alice](https://github.com/alice).\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == (
+        f"Add a feature with {opening}symbol ([#42](https://github.com/tox-dev/example/pull/42)) "
+        "by [@alice](https://github.com/alice).\n"
+    )
+
+
+@pytest.mark.parametrize(
     ("heading", "author", "expected"),
     [
         pytest.param(

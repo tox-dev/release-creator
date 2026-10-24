@@ -186,18 +186,18 @@ def _render_item(item: nodes.list_item, depth: int) -> str:
 
 
 def _render_paragraph(node: nodes.Node) -> str:
-    return " ".join(_render_inline(node).split()).replace(" - by ", " by ")
+    return _render_inline(node).strip().replace(" - by ", " by ")
 
 
 def _render_inline(node: nodes.Node) -> str:
     if isinstance(node, nodes.Text):
-        value = _escape_text(node.astext())
+        value = _escape_text(_normalize_prose(node.astext()))
     elif isinstance(node, nodes.title_reference):
         value = _code_span(node.rawsource[1:-1])
     elif isinstance(node, nodes.literal):
         value = _code_span(node.astext())
     elif isinstance(node, nodes.reference):
-        label = node.astext()
+        label = _normalize_prose(node.astext()).strip()
         url = node.get("refuri")
         is_profile = (
             label.startswith("@")
@@ -216,8 +216,15 @@ def _render_inline(node: nodes.Node) -> str:
     return value
 
 
+def _normalize_prose(value: str) -> str:
+    words = value.split()
+    if not words:
+        return " "
+    return f"{' ' if value[0].isspace() else ''}{' '.join(words)}{' ' if value[-1].isspace() else ''}"
+
+
 def _escape_text(value: str) -> str:
-    for character in ("\\", "`", "*", "_", "~", "[", "]", "<", ">"):
+    for character in ("\\", "`", "*", "_", "~", "[", "]", "<", ">", "&"):
         value = value.replace(character, f"\\{character}")
     return value
 
