@@ -19,9 +19,11 @@ lazy from release_creator.notes.rst import render_rst_section
 
 _RE_RELEASE_PULL: Final = re.compile(
     r"""
-    (?<![A-Za-z0-9_.-])
+    (?<![A-Za-z0-9_.\[#-])  # Ignore words, headings, and Markdown link labels
     (?:
-        \(\#  # GitHub's short PR reference
+        \#|GH-  # GitHub's current-repository shorthand
+        |
+        (?P<short_repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)\#  # Owner/repository shorthand
         |
         (?:https?://)?(?:www\.)?github\.com/
         (?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/
@@ -304,7 +306,8 @@ def _pull_references(line: str, repository: str, known_numbers: set[str]) -> lis
     candidates = [
         match
         for match in _RE_RELEASE_PULL.finditer(line)
-        if match["repository"] is None or match["repository"].casefold() == repository.casefold()
+        if (match["repository"] is None or match["repository"].casefold() == repository.casefold())
+        and (match["short_repository"] is None or match["short_repository"].casefold() == repository.casefold())
     ]
     known = known_numbers | {match["number"] for match in candidates if match["kind"] == "pull"}
     return [match for match in candidates if match["kind"] == "pull" or match["number"] in known]

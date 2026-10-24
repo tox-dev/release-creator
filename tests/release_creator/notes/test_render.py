@@ -584,6 +584,46 @@ def test_render_markdown_checks_noncanonical_pull_references(reference: str) -> 
 
 
 @pytest.mark.parametrize(
+    "reference",
+    [
+        pytest.param("#42", id="bare-number"),
+        pytest.param("fix(#42)", id="commit-style"),
+        pytest.param("GH-42", id="github-prefix"),
+        pytest.param("tox-dev/example#42", id="repository-prefix"),
+    ],
+)
+def test_render_markdown_checks_short_pull_references(reference: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Added\n\n- Add support {reference} by @mallory.\n"
+    generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
+
+    with pytest.raises(ValueError, match="pull request #42 does not include @alice"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+def test_render_markdown_checks_each_number_in_short_pull_list() -> None:
+    changelog = "## 1.2.3 (today)\n\n### Fixed\n\n- Fix both (#4, #5) by @alice.\n"
+    generated = (
+        "* First fix by @alice in https://github.com/tox-dev/example/pull/4\n"
+        "* Second fix by @bob in https://github.com/tox-dev/example/pull/5\n"
+    )
+
+    with pytest.raises(ValueError, match="pull request #5 does not include @bob"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+def test_render_markdown_ignores_other_repository_short_reference() -> None:
+    changelog = "## 1.2.3 (today)\n\n### Fixed\n\n- Follow other/project#42 in our fix (#43) by @alice.\n"
+    generated = (
+        "* Another change by @bob in https://github.com/tox-dev/example/pull/42\n"
+        "* Our fix by @alice in https://github.com/tox-dev/example/pull/43\n"
+    )
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "other/project#42" in result
+
+
+@pytest.mark.parametrize(
     "literal",
     [
         pytest.param("`(#42)`", id="inline-markdown"),
