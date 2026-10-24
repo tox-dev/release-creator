@@ -109,8 +109,8 @@ def _parse_group(
     direct: list[tuple[ScalarNode, Requirement]] = []
     managed: list[ScalarNode] = []
     for item in value.value:
-        line_end = source.find("\n", _end(item))
-        if "# release-creator managed" in source[_end(item) : line_end if line_end >= 0 else len(source)]:
+        line_end = source.find("\n", _start(item))
+        if "# release-creator managed" in source[_start(item) : line_end if line_end >= 0 else len(source)]:
             managed.append(item)
             continue
         try:
@@ -302,7 +302,12 @@ def _group_edits(source: str, group: _Group, resolved: list[Requirement]) -> lis
         end = source.find("\n", _last_content_end(sequence.value[-1]))
         return [(_start(key), end + 1 if end >= 0 else len(source), f"{key.value}: []\n")]
     roots = {canonicalize_name(requirement.name) for _, requirement in direct}
-    transitive = [item for item in resolved if canonicalize_name(item.name) not in roots]
+    unpinned = {canonicalize_name(requirement.name) for _, requirement in direct if not _exact_pin(requirement)}
+    transitive = [
+        item
+        for item in resolved
+        if canonicalize_name(item.name) not in roots or canonicalize_name(item.name) in unpinned
+    ]
     versions = {
         canonicalize_name(item.name): next(iter(item.specifier)).version
         for item in resolved
@@ -370,9 +375,7 @@ def _inline_edit(
 
 def _replace_scalar(scalar: str, requirement: Requirement, version: str) -> str:
     if not _exact_pin(requirement):
-        extras = f"[{','.join(sorted(requirement.extras))}]" if requirement.extras else ""
-        marker = f"; {requirement.marker}" if requirement.marker else ""
-        return json.dumps(f"{requirement.name}{extras}=={version}{marker}")
+        return scalar
     old_version = next(iter(requirement.specifier)).version
     if old_version == version:
         return scalar

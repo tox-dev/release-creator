@@ -55,7 +55,8 @@ def test_updates_each_hook_with_its_universal_closure(tmp_path: Path, mocker: Mo
         "        language: python\n"
         "        additional_dependencies: # keep\n"
         "          - 'MDFormat_GFM==1.1.0'\n"
-        '          - "sphinx==9.1.1"\n'
+        "          - sphinx>=9\n"
+        '          - "sphinx==9.1.1" # release-creator managed\n'
         '          - "mdformat==1.0.0" # release-creator managed\n'
         "      - id: docs\n"
         "        language: python\n"
@@ -586,6 +587,26 @@ def test_adds_managed_dependency_after_folded_root(tmp_path: Path, mocker: Mocke
     }
 
 
+def test_folded_root_stays_when_managed_pin_follows(tmp_path: Path, mocker: MockerFixture) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(
+        'additional_dependencies:\n  - >-\n    sphinx>=9\n  - "sphinx==9.1" # release-creator managed\n',
+        encoding="utf-8",
+    )
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
+    mocker.patch(
+        "release_creator.hooks.update.run_text",
+        return_value=subprocess.CompletedProcess([], 0, "sphinx==9.1\n", ""),
+    )
+
+    update_pins(config, "7 days", "3.15")
+
+    assert safe_load(config.read_text(encoding="utf-8"))["additional_dependencies"] == [
+        "sphinx>=9",
+        "sphinx==9.1",
+    ]
+
+
 def test_updates_multiline_flow_hook_without_stale_pins(tmp_path: Path, mocker: MockerFixture) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_text(
@@ -738,7 +759,9 @@ def test_pins_nonexact_dependency_when_root_is_removed(tmp_path: Path, mocker: M
 
     update_pins(config, "2026-10-14T00:00:00Z", "3.15")
 
-    assert config.read_text(encoding="utf-8") == 'additional_dependencies:\n  - "sphinx==9.1"\n'
+    assert config.read_text(encoding="utf-8") == (
+        'additional_dependencies:\n  - sphinx>=9\n  - "sphinx==9.1" # release-creator managed\n'
+    )
 
 
 def test_resolves_ranges_and_unpinned_roots(tmp_path: Path, mocker: MockerFixture) -> None:
@@ -754,11 +777,34 @@ def test_resolves_ranges_and_unpinned_roots(tmp_path: Path, mocker: MockerFixtur
     update_pins(config, "2026-10-14T00:00:00Z", "3.15")
 
     assert safe_load(config.read_text(encoding="utf-8"))["additional_dependencies"] == [
+        "sphinx>=9",
+        "mdformat-gfm",
         "sphinx==9.1",
         "mdformat-gfm==1.2",
         "colorama==0.4.6",
     ]
     assert run.call_args.kwargs["stdin"] == "sphinx>=9\nmdformat-gfm\n"
+
+
+def test_preserves_upper_bound_on_next_hook_update(tmp_path: Path, mocker: MockerFixture) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text("additional_dependencies:\n  - toml-fmt-common<1.3.3,>=1.3.2\n", encoding="utf-8")
+    mocker.patch("release_creator.process.shutil.which", return_value="/usr/bin/uv")
+    run = mocker.patch(
+        "release_creator.hooks.update.run_text",
+        return_value=subprocess.CompletedProcess([], 0, "toml-fmt-common==1.3.2\n", ""),
+    )
+
+    update_pins(config, "7 days", "3.15")
+    first = config.read_text(encoding="utf-8")
+    update_pins(config, "7 days", "3.15")
+
+    assert first == (
+        "additional_dependencies:\n  - toml-fmt-common<1.3.3,>=1.3.2\n"
+        '  - "toml-fmt-common==1.3.2" # release-creator managed\n'
+    )
+    assert config.read_text(encoding="utf-8") == first
+    assert all(call.kwargs["stdin"] == "toml-fmt-common<1.3.3,>=1.3.2\n" for call in run.call_args_list)
 
 
 @pytest.mark.parametrize(

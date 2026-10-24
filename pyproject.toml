@@ -27,6 +27,7 @@ classifiers = [
 dynamic = [ "readme", "version" ]
 dependencies = [
   "docutils>=0.22",
+  "markdown-it-py>=4,<5",
   "mdformat>=1,<2",
   "mdformat-gfm>=1,<2",
   "packaging>=26",
@@ -65,6 +66,7 @@ pkg-meta = [ "check-wheel-contents>=0.6.3", "twine>=7", "uv>=0.12.22" ]
 release-check = [ "prek>=0.2" ]
 release-notes = []
 release-prepare = [ "prek>=0.2", "towncrier>=26.9" ]
+release-validate = [ "prek>=0.2" ]
 
 [tool.hatch]
 version.source = "vcs"

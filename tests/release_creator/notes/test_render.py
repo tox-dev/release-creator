@@ -6,6 +6,7 @@ from dataclasses import replace
 from textwrap import dedent
 
 import pytest
+lazy from pytest_mock import MockerFixture
 
 from release_creator.notes.render import ReleaseContext, render_markdown, render_rst
 
@@ -348,6 +349,105 @@ def test_render_markdown_checks_shared_credit_for_multiple_pull_requests() -> No
     result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
     assert "([#43](https://github.com/tox-dev/example/pull/43)) by @alice" in result
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        pytest.param(
+            "([#5](https://github.com/tox-dev/example/pull/5), "
+            "[#6](https://github.com/tox-dev/example/pull/6)) by @alice and @bob",
+            id="paired-links",
+        ),
+        pytest.param(
+            "Fix by @alice and @bob ([#5](https://github.com/tox-dev/example/pull/5), [#6](https://github.com/tox-dev/example/pull/6))",
+            id="credit-first",
+        ),
+    ],
+)
+def test_render_markdown_accepts_shared_multi_author_credit(entry: str) -> None:
+    generated = (
+        "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
+        "* Fix by @bob in https://github.com/tox-dev/example/pull/6\n"
+    )
+
+    result = render_markdown(
+        f"## 1.2.3 (today)\n\n### Fixed\n\n- {entry}.\n",
+        ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
+        generated,
+    )
+
+    assert entry in result
+
+
+def test_render_markdown_rejects_wrong_credit_in_nested_list() -> None:
+    changelog = (
+        "## 1.2.3 (today)\n\n### Fixed\n\n- Fix parser.\n\n"
+        "    - Preserve metadata ([#5](https://github.com/tox-dev/example/pull/5)) by @mallory.\n"
+    )
+    generated = "* Preserve metadata by @alice in https://github.com/tox-dev/example/pull/5\n"
+
+    with pytest.raises(ValueError, match="pull request #5 does not include @alice"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+def test_render_markdown_rejects_wrong_credit_after_escaped_backtick() -> None:
+    changelog = (
+        "## 1.2.3 (today)\n\n### Fixed\n\n"
+        r"- Keep \`x ([#5](https://github.com/tox-dev/example/pull/5)) by @mallory\` intact."
+        "\n"
+    )
+    generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
+
+    with pytest.raises(ValueError, match="pull request #5 does not include @alice"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+@pytest.mark.parametrize(
+    "literal",
+    [
+        pytest.param("`(#5)`", id="plain-code-span"),
+        pytest.param("``x` (#5)``", id="different-width-inner-backtick"),
+    ],
+)
+def test_render_markdown_ignores_pull_reference_in_code_span(literal: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Fixed\n\n- Document {literal}.\n"
+    generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "### Bug fixes" in result
+
+
+def test_render_markdown_checks_reference_after_unclosed_code_span() -> None:
+    changelog = (
+        "## 1.2.3 (today)\n\n### Fixed\n\n"
+        "- Document `literal and fix ([#5](https://github.com/tox-dev/example/pull/5)) by @mallory.\n"
+    )
+    generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
+
+    with pytest.raises(ValueError, match="pull request #5 does not include @alice"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+def test_render_markdown_checks_reference_after_unclosed_formatter_output(mocker: MockerFixture) -> None:
+    mocker.patch("release_creator.notes.render.mdformat.text", autospec=True, side_effect=lambda text, **_: text)
+    changelog = (
+        "## 1.2.3 (today)\n\n### Fixed\n\n"
+        "- Document ``literal` and fix ([#5](https://github.com/tox-dev/example/pull/5)) by @mallory.\n"
+    )
+    generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
+
+    with pytest.raises(ValueError, match="pull request #5 does not include @alice"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+def test_render_markdown_checks_reference_after_escaped_backtick_in_code() -> None:
+    changelog = "## 1.2.3 (today)\n\n### Fixed\n\n- Document `x\\` (#5)` by @mallory.\n"
+    generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
+
+    with pytest.raises(ValueError, match="pull request #5 does not include @alice"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
 
 def test_render_markdown_scopes_distinct_credits_on_one_line() -> None:

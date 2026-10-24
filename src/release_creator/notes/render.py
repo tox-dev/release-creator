@@ -124,14 +124,6 @@ _RE_MARKDOWN_LINK_DEFINITION: Final = re.compile(
     """,
     re.VERBOSE | re.IGNORECASE,
 )
-_RE_CODE_SPAN: Final = re.compile(
-    r"""
-    (?P<delimiter>`+)  # Opening backticks
-    (?P<content>.*?)   # Inline code is ignored when checking PR credits
-    (?P=delimiter)      # Closing backticks of the same length
-    """,
-    re.VERBOSE,
-)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -252,7 +244,6 @@ def _release_entries(notes: str, repository: str, known_numbers: set[str]) -> di
                 pending.clear()
             elif index + 1 < len(references) and (
                 following.partition("[")[0].strip(" ()") not in {",", "and", ", and"}
-                or _parenthetical_pull_link(line, reference) != _parenthetical_pull_link(line, references[index + 1])
             ):
                 for item in pending:
                     entries.setdefault(item["number"], []).append(initial_credit or (set(), False))
@@ -266,11 +257,42 @@ def _release_entries(notes: str, repository: str, known_numbers: set[str]) -> di
 
 def _release_lines(notes: str) -> Iterator[str]:
     for _, line in prose_lines(notes.splitlines()):
-        yield _RE_CODE_SPAN.sub(lambda match: " " * len(match.group()), line)
+        yield _without_code_spans(line)
 
 
-def _parenthetical_pull_link(line: str, reference: re.Match[str]) -> bool:
-    return line[: reference.start()].endswith(f"([#{reference['number']}](")
+def _without_code_spans(line: str) -> str:
+    result: list[str] = []
+    index = 0
+    while index < len(line):
+        if line[index] == "\\" and index + 1 < len(line):
+            result.append(line[index : index + 2])
+            index += 2
+        elif line[index] == "`":
+            end = index
+            while end < len(line) and line[end] == "`":
+                end += 1
+            if (close := _code_span_end(line, end, end - index)) is None:
+                result.append(line[index:end])
+                index = end
+            else:
+                result.append(" " * (close - index))
+                index = close
+        else:
+            result.append(line[index])
+            index += 1
+    return "".join(result)
+
+
+def _code_span_end(line: str, start: int, width: int) -> int | None:
+    index = start
+    while (index := line.find("`", index)) >= 0:
+        end = index
+        while end < len(line) and line[end] == "`":
+            end += 1
+        if end - index == width:
+            return end
+        index = end
+    return None
 
 
 def _pull_references(line: str, repository: str, known_numbers: set[str]) -> list[re.Match[str]]:

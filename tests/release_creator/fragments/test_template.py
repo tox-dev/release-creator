@@ -71,18 +71,20 @@ def test_markdown_template_keeps_numbered_and_named_pull_requests(
 
 
 @pytest.mark.parametrize(
-    ("extension", "template", "issue_format", "pull_link"),
+    "case",
     [
-        pytest.param("md", "template.jinja2", "#{issue}", "pull/123", id="markdown"),
-        pytest.param("rst", "template.rst.jinja2", ":pr:`{issue}`", ":pr:`123`", id="rst"),
+        pytest.param(("md", "template.jinja2", "#{issue}", "pull/123"), id="markdown"),
+        pytest.param(("rst", "template.rst.jinja2", ":pr:`{issue}`", ":pr:`123`"), id="rst"),
     ],
 )
+@pytest.mark.parametrize("mention", [pytest.param("", id="plain"), pytest.param(" in pypa/pip#12", id="other-repo")])
 def test_template_does_not_confuse_short_issue_with_longer_pull_request(
-    tmp_path: Path, extension: str, template: str, issue_format: str, pull_link: str
+    tmp_path: Path, case: tuple[str, str, str, str], mention: str
 ) -> None:
+    extension, template, issue_format, pull_link = case
     (tmp_path / "changelog.d").mkdir()
     fragment = tmp_path / "changelog.d" / f"12.bugfix.{extension}"
-    fragment.write_text("Fix a numbered bug.\n")
+    fragment.write_text(f"Fix a numbered bug{mention}.\n")
     changelog = tmp_path / f"CHANGELOG.{extension}"
     changelog.write_text("Changelog\n=========\n" if extension == "rst" else "# Changelog\n")
     (tmp_path / "pyproject.toml").write_text(
