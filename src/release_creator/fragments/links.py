@@ -9,6 +9,7 @@ lazy from pathlib import Path
 lazy from typing import Final, Literal
 
 lazy from markdown_it import MarkdownIt
+lazy from markdown_it.token import Token
 
 lazy from release_creator.fragments.knope import changeset_parts
 lazy from release_creator.fragments.names import fragment_number, pending_changesets, pending_fragments
@@ -45,6 +46,20 @@ _RE_AUTHOR_SEPARATOR: Final = re.compile(
     ^[ \t]*(?P<separator>,(?:[ \t]*and)?|and)[ \t]*  # Continue a shared author list
     """,
     re.VERBOSE,
+)
+_RE_HTML_TAG: Final = re.compile(
+    r"""
+    <\s*(?P<closing>/)?\s*(?P<name>code|kbd|pre|samp)\b[^>]*>  # Hidden HTML literal element
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+_RE_HTML_LINK: Final = re.compile(
+    r"""
+    <a\b[^>]*\bhref\s*=\s*(?P<quote>["'])
+    (?P<href>https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/\d+)
+    (?P=quote)[^>]*>  # HTML pull request anchor
+    """,
+    re.VERBOSE | re.IGNORECASE,
 )
 type _LinkMode = Literal["towncrier", "knope"]
 
@@ -148,33 +163,40 @@ def _has_pull_request_link(content: str, repository: str, number: str, extension
 
 def _markdown_prose(content: str) -> list[str]:
     prose: list[str] = []
+    hidden = 0
     for token in MarkdownIt().parse(content):
         for child in token.children or ():
-            if child.type == "text" or (child.type == "html_inline" and not child.content.startswith("<!--")):
+            if child.type == "html_inline":
+                if match := _RE_HTML_TAG.fullmatch(child.content):
+                    hidden += -1 if match["closing"] else 1
+                elif not hidden and (match := _RE_HTML_LINK.fullmatch(child.content)):
+                    prose.append(match["href"])
+            elif child.type == "text" and not hidden:
                 prose.append(child.content)
-            elif child.type == "link_open" and isinstance(destination := child.attrGet("href"), str):
+            elif child.type == "link_open" and not hidden and isinstance(destination := child.attrGet("href"), str):
                 prose.append(destination)
-            elif child.type == "code_inline" and prose and prose[-1].endswith((":pr:", ":pull:")):
+            elif child.type == "code_inline" and not hidden and prose and prose[-1].endswith((":pr:", ":pull:")):
                 prose.append(f":pr:`{child.content}`")
     return prose
 
 
 def _rst_prose(content: str) -> list[str]:
     lines = content.splitlines()
-    code = _rst_code_lines(lines)
-    return [_without_rst_inline_literals(line) for index, line in enumerate(lines) if index not in code]
+    hidden = _rst_hidden_lines(lines)
+    return [_without_rst_inline_literals(line) for index, line in enumerate(lines) if index not in hidden]
 
 
-def _rst_code_lines(lines: list[str]) -> set[int]:
-    code: set[int] = set()
+def _rst_hidden_lines(lines: list[str]) -> set[int]:
+    hidden: set[int] = set()
     for index, line in enumerate(lines):
-        if index in code:
+        if index in hidden:
             continue
         stripped = line.lstrip()
         directive = stripped.startswith((".. code-block::", ".. code::", ".. sourcecode::"))
-        if directive:
-            code.add(index)
-        if not (directive or stripped.rstrip().endswith("::")):
+        comment = _rst_comment(stripped)
+        if directive or comment:
+            hidden.add(index)
+        if not (directive or comment or stripped.rstrip().endswith("::")):
             continue
         cursor = index + 1
         while cursor < len(lines) and not lines[cursor].strip():
@@ -182,23 +204,98 @@ def _rst_code_lines(lines: list[str]) -> set[int]:
         if cursor >= len(lines) or _indent_width(lines[cursor]) <= _indent_width(line):
             continue
         while cursor < len(lines) and (not lines[cursor].strip() or _indent_width(lines[cursor]) > _indent_width(line)):
-            code.add(cursor)
+            hidden.add(cursor)
             cursor += 1
-    return code
+    return hidden
+
+
+def _rst_comment(line: str) -> bool:
+    if not line.startswith(".. "):
+        return False
+    first = line[3:].split(maxsplit=1)
+    return not first or not first[0].endswith("::")
 
 
 def _credit_prose(content: str, extension: str) -> str:
     lines = content.splitlines(keepends=True)
     if extension == ".md":
-        for token in MarkdownIt().parse(content):
-            if token.type in {"fence", "code_block", "html_block"} and token.map is not None:
-                for index in range(*token.map):
-                    lines[index] = "\0" * len(lines[index])
-        prose = _mask_delimited("".join(lines), "<!--", "-->")
-        return _mask_markdown_code(prose)
-    for index in _rst_code_lines(lines):
+        return _markdown_credit_prose(content, lines)
+    for index in _rst_hidden_lines(lines):
         lines[index] = "\0" * len(lines[index])
     return _mask_delimited("".join(lines), "``", "``")
+
+
+def _markdown_credit_prose(content: str, lines: list[str]) -> str:
+    tokens = MarkdownIt().parse(content)
+    visible_lines = {
+        index for token in tokens if token.type == "inline" and token.map is not None for index in range(*token.map)
+    }
+    for index in range(len(lines)):
+        if index not in visible_lines:
+            lines[index] = "\0" * len(lines[index])
+    masked = list("".join(lines))
+    for start, end in [*_markdown_hidden_spans(content, tokens), *_markdown_target_spans(content)]:
+        masked[start:end] = "\0" * (end - start)
+    return _mask_markdown_code(_mask_delimited("".join(masked), "<!--", "-->"))
+
+
+def _markdown_hidden_spans(content: str, tokens: list[Token]) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    cursor = 0
+    html_literal_start: int | None = None
+    for token in tokens:
+        for child in token.children or ():
+            if child.type == "html_inline" and (start := content.find(child.content, cursor)) >= 0:
+                spans.append((start, start + len(child.content)))
+                html_literal_start = _html_literal_span(child.content, start, html_literal_start, spans)
+                cursor = start + len(child.content)
+    return spans
+
+
+def _markdown_target_spans(content: str) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    cursor = 0
+    while (opening := content.find("](", cursor)) >= 0:
+        if (end := _markdown_target_end(content, opening + 2)) is not None and any(
+            token.type == "link_open"
+            for block in MarkdownIt().parse(f"[x]({content[opening + 2 : end]})")
+            for token in (block.children or ())[:1]
+        ):
+            spans.append((opening + 2, end))
+        cursor = opening + 2
+    return spans
+
+
+def _markdown_target_end(content: str, start: int) -> int | None:
+    depth = 1
+    quote = ""
+    escaped = False
+    for index in range(start, len(content)):
+        char = content[index]
+        if escaped:
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif quote:
+            quote = "" if char == quote else quote
+        elif char in "\"'":
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
+def _html_literal_span(content: str, start: int, opened: int | None, spans: list[tuple[int, int]]) -> int | None:
+    if (match := _RE_HTML_TAG.fullmatch(content)) is None:
+        return opened
+    if match["closing"] and opened is not None:
+        spans.append((opened, start))
+        return None
+    return opened if match["closing"] else start + len(content)
 
 
 def _mask_delimited(content: str, opening: str, closing: str) -> str:
@@ -224,9 +321,7 @@ def _mask_markdown_code(content: str) -> str:
         fence = "`" * width
         end = content.find(fence, start + width)
         while end >= 0 and (
-            (end > 0 and content[end - 1] == "`")
-            or (end + width < len(content) and content[end + width] == "`")
-            or (end - len(content[:end].rstrip("\\"))) % 2
+            (end > 0 and content[end - 1] == "`") or (end + width < len(content) and content[end + width] == "`")
         ):
             end = content.find(fence, end + width)
         if end < 0:
@@ -274,6 +369,13 @@ def _split_trailing_code(content: str, suffix: str) -> tuple[str, str]:
         before = content[:position].rstrip()
         return before, content[len(before) :]
     if suffix == ".md":
+        visible_ends = [
+            token.map[1] for token in MarkdownIt().parse(content) if token.type == "inline" and token.map is not None
+        ]
+        if visible_ends and any(line.strip() for line in lines[visible_ends[-1] :]):
+            position = sum(map(len, lines[: visible_ends[-1]]))
+            before = content[:position].rstrip()
+            return before, content[len(before) :]
         opening = next(
             (
                 index
@@ -288,15 +390,6 @@ def _split_trailing_code(content: str, suffix: str) -> tuple[str, str]:
             and all(not line.strip() or line.startswith("    ") for line in lines)
         ):
             return "", content
-        if (
-            opening is not None
-            and opening < len(lines) - 2
-            and not lines[opening + 1].strip()
-            and all(not line.strip() or line.startswith("    ") for line in lines[opening + 2 :])
-        ):
-            position = sum(map(len, lines[: opening + 1]))
-            before = content[:position].rstrip()
-            return before, content[len(before) :]
     if suffix == ".rst" and (opening := _trailing_rst_code_opening(lines)) is not None:
         position = sum(map(len, lines[:opening]))
         before = content[:position].rstrip()
@@ -308,11 +401,15 @@ def _trailing_rst_code_opening(lines: list[str]) -> int | None:
     for index, line in enumerate(lines):
         stripped = line.lstrip()
         if not (
-            stripped.startswith((".. code-block::", ".. code::", ".. sourcecode::")) or stripped.rstrip().endswith("::")
+            stripped.startswith((".. code-block::", ".. code::", ".. sourcecode::"))
+            or stripped.rstrip().endswith("::")
+            or _rst_comment(stripped)
         ):
             continue
         body = [following for following in lines[index + 1 :] if following.strip()]
-        if body and all(_indent_width(following) > _indent_width(line) for following in body):
+        if (body or _rst_comment(stripped)) and all(
+            _indent_width(following) > _indent_width(line) for following in body
+        ):
             return index
     return None
 
