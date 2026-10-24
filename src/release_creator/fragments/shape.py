@@ -13,12 +13,7 @@ lazy from release_creator.notes.rst import register_roles
 
 
 def validate_towncrier_fragment(content: str, fragment: Path) -> None:
-    """Reject blocks that bullet-prefix templates place outside one change item.
-
-    :param content: Pending fragment source.
-    :param fragment: Fragment path, including its Markdown or RST suffix.
-    :raises ValueError: The fragment contains unsupported block structure.
-    """
+    """Keep attribution inside the item supplied by bullet-prefix templates."""
     if fragment.suffix == ".md":
         tokens = MarkdownIt().enable("table").parse(content)
         allowed = {"paragraph_open", "paragraph_close", "fence", "code_block", "html_block", "hr"}
