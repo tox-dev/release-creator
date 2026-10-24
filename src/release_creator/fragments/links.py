@@ -53,6 +53,14 @@ _RE_HTML_TAG: Final = re.compile(
     """,
     re.VERBOSE | re.IGNORECASE,
 )
+_RE_HTML_BREAK: Final = re.compile(
+    r"""
+    <(?P<name>br|hr)  # HTML line or horizontal break
+    (?:\s+[^>]*)?     # Optional attributes
+    \s*/?>            # Optional self-closing slash
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
 type _LinkMode = Literal["towncrier", "knope"]
 
 
@@ -257,7 +265,7 @@ def _markdown_credit_prose(content: str) -> str:
         elif link_destination is not None and child.type not in {"em_open", "em_close", "strong_open", "strong_close"}:
             link_plain = False
         elif child.type in {"softbreak", "hardbreak"} or (
-            child.type == "html_inline" and child.content.casefold().replace(" ", "") in {"<br>", "<br/>"}
+            child.type == "html_inline" and _RE_HTML_BREAK.fullmatch(child.content) is not None
         ):
             prose.append(" ")
     return "".join(prose)
