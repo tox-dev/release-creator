@@ -33,22 +33,28 @@ def update_pins(config: Path, exclude_newer: str, python_version: str) -> None:
     root = _config_root(source)
     edits: list[_Edit] = []
     with TemporaryDirectory() as temporary:
-        packages, missing, python_groups = _hook_packages(root, Path(temporary), config.parent)
-        groups = _groups(source, root, python_groups)
+        version = _default_python_version(root, python_version)
+        packages, missing, python_groups = _hook_packages(root, Path(temporary), config.parent, version, python_version)
+        groups = _groups(source, root, set(python_groups))
         for group in groups:
             direct = group[2]
             package = packages.get(_start(group[0]))
             if direct or package is not None:
                 resolved = _resolve(
-                    [requirement for _, requirement in direct], config, exclude_newer, python_version, package
+                    [requirement for _, requirement in direct],
+                    config,
+                    exclude_newer,
+                    python_groups.get(_start(group[0]), version),
+                    package,
                 )
                 edits.extend(_group_edits(source, group, resolved))
             elif group[3]:
                 edits.extend(_group_edits(source, group, []))
-        for hook, package in missing:
-            resolved = _resolve([], config, exclude_newer, python_version, package)
+        for hook, package, hook_version in missing:
+            resolved = _resolve([], config, exclude_newer, hook_version, package)
             if resolved:
                 edits.append(_new_group_edit(source, hook, resolved))
+    _reject_shared_edits(root, edits)
     for start, end, replacement in sorted(edits, key=operator.itemgetter(0), reverse=True):
         source = f"{source[:start]}{replacement}{source[end:]}"
     if edits:
@@ -65,26 +71,54 @@ def _config_root(source: str) -> MappingNode:
     if not isinstance(root, MappingNode):
         msg = "pre-commit configuration must be a YAML mapping"
         raise TypeError(msg)
+    return root
+
+
+def _reject_shared_edits(root: MappingNode, edits: list[_Edit]) -> None:
     seen: set[int] = set()
     pending: list[Node] = [root]
     while pending:
         node = pending.pop()
         if id(node) in seen:
-            msg = "YAML aliases cannot be updated safely"
-            raise ValueError(msg)
+            shared = cast("MappingNode | ScalarNode | SequenceNode", node)
+            if any(start <= _end(shared) and _start(shared) <= end for start, end, _ in edits):
+                msg = "YAML aliases cannot be updated safely"
+                raise ValueError(msg)
+            continue
         seen.add(id(node))
         if isinstance(node, MappingNode):
             pending.extend(child for pair in node.value for child in pair)
         elif isinstance(node, SequenceNode):
             pending.extend(node.value)
-    return root
+
+
+def _default_python_version(root: MappingNode, fallback: str) -> str:
+    defaults = _mapping_value(root, "default_language_version")
+    override = _mapping_value(defaults, "python") if isinstance(defaults, MappingNode) else None
+    return _python_version(override, fallback)
+
+
+def _python_version(value: Node | None, fallback: str, system_version: str | None = None) -> str:
+    if not isinstance(value, ScalarNode) or value.value == "default":
+        return fallback
+    if value.value == "python3":
+        return system_version or fallback
+    version = str(value.value).removeprefix("python")
+    if version == value.value or not version.startswith("3."):
+        msg = f"unsupported Python hook language_version: {value.value}"
+        raise ValueError(msg)
+    return version
 
 
 def _groups(source: str, root: MappingNode, python_groups: set[int]) -> list[_Group]:
     groups: list[_Group] = []
     pending: list[MappingNode | SequenceNode | ScalarNode] = [root]
+    seen: set[int] = set()
     while pending:
         node = pending.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
         if isinstance(node, MappingNode):
             for key, value in node.value:
                 if (
@@ -138,11 +172,11 @@ def _last_content_end(node: MappingNode | ScalarNode | SequenceNode) -> int:
 
 
 def _hook_packages(
-    root: MappingNode, temporary: Path, cwd: Path
-) -> tuple[dict[int, Path], list[tuple[MappingNode, Path]], set[int]]:
+    root: MappingNode, temporary: Path, cwd: Path, default_version: str, system_version: str
+) -> tuple[dict[int, Path], list[tuple[MappingNode, Path, str]], dict[int, str]]:
     packages: dict[int, Path] = {}
-    missing: list[tuple[MappingNode, Path]] = []
-    python_groups: set[int] = set()
+    missing: list[tuple[MappingNode, Path, str]] = []
+    python_groups: dict[int, str] = {}
     repositories = _mapping_value(root, "repos")
     if not isinstance(repositories, SequenceNode):
         return packages, missing, python_groups
@@ -168,12 +202,13 @@ def _hook_packages(
             if _hook_language(hook, languages, require_id=checkout is not None) not in {None, "python"}:
                 continue
             hook = cast("MappingNode", hook)
+            version = _python_version(_mapping_value(hook, "language_version"), default_version, system_version)
             if isinstance(dependencies := _mapping_key(hook, "additional_dependencies"), ScalarNode):
-                python_groups.add(_start(dependencies))
+                python_groups[_start(dependencies)] = version
                 if checkout is not None:
                     packages[_start(dependencies)] = checkout
             elif checkout is not None:
-                missing.append((hook, checkout))
+                missing.append((hook, checkout, version))
     return packages, missing, python_groups
 
 

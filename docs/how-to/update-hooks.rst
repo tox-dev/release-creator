@@ -17,10 +17,11 @@ closure to that hook's ``additional_dependencies``. It also resolves dependencie
 dependencies remain conditional, so a Windows-only package does not install on Linux. Non-Python hooks are unchanged.
 
 Generated pins have a ``# release-creator managed`` marker. The next update replaces them. Direct pins retain their
-comments; ranges and unpinned requirements become exact pins. A flow-style list becomes a block list when the closure
-adds packages. Resolution targets Python 3.15 and excludes packages released in the last seven days. It ignores uv
-config files and source overrides. YAML aliases are rejected because editing the anchored value could also change an
-unrelated hook field.
+comments and version ranges; ranges and unpinned requirements gain a separate exact pin. A flow-style list becomes a
+block list when the closure adds packages. Resolution uses each hook's ``language_version`` or the top-level
+``default_language_version``; otherwise it targets Python 3.15. It excludes packages released in the last seven days and
+ignores uv config files and source overrides. An alias that shares an edited value is rejected because changing the
+anchor could also change an unrelated hook field.
 
 If uv cannot resolve every pinned package, the command fails without changing the file. Review the patch and run
 ``prek`` before opening the update PR. The command does not update hook revisions, project requirements, or
