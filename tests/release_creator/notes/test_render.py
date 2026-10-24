@@ -1076,14 +1076,6 @@ def test_render_markdown_does_not_count_reviewer_as_author(entry: str) -> None:
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
 
-def test_render_markdown_does_not_credit_author_after_hard_break() -> None:
-    changelog = "## 1.2.3 (today)\n\n### Added\n\n- Add support (#42)  \n  by @alice.\n"
-    generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
-
-    with pytest.raises(ValueError, match="pull request #42 does not include @alice"):
-        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
-
-
 def test_render_markdown_ignores_other_repository_link_label() -> None:
     changelog = (
         "## 1.2.3 (today)\n\n### Added\n\n- Follow [PR #42](https://github.com/other/project/pull/42) by @alice.\n"
@@ -1183,6 +1175,54 @@ def test_render_markdown_rejects_credit_only_inside_html_block() -> None:
     generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
 
     with pytest.raises(ValueError, match="pull request #5 does not include @alice"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+@pytest.mark.parametrize("opening", ["<br>", '<br title="x > y">', "<hr>", "<br />"])
+def test_render_markdown_accepts_credit_after_html_break(opening: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Fixed\n\n- Fix https://github.com/tox-dev/example/pull/5{opening}by @alice.\n"
+    generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "by @alice" in result
+
+
+@pytest.mark.parametrize(
+    "separator",
+    [pytest.param("  \n  ", id="hard-break"), pytest.param("\n\n  ", id="paragraph")],
+)
+def test_render_markdown_accepts_credit_across_one_list_item(separator: str) -> None:
+    changelog = (
+        f"## 1.2.3 (today)\n\n### Fixed\n\n- Fix [#5](https://github.com/tox-dev/example/pull/5){separator}by @alice.\n"
+    )
+    generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "Fix [#5](https://github.com/tox-dev/example/pull/5)" in result
+
+
+def test_render_markdown_keeps_distinct_list_items_separate() -> None:
+    changelog = (
+        "## 1.2.3 (today)\n\n### Fixed\n\n"
+        "- Fix [#5](https://github.com/tox-dev/example/pull/5) by @alice.\n"
+        "- Fix [#6](https://github.com/tox-dev/example/pull/6).\n"
+    )
+    generated = (
+        "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
+        "* Fix by @bob in https://github.com/tox-dev/example/pull/6\n"
+    )
+
+    with pytest.raises(ValueError, match="pull request #6 does not include @bob"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+def test_render_markdown_rejects_self_closing_literal() -> None:
+    changelog = '## 1.2.3 (today)\n\n### Fixed\n\n- Change (#5) <code title="x > y"/> by @alice.\n'
+    generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
+
+    with pytest.raises(ValueError, match="self-closing HTML literal elements are unsupported"):
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
 

@@ -285,12 +285,21 @@ def _shared_credit_group(line: str, first: re.Match[str], second: re.Match[str])
 
 def _visible_lines(notes: str, repository: str) -> Iterator[str]:
     parser = _RawHtmlLinkParser()
+    items: list[list[str]] = []
     for token in MarkdownIt().parse(notes):
-        if token.type == "html_block":
+        if token.type == "list_item_open":
+            items.append([])
+        elif token.type == "list_item_close":
+            yield " ".join(items.pop())
+        elif token.type == "html_block":
             parser.feed(token.content)
             yield from parser.take_text().splitlines()
         elif token.type == "inline":
-            yield from _visible_inline(token.children or [], parser, repository).splitlines()
+            line = _visible_inline(token.children or [], parser, repository)
+            if items:
+                items[-1].append(line)
+            else:
+                yield line
 
 
 def _visible_inline(children: list[Token], parser: _RawHtmlLinkParser, repository: str) -> str:
@@ -312,9 +321,7 @@ def _visible_inline(children: list[Token], parser: _RawHtmlLinkParser, repositor
             index = end
         elif child.type == "text":
             parts.append(child.content)
-        elif child.type in {"softbreak", "hardbreak"}:
-            parts.append(" " if child.type == "softbreak" else "\n")
-        elif child.type == "code_inline":
+        elif child.type in {"softbreak", "hardbreak"} or child.type == "code_inline":
             parts.append(" ")
         index += 1
     return "".join(parts)
@@ -667,6 +674,15 @@ class _RawHtmlLinkParser(HTMLParser):
         elif not self.in_literal() and tag == "a" and any(name == "href" for name, _ in attrs):
             msg = "raw HTML links are unsupported in release notes"
             raise ValueError(msg)
+        elif not self.in_literal() and tag in {"br", "hr"}:
+            self._text.append(" ")
+
+    @override
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"code", "kbd", "pre", "samp", "script", "style", "textarea", "template", "noscript"}:
+            msg = "self-closing HTML literal elements are unsupported in release notes"
+            raise ValueError(msg)
+        super().handle_startendtag(tag, attrs)
 
     @override
     def handle_endtag(self, tag: str) -> None:

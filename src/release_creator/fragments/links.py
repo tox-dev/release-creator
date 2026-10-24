@@ -94,11 +94,7 @@ def _link_fragment(
         msg = f"no pull request data for {fragment}"
         raise ValueError(msg)
     content = fragment.read_text(encoding="utf-8")
-    if (
-        mode == "towncrier"
-        and fragment.suffix == ".md"
-        and sum(token.type == "list_item_open" and token.level == 1 for token in MarkdownIt().parse(content)) > 1
-    ):
+    if mode == "towncrier" and fragment.suffix == ".md" and _primary_change_items(content) > 1:
         msg = f"split multiple change items into separate fragments: {fragment}"
         raise ValueError(msg)
     target = _LinkTarget(
@@ -112,6 +108,19 @@ def _link_fragment(
         frontmatter, heading, remainder = changeset_parts(fragment, content)
         return f"{frontmatter}# {_link_text(heading, target)}{remainder}"
     return f"{_link_text(content.rstrip(), target)}\n"
+
+
+def _primary_change_items(content: str) -> int:
+    items = 0
+    depth = 0
+    for token in MarkdownIt().parse(content):
+        if token.type == "list_item_open":
+            if depth == 0:
+                items += 1
+            depth += 1
+        elif token.type == "list_item_close":
+            depth -= 1
+    return items
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -148,7 +157,9 @@ def _link_text(
         if linked:
             return content
         if fragment.suffix == ".md":
-            return _append_pull_request_link(content, target, None)
+            return _append_pull_request_link(
+                content, target, None, anchor=_markdown_credit_anchor(content, target.author.handle)
+            )
         return (
             f"{content[: match.start()]} {_pull_request_link(target.repository, target.number, fragment.suffix)} "
             f"by {content[match.end() :]}"
@@ -160,7 +171,12 @@ def _link_text(
             return content
         suffix = "" if target.knope else "."
         return f"{before.removesuffix('.')} by {_author_credit(handle, fragment.suffix)}{suffix}{after}"
-    return _append_pull_request_link(content, target, handle)
+    return _append_pull_request_link(
+        content,
+        target,
+        handle,
+        anchor=_markdown_primary_item_anchor(content) if fragment.suffix == ".md" else None,
+    )
 
 
 def _has_pull_request_link(content: str, repository: str, number: str, extension: str) -> bool:
@@ -171,25 +187,31 @@ def _has_pull_request_link(content: str, repository: str, number: str, extension
     )
 
 
-def _markdown_visible_children(content: str) -> list[Token | None]:
-    visible: list[Token | None] = []
+def _markdown_visible_children(content: str) -> list[tuple[Token | None, int]]:
+    visible: list[tuple[Token | None, int]] = []
     hidden = 0
+    has_inline = False
     for token in MarkdownIt().parse(content):
         if token.type != "inline":
             continue
-        if visible:
-            visible.append(None)
+        end_line = token.map[1] if token.map is not None else 0
+        if has_inline:
+            visible.append((None, end_line))
+        has_inline = True
         for child in token.children or ():
             if child.type == "html_inline" and (match := _RE_HTML_TAG.fullmatch(child.content)):
+                if not match["closing"] and match["attributes"].rstrip().endswith("/"):
+                    msg = "self-closing HTML literal elements are unsupported in changelog fragments"
+                    raise ValueError(msg)
                 hidden = max(0, hidden - 1) if match["closing"] else hidden + 1
             elif not hidden:
-                visible.append(child)
+                visible.append((child, end_line))
     return visible
 
 
 def _markdown_prose(content: str) -> list[str]:
     prose: list[str] = []
-    for child in _markdown_visible_children(content):
+    for child, _ in _markdown_visible_children(content):
         if child is None:
             continue
         if child.type == "text":
@@ -249,14 +271,66 @@ def _credit_prose(content: str, extension: str) -> str:
 
 
 def _markdown_credit_prose(content: str) -> str:
+    return " ".join(block for block, _ in _markdown_credit_blocks(content))
+
+
+def _markdown_credit_anchor(content: str, author: str) -> int:
+    blocks = _markdown_credit_blocks(content)
+    if sum(1 for _ in _RE_AUTHOR_MARKER.finditer(" ".join(block for block, _ in blocks))) > 1:
+        msg = "split multiple credited changes into separate fragments"
+        raise ValueError(msg)
+    credited = [end for block, end in blocks if _RE_AUTHOR_MARKER.search(block)]
+    end_line = (
+        credited[0]
+        if credited
+        else next(
+            end
+            for block, end in blocks
+            if any(match["handle"].casefold() == author.casefold() for match in MARKDOWN_AUTHOR.finditer(block))
+        )
+    )
+    return sum(map(len, content.splitlines(keepends=True)[:end_line]))
+
+
+def _markdown_primary_item_anchor(content: str) -> int | None:
+    depth = 0
+    for token in MarkdownIt().parse(content):
+        if token.type == "inline" and depth == 0:
+            return None
+        if token.type == "list_item_open":
+            depth += 1
+        elif token.type == "list_item_close":
+            depth -= 1
+            if depth == 0:
+                msg = "primary change item has no text"
+                raise ValueError(msg)
+        elif token.type == "inline" and depth == 1 and token.map is not None:
+            return sum(map(len, content.splitlines(keepends=True)[: token.map[1]]))
+    return None
+
+
+def _markdown_credit_blocks(content: str) -> list[tuple[str, int]]:
+    blocks: list[tuple[str, int]] = []
+    children: list[Token] = []
+    end_line = 0
+    for child, line in _markdown_visible_children(content):
+        if child is None:
+            blocks.append((_markdown_credit_children(children), end_line))
+            children = []
+        else:
+            children.append(child)
+            end_line = line
+    if children:
+        blocks.append((_markdown_credit_children(children), end_line))
+    return blocks
+
+
+def _markdown_credit_children(children: list[Token]) -> str:
     prose: list[str] = []
     link_destination: str | None = None
     link_text: list[str] = []
     link_plain = True
-    for child in _markdown_visible_children(content):
-        if child is None:
-            prose.append(" ")
-            continue
+    for child in children:
         if child.type == "link_open" and isinstance(destination := child.attrGet("href"), str):
             link_destination = destination
             link_text = []
@@ -302,9 +376,15 @@ def _without_rst_inline_literals(line: str) -> str:
     return "".join(parts)
 
 
-def _append_pull_request_link(content: str, target: _LinkTarget, author: str | None) -> str:
+def _append_pull_request_link(
+    content: str, target: _LinkTarget, author: str | None, *, anchor: int | None = None
+) -> str:
     link = _pull_request_link(target.repository, target.number, target.fragment.suffix)
-    before, after = _split_trailing_code(content, target.fragment.suffix)
+    if anchor is None:
+        before, after = _split_trailing_code(content, target.fragment.suffix)
+    else:
+        before = content[:anchor].rstrip()
+        after = content[len(before) :]
     if not before:
         suffix = f"{link}"
         if author is not None:

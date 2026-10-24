@@ -8,6 +8,7 @@ import pytest
 
 from release_creator.fragments.links import add_pull_request_links
 from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor
+from release_creator.notes.render import ReleaseContext, render_markdown
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -208,12 +209,97 @@ def test_add_pull_request_links_accepts_credit_across_visible_boundary(tmp_path:
     assert "([#42](https://github.com/tox-dev/example/pull/42))" in fragment.read_text()
 
 
-@pytest.mark.parametrize("source", ["- Fix A.\n- Fix B.\n", "1. Fix A.\n2. Fix B.\n"])
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param("- Fix A.\n- Fix B.\n", id="bullets"),
+        pytest.param("1. Fix A.\n2. Fix B.\n", id="numbered"),
+        pytest.param("> - Fix A.\n> - Fix B.\n", id="blockquote"),
+    ],
+)
 def test_add_pull_request_links_rejects_multiple_change_items(tmp_path: Path, source: str) -> None:
     fragment = tmp_path / "+first.bugfix.md"
     fragment.write_text(source)
 
     with pytest.raises(ValueError, match="split multiple change items into separate fragments"):
+        _link(tmp_path, "tox-dev/example", {fragment.name: "Fix both (#42)"})
+
+    assert fragment.read_text() == source
+
+
+@pytest.mark.parametrize(
+    ("detail", "expected"),
+    [
+        pytest.param("  - subdetail", "  - subdetail", id="nested-list"),
+        pytest.param("  > subdetail", "  > subdetail", id="nested-blockquote"),
+    ],
+)
+def test_add_pull_request_links_places_credit_on_primary_item(tmp_path: Path, detail: str, expected: str) -> None:
+    fragment = tmp_path / "+first.bugfix.md"
+    fragment.write_text(f"- Fix A by [@alice](https://github.com/alice).\n{detail}\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Fix A (#42)"})
+
+    assert fragment.read_text() == (
+        "- Fix A by [@alice](https://github.com/alice) "
+        "([#42](https://github.com/tox-dev/example/pull/42)).\n"
+        f"{expected}\n"
+    )
+    notes = render_markdown(
+        f"## 1.2.3 (today)\n\n### Fixed\n\n{fragment.read_text()}",
+        ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
+        "* Fix A by @alice in https://github.com/tox-dev/example/pull/42\n",
+    )
+    assert "Fix A by @alice ([#42](https://github.com/tox-dev/example/pull/42))." in notes
+
+
+def test_add_pull_request_links_places_generated_credit_on_primary_item(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.bugfix.md"
+    fragment.write_text("- Fix A.\n  - subdetail\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Fix A (#42)"})
+
+    assert fragment.read_text() == (
+        "- Fix A ([#42](https://github.com/tox-dev/example/pull/42)) "
+        "by [@alice](https://github.com/alice).\n"
+        "  - subdetail\n"
+    )
+
+
+def test_add_pull_request_links_rejects_empty_primary_item(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.bugfix.md"
+    source = "- \n  - subdetail\n"
+    fragment.write_text(source)
+
+    with pytest.raises(ValueError, match="primary change item has no text"):
+        _link(tmp_path, "tox-dev/example", {fragment.name: "Fix A (#42)"})
+
+    assert fragment.read_text() == source
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param(
+            "Change A by [@alice](https://github.com/alice).\n\nChange B by [@bob](https://github.com/bob).\n",
+            id="paragraphs",
+        ),
+        pytest.param(
+            "Change A by [@alice](https://github.com/alice); change B by [@bob](https://github.com/bob).\n",
+            id="same-paragraph",
+        ),
+        pytest.param(
+            "- Change.\n  - Detail A by [@alice](https://github.com/alice).\n"
+            "  - Detail B by [@bob](https://github.com/bob).\n",
+            id="nested-list",
+        ),
+    ],
+)
+def test_add_pull_request_links_rejects_multiple_credited_changes(tmp_path: Path, source: str) -> None:
+    fragment = tmp_path / "+first.bugfix.md"
+    fragment.write_text(source)
+
+    with pytest.raises(ValueError, match="split multiple credited changes into separate fragments"):
         _link(tmp_path, "tox-dev/example", {fragment.name: "Fix both (#42)"})
 
     assert fragment.read_text() == source
@@ -879,6 +965,18 @@ def test_add_pull_request_links_ignores_reference_in_quoted_html_tag(tmp_path: P
         f"Add {source} support ([#42](https://github.com/tox-dev/example/pull/42)) "
         "by [@alice](https://github.com/alice).\n"
     )
+
+
+@pytest.mark.parametrize("tag", ["code", "kbd", "pre"])
+def test_add_pull_request_links_rejects_self_closing_literal(tmp_path: Path, tag: str) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    source = f'Add <{tag} title="x > y"/> by [@mallory](https://github.com/mallory).\n'
+    fragment.write_text(source)
+
+    with pytest.raises(ValueError, match="self-closing HTML literal elements are unsupported"):
+        _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == source
 
 
 @pytest.mark.parametrize(
