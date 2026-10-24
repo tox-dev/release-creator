@@ -745,6 +745,22 @@ def test_render_markdown_rejects_raw_html_credit_link() -> None:
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
 
+def test_render_markdown_rejects_raw_html_block_link() -> None:
+    changelog = dedent("""\
+        ## 1.2.3 (today)
+
+        ### Fixed
+
+        - Fix the parser.
+          <div>
+          <a href="https://github.com/mallory">@alice</a>
+          </div>
+        """)
+
+    with pytest.raises(ValueError, match="raw HTML links are unsupported"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+
 def test_render_markdown_keeps_html_anchor_and_literal_link_example() -> None:
     changelog = dedent("""\
         ## 1.2.3 (today)

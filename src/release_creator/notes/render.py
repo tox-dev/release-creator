@@ -541,6 +541,8 @@ def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
 def _validate_profile_links(text: str) -> None:
     parser = _RawHtmlLinkParser()
     for token in MarkdownIt().parse(text):
+        if token.type == "html_block":
+            parser.feed(token.content)
         for child in token.children or ():
             if child.type == "html_inline":
                 parser.feed(child.content)
