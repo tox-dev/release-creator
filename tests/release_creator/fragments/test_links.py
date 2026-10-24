@@ -170,6 +170,74 @@ def test_add_pull_request_links_preserves_shared_credits(tmp_path: Path) -> None
     )
 
 
+def test_add_pull_request_links_accepts_oxford_comma_credit(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    credit = (
+        "[@alice](https://github.com/alice), [@bob](https://github.com/bob), and [@carol](https://github.com/carol)"
+    )
+    fragment.write_text(f"Add a feature by {credit}.\n")
+
+    _link(
+        tmp_path,
+        "tox-dev/example",
+        {fragment.name: "Add release notes (#42)"},
+        {"42": PullRequestAuthor(handle="carol", is_bot=False)},
+    )
+
+    assert fragment.read_text() == f"Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) by {credit}.\n"
+
+
+@pytest.mark.parametrize(
+    ("extension", "credit"),
+    [
+        pytest.param(
+            "md",
+            "by [@mallory](https://github.com/mallory), reviewed by [@alice](https://github.com/alice)",
+            id="markdown",
+        ),
+        pytest.param("rst", "by :user:`mallory`, reviewed by :user:`alice`", id="rst"),
+    ],
+)
+def test_add_pull_request_links_does_not_count_reviewer_as_author(tmp_path: Path, extension: str, credit: str) -> None:
+    fragment = tmp_path / f"+first.feature.{extension}"
+    source = f"Add a feature {credit}.\n"
+    fragment.write_text(source)
+
+    with pytest.raises(ValueError, match="author @alice is missing"):
+        _link(
+            tmp_path,
+            "tox-dev/example",
+            {fragment.name: "Add release notes (#42)"},
+            {"42": PullRequestAuthor(handle="alice", is_bot=False)},
+        )
+
+    assert fragment.read_text() == source
+
+
+@pytest.mark.parametrize(
+    ("extension", "credit"),
+    [
+        pytest.param("md", "[@alice](https://github.com/alice/)", id="markdown-trailing-slash"),
+        pytest.param("md", "[@alice](https://www.github.com/Alice)", id="markdown-www-case"),
+        pytest.param("rst", "`@alice <https://github.com/alice/>`_", id="rst-trailing-slash"),
+        pytest.param("rst", "`@alice <https://www.github.com/Alice>`_", id="rst-www-case"),
+    ],
+)
+def test_add_pull_request_links_accepts_matching_profile_variants(tmp_path: Path, extension: str, credit: str) -> None:
+    fragment = tmp_path / f"+first.feature.{extension}"
+    fragment.write_text(f"Add a feature by {credit}.\n")
+
+    _link(
+        tmp_path,
+        "tox-dev/example",
+        {fragment.name: "Add release notes (#42)"},
+        {"42": PullRequestAuthor(handle="alice", is_bot=False)},
+    )
+
+    link = "(:pr:`42`)" if extension == "rst" else "([#42](https://github.com/tox-dev/example/pull/42))"
+    assert fragment.read_text() == f"Add a feature {link} by {credit}.\n"
+
+
 @pytest.mark.parametrize(
     ("extension", "code"),
     [

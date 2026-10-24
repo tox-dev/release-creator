@@ -36,7 +36,13 @@ _RE_RST_USER: Final = re.compile(
     :user:`(?P<handle>[A-Za-z0-9-]+)`  # RST GitHub user role
     |                                 # Or
     `@(?P<link_handle>[A-Za-z0-9-]+)  # Explicit profile link text
-    \ <https://github\.com/(?P=link_handle)>`_  # Matching profile URL
+    \ <https://(?:www\.)?github\.com/(?P=link_handle)/?>`_  # Matching profile URL
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+_RE_AUTHOR_SEPARATOR: Final = re.compile(
+    r"""
+    ^[ \t]*(?P<separator>,(?:[ \t]*and)?|and)[ \t]*  # Continue a shared author list
     """,
     re.VERBOSE,
 )
@@ -288,9 +294,16 @@ def _author_credit(author: str, extension: str) -> str:
 
 
 def _credited_handles(credit_text: str, extension: str) -> set[str]:
-    if extension == ".rst":
-        return {author["handle"] or author["link_handle"] for author in _RE_RST_USER.finditer(credit_text)}
-    return {author["handle"] for author in MARKDOWN_AUTHOR.finditer(credit_text)}
+    pattern = _RE_RST_USER if extension == ".rst" else MARKDOWN_AUTHOR
+    remaining = credit_text.lstrip()
+    handles: set[str] = set()
+    while (author := pattern.match(remaining)) is not None:
+        handles.add(author["handle"] or author["link_handle"] if extension == ".rst" else author["handle"])
+        remaining = remaining[author.end() :]
+        if (separator := _RE_AUTHOR_SEPARATOR.match(remaining)) is None:
+            break
+        remaining = remaining[separator.end() :]
+    return handles
 
 
 def _pull_request_url(repository: str, number: str) -> str:

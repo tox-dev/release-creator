@@ -37,8 +37,7 @@ _RE_RELEASE_PULL: Final = re.compile(
 )
 _RE_GITHUB_CREDIT: Final = re.compile(
     r"""
-    \s(?:-\s)?by\s+          # Credit after the final PR link
-    (?P<credits>[^\n]+)$         # Credit after the final PR link
+    \s(?:-\s)?by\s+  # Candidate author credit
     """,
     re.VERBOSE,
 )
@@ -280,15 +279,7 @@ def _release_entries(
 
 def _shared_credit_group(line: str, first: re.Match[str], second: re.Match[str]) -> bool:
     between = line[first.end() : second.start()]
-    if between.strip(" (),;") not in {"", "and"}:
-        return False
-    before_first = line[: first.start()]
-    before_second = line[: second.start()]
-    return (
-        "," in between
-        or "and" in between
-        or before_first.rstrip().endswith("(") == before_second.rstrip().endswith("(")
-    )
+    return between.strip(" (),;") in {"", "and"}
 
 
 def _visible_lines(notes: str, repository: str) -> Iterator[str]:
@@ -328,7 +319,14 @@ def _visible_lines(notes: str, repository: str) -> Iterator[str]:
 
 def _visible_link(label: str, url: str, repository: str) -> str:
     if (profile := _RE_PROFILE_LABEL.fullmatch(label)) is not None:
-        if url.casefold() != f"https://github.com/{profile['handle']}".casefold():
+        parsed = urlsplit(url)
+        if (
+            parsed.scheme != "https"
+            or parsed.netloc.casefold() not in {"github.com", "www.github.com"}
+            or parsed.path.casefold() not in {f"/{profile['handle']}", f"/{profile['handle']}/"}
+            or parsed.query
+            or parsed.fragment
+        ):
             msg = f"GitHub credit link for @{profile['handle']} points to another profile"
             raise ValueError(msg)
         return label
@@ -356,22 +354,36 @@ def _pull_references(line: str, repository: str, known_numbers: set[str]) -> lis
         for match in _RE_RELEASE_PULL.finditer(line)
         if (match["repository"] is None or match["repository"].casefold() == repository.casefold())
         and (match["short_repository"] is None or match["short_repository"].casefold() == repository.casefold())
+        and not _reference_in_url(line, match)
     ]
     known = known_numbers | {match["number"] for match in candidates if match["kind"] == "pull"}
     return [match for match in candidates if match["kind"] == "pull" or match["number"] in known]
 
 
+def _reference_in_url(line: str, match: re.Match[str]) -> bool:
+    prefix = line[: match.start()]
+    if not prefix or prefix[-1].isspace():
+        return False
+    before = prefix.split()
+    return bool(before and before[-1].lstrip("(").startswith(("https://", "http://")))
+
+
 def _entry_credit(text: str, *, named: bool) -> tuple[set[str], bool] | None:
-    if (marker := _RE_GITHUB_CREDIT.search(text)) is None:
-        return None
-    credit_text = str(marker.group("credits"))
-    handles = (
-        {str(item.group("handle")).casefold() for item in _RE_GITHUB_HANDLE.finditer(match["handles"])}
-        if (match := _RE_CREDIT_HANDLES.match(credit_text)) is not None
-        else set[str]()
-    )
-    plain_name = credit_text.strip(" .()")
-    return handles, bool(handles) or (named and len(plain_name.split()) > 1 and plain_name.istitle())
+    for marker in _RE_GITHUB_CREDIT.finditer(text):
+        prefix = text[: marker.start()].strip()
+        if named and prefix.strip("(),;.-"):
+            continue
+        if not named and prefix.rsplit(" ", 1)[-1].casefold() in {"reviewed", "tested", "approved", "verified"}:
+            continue
+        credit_text = text[marker.end() :]
+        handles = (
+            {str(item.group("handle")).casefold() for item in _RE_GITHUB_HANDLE.finditer(match["handles"])}
+            if (match := _RE_CREDIT_HANDLES.match(credit_text)) is not None
+            else set[str]()
+        )
+        plain_name = credit_text.strip(" .()")
+        return handles, bool(handles) or (named and len(plain_name.split()) > 1 and plain_name.istitle())
+    return None
 
 
 def _new_contributors(generated_notes: str, context: ReleaseContext) -> str:

@@ -658,6 +658,27 @@ def test_render_markdown_ignores_other_repository_short_reference() -> None:
 
 
 @pytest.mark.parametrize(
+    "url",
+    [
+        pytest.param("https://example.com/path/#42", id="numeric-fragment"),
+        pytest.param("http://example.com/path/#GH-42", id="github-style-fragment"),
+        pytest.param("https://example.com/redirect?to=https://github.com/tox-dev/example/pull/42", id="nested-url"),
+        pytest.param("https://example.com/docs/tox-dev/example#42", id="repository-shorthand-in-url"),
+    ],
+)
+def test_render_markdown_ignores_unrelated_url_fragments(url: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Added\n\n- Explain {url} and fix (#43) by @alice.\n"
+    generated = (
+        "* Another change by @bob in https://github.com/tox-dev/example/pull/42\n"
+        "* Our fix by @alice in https://github.com/tox-dev/example/pull/43\n"
+    )
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert url in result
+
+
+@pytest.mark.parametrize(
     "literal",
     [
         pytest.param("`(#42)`", id="inline-markdown"),
@@ -766,6 +787,22 @@ def test_render_markdown_rejects_credit_link_to_another_profile() -> None:
 
 
 @pytest.mark.parametrize(
+    "profile",
+    [
+        pytest.param("https://github.com/alice/", id="trailing-slash"),
+        pytest.param("https://www.github.com/alice", id="www"),
+    ],
+)
+def test_render_markdown_accepts_canonical_profile_variants(profile: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Added\n\n- Add support (#42) by [@alice]({profile}).\n"
+    generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "by @alice." in result
+
+
+@pytest.mark.parametrize(
     "credit",
     [
         pytest.param("[**@alice**](https://github.com/mallory)", id="bold-inline"),
@@ -779,8 +816,17 @@ def test_render_markdown_rejects_misdirected_profile_links(credit: str) -> None:
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
 
 
-def test_render_markdown_does_not_count_reviewer_as_author() -> None:
-    changelog = "## 1.2.3 (today)\n\n### Added\n\n- Add support (#42) by @bob, reviewed by @alice.\n"
+@pytest.mark.parametrize(
+    "entry",
+    [
+        pytest.param("Add support (#42) by @bob, reviewed by @alice.", id="after-author"),
+        pytest.param("Add support (#42), reviewed by @alice.", id="after-link"),
+        pytest.param("Add support reviewed by @alice (#42).", id="before-link"),
+        pytest.param("Add support (#42) tested by @alice.", id="tested"),
+    ],
+)
+def test_render_markdown_does_not_count_reviewer_as_author(entry: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Added\n\n- {entry}\n"
     generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/42\n"
 
     with pytest.raises(ValueError, match="pull request #42 does not include @alice"):

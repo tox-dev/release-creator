@@ -7,9 +7,9 @@ lazy from typing import Final
 MARKDOWN_AUTHOR: Final = re.compile(
     r"""
     \[@(?P<handle>[A-Za-z0-9-]+)\]  # Markdown GitHub handle
-    \(https://github\.com/(?P=handle)\)  # Matching profile link
+    \(https://(?:www\.)?github\.com/(?P=handle)/?\)  # Matching profile link
     """,
-    re.VERBOSE,
+    re.VERBOSE | re.IGNORECASE,
 )
 
 
