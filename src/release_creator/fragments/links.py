@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 lazy import re
-lazy from collections import Counter
 lazy from dataclasses import dataclass
 lazy from pathlib import Path
 lazy from typing import Final, Literal
@@ -126,8 +125,9 @@ def _link_text(
     if not target.knope and fragment_number(fragment) is None and linked:
         msg = f"pull request already linked in {fragment}"
         raise ValueError(msg)
-    if (match := _RE_AUTHOR_MARKER.search(_credit_prose(content, fragment.suffix))) is not None:
-        handles = {handle.casefold() for handle in _credited_handles(content[match.end() :], fragment.suffix)}
+    credit_prose = _credit_prose(content, fragment.suffix)
+    if (match := _RE_AUTHOR_MARKER.search(credit_prose)) is not None:
+        handles = {handle.casefold() for handle in _credited_handles(credit_prose[match.end() :], fragment.suffix)}
         handle = target.author.handle.casefold()
         if target.author.handle == "ghost":
             msg = f"cannot verify explicit credit for deleted pull request author in {fragment}"
@@ -140,6 +140,8 @@ def _link_text(
             raise ValueError(msg)
         if linked:
             return content
+        if fragment.suffix == ".md":
+            return _append_pull_request_link(content, target, None)
         return (
             f"{content[: match.start()]} {_pull_request_link(target.repository, target.number, fragment.suffix)} "
             f"by {content[match.end() :]}"
@@ -162,22 +164,29 @@ def _has_pull_request_link(content: str, repository: str, number: str, extension
     )
 
 
-def _markdown_prose(content: str) -> list[str]:
-    prose: list[str] = []
+def _markdown_visible_children(content: str) -> list[Token]:
+    visible: list[Token] = []
     hidden = 0
     for token in MarkdownIt().parse(content):
         for child in token.children or ():
-            if child.type == "html_inline":
-                if match := _RE_HTML_TAG.fullmatch(child.content):
-                    hidden = max(0, hidden - 1) if match["closing"] else hidden + 1
-                elif not hidden and (match := _RE_HTML_LINK.fullmatch(child.content)):
-                    prose.append(match["href"])
-            elif child.type == "text" and not hidden:
-                prose.append(child.content)
-            elif child.type == "link_open" and not hidden and isinstance(destination := child.attrGet("href"), str):
-                prose.append(destination)
-            elif child.type == "code_inline" and not hidden and prose and prose[-1].endswith((":pr:", ":pull:")):
-                prose.append(f":pr:`{child.content}`")
+            if child.type == "html_inline" and (match := _RE_HTML_TAG.fullmatch(child.content)):
+                hidden = max(0, hidden - 1) if match["closing"] else hidden + 1
+            elif not hidden:
+                visible.append(child)
+    return visible
+
+
+def _markdown_prose(content: str) -> list[str]:
+    prose: list[str] = []
+    for child in _markdown_visible_children(content):
+        if child.type == "html_inline" and (match := _RE_HTML_LINK.fullmatch(child.content)):
+            prose.append(match["href"])
+        elif child.type == "text":
+            prose.append(child.content)
+        elif child.type == "link_open" and isinstance(destination := child.attrGet("href"), str):
+            prose.append(destination)
+        elif child.type == "code_inline" and prose and prose[-1].endswith((":pr:", ":pull:")):
+            prose.append(f":pr:`{child.content}`")
     return prose
 
 
@@ -222,130 +231,33 @@ def _rst_comment(line: str) -> bool:
 def _credit_prose(content: str, extension: str) -> str:
     lines = content.splitlines(keepends=True)
     if extension == ".md":
-        return _markdown_credit_prose(content, lines)
+        return _markdown_credit_prose(content)
     for index in _rst_hidden_lines(lines):
         lines[index] = "\0" * len(lines[index])
     return _mask_delimited("".join(lines), "``", "``")
 
 
-def _markdown_credit_prose(content: str, lines: list[str]) -> str:
-    tokens = MarkdownIt().parse(content)
-    visible_lines = {
-        index for token in tokens if token.type == "inline" and token.map is not None for index in range(*token.map)
-    }
-    for index in range(len(lines)):
-        if index not in visible_lines:
-            lines[index] = "\0" * len(lines[index])
-    masked = list(_mask_delimited(_mask_markdown_code("".join(lines)), "<!--", "-->"))
-    for start, end in _markdown_target_spans("".join(masked)):
-        masked[start:end] = "\0" * (end - start)
-    for start, end in _markdown_hidden_spans(content, "".join(masked), tokens):
-        masked[start:end] = "\0" * (end - start)
-    return "".join(masked)
-
-
-def _markdown_hidden_spans(content: str, visible: str, tokens: list[Token]) -> list[tuple[int, int]]:
-    spans: list[tuple[int, int]] = []
-    cursor = 0
-    html_literal_start: int | None = None
-    children = [
-        child
-        for token in tokens
-        for child in token.children or ()
-        if child.type == "image" or (child.type == "html_inline" and not child.content.startswith("<!--"))
-    ]
-    remaining = Counter(f"![{child.content}]" if child.type == "image" else child.content for child in children)
-    for child in children:
-        marker = f"![{child.content}]" if child.type == "image" else child.content
-        start = _visible_start(content, visible, marker, cursor, remaining[marker])
-        spans.append((start, start + len(marker)))
-        if child.type == "html_inline":
-            html_literal_start = _html_literal_span(child.content, start, html_literal_start, spans)
-        cursor = start + len(marker)
-        remaining[marker] -= 1
-    return spans
-
-
-def _visible_start(content: str, visible: str, marker: str, cursor: int, remaining: int) -> int:
-    candidates: list[int] = []
-    while (start := content.find(marker, cursor)) >= 0:
-        if visible[start] != "\0" and not _escaped(content, start):
-            candidates.append(start)
-        cursor = start + 1
-    if marker.startswith("![") and len(candidates) > remaining:
-        candidates = [
-            start for start in candidates if content[start + len(marker) : start + len(marker) + 1] in {"(", "["}
-        ]
-    if len(candidates) != remaining:
-        msg = "cannot locate Markdown token in fragment source"
-        raise ValueError(msg)
-    return candidates[0]
-
-
-def _markdown_target_spans(content: str) -> list[tuple[int, int]]:
-    spans: list[tuple[int, int]] = []
-    cursor = 0
-    while (opening := content.find("](", cursor)) >= 0:
-        line_start = content.rfind("\n", 0, opening) + 1
-        label_start = _markdown_label_start(content, line_start, opening)
-        if (
-            label_start >= 0
-            and (end := _markdown_target_end(content, opening + 2)) is not None
-            and any(
-                token.type == "link_open"
-                for block in MarkdownIt().parse(content[label_start : end + 1])
-                for token in (block.children or ())[:1]
-            )
-        ):
-            spans.append((opening + 2, end))
-        cursor = opening + 2
-    return spans
-
-
-def _markdown_label_start(content: str, line_start: int, closing: int) -> int:
-    depth = 1
-    for index in range(closing - 1, line_start - 1, -1):
-        if _escaped(content, index):
-            continue
-        if content[index] == "]":
-            depth += 1
-        elif content[index] == "[":
-            depth -= 1
-            if depth == 0:
-                return index
-    return -1
-
-
-def _markdown_target_end(content: str, start: int) -> int | None:
-    depth = 1
-    quote = ">" if content[start : start + 1] == "<" else ""
-    escaped = False
-    for index in range(start, len(content)):
-        char = content[index]
-        if escaped:
-            escaped = False
-        elif char == "\\":
-            escaped = True
-        elif quote:
-            quote = "" if char == quote else quote
-        elif char in "\"'" and content[index - 1].isspace() and depth == 1:
-            quote = char
-        elif char == "(":
-            depth += 1
-        elif char == ")":
-            depth -= 1
-            if depth == 0:
-                return index
-    return None
-
-
-def _html_literal_span(content: str, start: int, opened: int | None, spans: list[tuple[int, int]]) -> int | None:
-    if (match := _RE_HTML_TAG.fullmatch(content)) is None:
-        return opened
-    if match["closing"] and opened is not None:
-        spans.append((opened, start))
-        return None
-    return opened if match["closing"] else start + len(content)
+def _markdown_credit_prose(content: str) -> str:
+    prose: list[str] = []
+    link_destination: str | None = None
+    link_text: list[str] = []
+    link_plain = True
+    for child in _markdown_visible_children(content):
+        if child.type == "link_open" and isinstance(destination := child.attrGet("href"), str):
+            link_destination = destination
+            link_text = []
+            link_plain = True
+        elif child.type == "link_close" and link_destination is not None:
+            if link_plain and link_text:
+                prose.append(f"[{''.join(link_text)}]({link_destination})")
+            link_destination = None
+        elif child.type == "text":
+            (link_text if link_destination is not None else prose).append(child.content)
+        elif link_destination is not None:
+            link_plain = False
+        elif child.type in {"softbreak", "hardbreak"}:
+            prose.append(" ")
+    return "".join(prose)
 
 
 def _mask_delimited(content: str, opening: str, closing: str) -> str:
@@ -358,33 +270,6 @@ def _mask_delimited(content: str, opening: str, closing: str) -> str:
         masked[start:end] = "\0" * (end - start)
         cursor = end
     return "".join(masked)
-
-
-def _mask_markdown_code(content: str) -> str:
-    masked = list(content)
-    cursor = 0
-    while (start := content.find("`", cursor)) >= 0:
-        if _escaped(content, start):
-            cursor = start + 1
-            continue
-        width = len(content[start:]) - len(content[start:].lstrip("`"))
-        fence = "`" * width
-        end = content.find(fence, start + width)
-        while end >= 0 and (
-            (end > 0 and content[end - 1] == "`") or (end + width < len(content) and content[end + width] == "`")
-        ):
-            end = content.find(fence, end + width)
-        if end < 0:
-            cursor = start + width
-            continue
-        end += width
-        masked[start:end] = "\0" * (end - start)
-        cursor = end
-    return "".join(masked)
-
-
-def _escaped(content: str, index: int) -> bool:
-    return bool((index - len(content[:index].rstrip("\\"))) % 2)
 
 
 def _without_rst_inline_literals(line: str) -> str:
