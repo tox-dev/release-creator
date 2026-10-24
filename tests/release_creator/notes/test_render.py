@@ -223,6 +223,31 @@ def test_render_markdown_selects_package_history() -> None:
     )
 
 
+def test_render_markdown_accepts_underscore_package_anchors() -> None:
+    changelog = dedent("""\
+        ## some_name
+
+        ### 1.0.0 (today)
+
+        <a name="release-some_name-1-0-0-fixed"></a>
+
+        #### Fixed
+
+        - Fix the current release.
+
+        <a name="release-some_name-1-0-1"></a>
+
+        Draft text for the next release.
+        """)
+
+    result = render_markdown(
+        changelog, ReleaseContext(tag="some_name/1.0.0", repository="tox-dev/example", package="some_name")
+    )
+
+    assert "- Fix the current release." in result
+    assert "Draft text" not in result
+
+
 def test_render_markdown_stops_at_next_package_release_anchor() -> None:
     changelog = dedent("""\
         ## pyproject-fmt

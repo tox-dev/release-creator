@@ -105,14 +105,14 @@ _RE_MARKDOWN_VERSION: Final = re.compile(
 _RE_MARKDOWN_VERSION_ANCHOR: Final = re.compile(
     r"""
     ^<a\ name="release-             # Version anchor prefix
-    (?P<version>v?[A-Za-z0-9.-]+)  # Version encoded for an anchor
+    (?P<version>v?[A-Za-z0-9_.-]+)  # Version encoded for an anchor
     "></a>$                         # Anchor terminator
     """,
     re.VERBOSE,
 )
 _RE_MARKDOWN_ANCHOR: Final = re.compile(
     r"""
-    ^<a\ name="(?P<anchor>release-[A-Za-z0-9-]+)"></a>$  # Complete release or category anchor
+    ^<a\ name="(?P<anchor>release-[A-Za-z0-9_-]+)"></a>$  # Complete release or category anchor
     """,
     re.VERBOSE,
 )
