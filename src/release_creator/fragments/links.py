@@ -264,6 +264,7 @@ def _markdown_target_spans(content: str) -> list[tuple[int, int]]:
         label_start = content.rfind("[", line_start, opening)
         if (
             label_start >= 0
+            and not _escaped(content, label_start)
             and (end := _markdown_target_end(content, opening + 2)) is not None
             and any(
                 token.type == "link_open"
@@ -324,7 +325,7 @@ def _mask_markdown_code(content: str) -> str:
     masked = list(content)
     cursor = 0
     while (start := content.find("`", cursor)) >= 0:
-        if (start - len(content[:start].rstrip("\\"))) % 2:
+        if _escaped(content, start):
             cursor = start + 1
             continue
         width = len(content[start:]) - len(content[start:].lstrip("`"))
@@ -341,6 +342,10 @@ def _mask_markdown_code(content: str) -> str:
         masked[start:end] = "\0" * (end - start)
         cursor = end
     return "".join(masked)
+
+
+def _escaped(content: str, index: int) -> bool:
+    return bool((index - len(content[:index].rstrip("\\"))) % 2)
 
 
 def _without_rst_inline_literals(line: str) -> str:

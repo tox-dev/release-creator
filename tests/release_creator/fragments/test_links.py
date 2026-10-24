@@ -598,7 +598,7 @@ def test_add_pull_request_links_ignores_repeated_html_inside_code(tmp_path: Path
     )
 
 
-@pytest.mark.parametrize("prefix", ["Add ](", "Add [docs] \\]("])
+@pytest.mark.parametrize("prefix", ["Add ](", "Add [docs] \\](", "Add \\[docs]("])
 def test_add_pull_request_links_rejects_visible_credit_after_nonlink_target(tmp_path: Path, prefix: str) -> None:
     fragment = tmp_path / "+first.feature.md"
     source = f'{prefix}https://example.com "x by [@mallory](https://github.com/mallory)") now.\n'
