@@ -731,6 +731,35 @@ def test_render_markdown_rejects_credit_link_to_another_profile() -> None:
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
 
+def test_render_markdown_rejects_raw_html_credit_link() -> None:
+    changelog = dedent("""\
+        ## 1.2.3 (today)
+
+        ### Fixed
+
+        - Fix the parser ([#42](https://github.com/tox-dev/example/pull/42)) by <a href="https://github.com/mallory">@alice</a>.
+        """)
+    generated = "* Fix the parser by @alice in https://github.com/tox-dev/example/pull/42\n"
+
+    with pytest.raises(ValueError, match="raw HTML links are unsupported"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+def test_render_markdown_keeps_html_anchor_and_literal_link_example() -> None:
+    changelog = dedent("""\
+        ## 1.2.3 (today)
+
+        ### Fixed
+
+        - Keep <a name="parser"></a> and the literal `<a href="https://github.com/mallory">` example.
+        """)
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert '<a name="parser"></a>' in result
+    assert '`<a href="https://github.com/mallory">`' in result
+
+
 def test_render_rst_rejects_credit_link_to_another_profile() -> None:
     changelog = dedent("""\
         1.2.3 (today)

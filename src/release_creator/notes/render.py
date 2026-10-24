@@ -6,9 +6,11 @@ from __future__ import annotations
 lazy import re
 lazy from collections.abc import Iterator
 lazy from dataclasses import dataclass
-lazy from typing import Final
+lazy from html.parser import HTMLParser
+lazy from typing import Final, override
 
 lazy import mdformat
+lazy from markdown_it import MarkdownIt
 lazy from packaging.version import InvalidVersion, Version
 
 lazy from release_creator.anchors.names import release_anchor
@@ -537,6 +539,11 @@ def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
 
 
 def _validate_profile_links(text: str) -> None:
+    parser = _RawHtmlLinkParser()
+    for token in MarkdownIt().parse(text):
+        for child in token.children or ():
+            if child.type == "html_inline":
+                parser.feed(child.content)
     if (
         invalid := next(
             (
@@ -549,6 +556,14 @@ def _validate_profile_links(text: str) -> None:
     ) is not None:
         msg = f"GitHub credit link for @{invalid['handle']} points to another profile"
         raise ValueError(msg)
+
+
+class _RawHtmlLinkParser(HTMLParser):
+    @override
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "a" and any(name == "href" for name, _ in attrs):
+            msg = "raw HTML links are unsupported in release notes"
+            raise ValueError(msg)
 
 
 def _is_comparison_line(line: str) -> bool:
