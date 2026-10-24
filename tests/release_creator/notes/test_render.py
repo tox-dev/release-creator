@@ -1420,6 +1420,7 @@ def test_render_rst_converts_external_link(source: str, expected: str) -> None:
         pytest.param("2*3*4", r"2\*3\*4", id="asterisks"),
         pytest.param("<img src=x>", r"\<img src=x>", id="html-image"),
         pytest.param("<details>", r"\<details>", id="html-details"),
+        pytest.param("~~removed~~", r"\~~removed\~~", id="strikethrough"),
     ],
 )
 def test_render_rst_escapes_markdown_syntax(source: str, expected: str) -> None:

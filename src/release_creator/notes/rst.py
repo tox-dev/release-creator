@@ -208,7 +208,7 @@ def _render_inline(node: nodes.Node) -> str:
 
 
 def _escape_text(value: str) -> str:
-    for character in ("\\", "`", "*", "_", "[", "]", "<", ">"):
+    for character in ("\\", "`", "*", "_", "~", "[", "]", "<", ">"):
         value = value.replace(character, f"\\{character}")
     return value
 
