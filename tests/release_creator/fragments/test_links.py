@@ -602,6 +602,12 @@ def test_add_pull_request_links_ignores_repeated_html_inside_code(tmp_path: Path
     ("source", "expected"),
     [
         pytest.param(
+            "Add parser ![ by [@alice](https://github.com/alice)](image.png).\n",
+            "Add parser ![ by [@alice](https://github.com/alice)](image.png) "
+            "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n",
+            id="leading-space",
+        ),
+        pytest.param(
             "Add ![x by [@alice](https://github.com/alice)](https://example.com/image.png) feature.\n",
             "Add ![x by [@alice](https://github.com/alice)](https://example.com/image.png) feature "
             "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n",
