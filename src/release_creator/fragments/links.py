@@ -236,29 +236,37 @@ def _markdown_credit_prose(content: str, lines: list[str]) -> str:
         if index not in visible_lines:
             lines[index] = "\0" * len(lines[index])
     masked = list(_mask_delimited(_mask_markdown_code("".join(lines)), "<!--", "-->"))
-    for start, end in _markdown_hidden_spans("".join(masked), tokens):
+    for start, end in _markdown_hidden_spans(content, "".join(masked), tokens):
         masked[start:end] = "\0" * (end - start)
     for start, end in _markdown_target_spans("".join(masked)):
         masked[start:end] = "\0" * (end - start)
     return "".join(masked)
 
 
-def _markdown_hidden_spans(content: str, tokens: list[Token]) -> list[tuple[int, int]]:
+def _markdown_hidden_spans(content: str, visible: str, tokens: list[Token]) -> list[tuple[int, int]]:
     spans: list[tuple[int, int]] = []
     cursor = 0
     html_literal_start: int | None = None
     for token in tokens:
         for child in token.children or ():
-            if child.type == "html_inline" and (start := content.find(child.content, cursor)) >= 0:
+            if child.type == "html_inline" and not child.content.startswith("<!--"):
+                start = _visible_start(content, visible, child.content, cursor)
                 spans.append((start, start + len(child.content)))
                 html_literal_start = _html_literal_span(child.content, start, html_literal_start, spans)
                 cursor = start + len(child.content)
             elif child.type == "image":
                 marker = f"![{child.content}]"
-                start = content.index(marker, cursor)
+                start = _visible_start(content, visible, marker, cursor)
                 spans.append((start, start + len(marker)))
                 cursor = start + len(marker)
     return spans
+
+
+def _visible_start(content: str, visible: str, marker: str, cursor: int) -> int:
+    start = content.index(marker, cursor)
+    while visible[start] == "\0":
+        start = content.index(marker, start + 1)
+    return start
 
 
 def _markdown_target_spans(content: str) -> list[tuple[int, int]]:
@@ -266,10 +274,9 @@ def _markdown_target_spans(content: str) -> list[tuple[int, int]]:
     cursor = 0
     while (opening := content.find("](", cursor)) >= 0:
         line_start = content.rfind("\n", 0, opening) + 1
-        label_start = content.rfind("[", line_start, opening)
+        label_start = _markdown_label_start(content, line_start, opening)
         if (
             label_start >= 0
-            and not _escaped(content, label_start)
             and (end := _markdown_target_end(content, opening + 2)) is not None
             and any(
                 token.type == "link_open"
@@ -280,6 +287,20 @@ def _markdown_target_spans(content: str) -> list[tuple[int, int]]:
             spans.append((opening + 2, end))
         cursor = opening + 2
     return spans
+
+
+def _markdown_label_start(content: str, line_start: int, closing: int) -> int:
+    depth = 1
+    for index in range(closing - 1, line_start - 1, -1):
+        if _escaped(content, index):
+            continue
+        if content[index] == "]":
+            depth += 1
+        elif content[index] == "[":
+            depth -= 1
+            if depth == 0:
+                return index
+    return -1
 
 
 def _markdown_target_end(content: str, start: int) -> int | None:

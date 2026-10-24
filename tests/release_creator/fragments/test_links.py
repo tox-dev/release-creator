@@ -621,6 +621,12 @@ def test_add_pull_request_links_ignores_repeated_html_inside_code(tmp_path: Path
             "[image]: https://example.com/image.png\n",
             id="reference",
         ),
+        pytest.param(
+            "Add ![`code` by [@alice](https://github.com/alice)](image.png) feature.\n",
+            "Add ![`code` by [@alice](https://github.com/alice)](image.png) feature "
+            "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n",
+            id="inline-code",
+        ),
     ],
 )
 def test_add_pull_request_links_ignores_image_alt_credit(tmp_path: Path, source: str, expected: str) -> None:
@@ -630,6 +636,19 @@ def test_add_pull_request_links_ignores_image_alt_credit(tmp_path: Path, source:
     _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
 
     assert fragment.read_text() == expected
+
+
+def test_add_pull_request_links_ignores_nested_link_title_credit(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    source = 'Add [see [a] more](https://example.com "x by [@alice](https://github.com/alice)") now.\n'
+    fragment.write_text(source)
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == (
+        'Add [see [a] more](https://example.com "x by [@alice](https://github.com/alice)") now '
+        "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n"
+    )
 
 
 @pytest.mark.parametrize("prefix", ["Add ](", "Add [docs] \\](", "Add \\[docs]("])
