@@ -253,6 +253,11 @@ def _markdown_hidden_spans(content: str, tokens: list[Token]) -> list[tuple[int,
                 spans.append((start, start + len(child.content)))
                 html_literal_start = _html_literal_span(child.content, start, html_literal_start, spans)
                 cursor = start + len(child.content)
+            elif child.type == "image":
+                marker = f"![{child.content}]"
+                start = content.index(marker, cursor)
+                spans.append((start, start + len(marker)))
+                cursor = start + len(marker)
     return spans
 
 

@@ -598,6 +598,34 @@ def test_add_pull_request_links_ignores_repeated_html_inside_code(tmp_path: Path
     )
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            "Add ![x by [@alice](https://github.com/alice)](https://example.com/image.png) feature.\n",
+            "Add ![x by [@alice](https://github.com/alice)](https://example.com/image.png) feature "
+            "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n",
+            id="inline",
+        ),
+        pytest.param(
+            "Add ![x by [@alice](https://github.com/alice)][image] feature.\n\n"
+            "[image]: https://example.com/image.png\n",
+            "Add ![x by [@alice](https://github.com/alice)][image] feature "
+            "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n\n"
+            "[image]: https://example.com/image.png\n",
+            id="reference",
+        ),
+    ],
+)
+def test_add_pull_request_links_ignores_image_alt_credit(tmp_path: Path, source: str, expected: str) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    fragment.write_text(source)
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == expected
+
+
 @pytest.mark.parametrize("prefix", ["Add ](", "Add [docs] \\](", "Add \\[docs]("])
 def test_add_pull_request_links_rejects_visible_credit_after_nonlink_target(tmp_path: Path, prefix: str) -> None:
     fragment = tmp_path / "+first.feature.md"
