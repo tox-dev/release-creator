@@ -228,6 +228,24 @@ def test_add_pull_request_links_rejects_multiple_change_items(tmp_path: Path, so
 
 
 @pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param("- Fix A.\n- Fix B.\n", id="bullets"),
+        pytest.param("  - Fix A.\n  - Fix B.\n", id="indented-bullets"),
+        pytest.param("1. Fix A.\n2. Fix B.\n", id="numbered"),
+    ],
+)
+def test_add_pull_request_links_rejects_multiple_rst_change_items(tmp_path: Path, source: str) -> None:
+    fragment = tmp_path / "+first.bugfix.rst"
+    fragment.write_text(source)
+
+    with pytest.raises(ValueError, match="split multiple change items into separate fragments"):
+        _link(tmp_path, "tox-dev/example", {fragment.name: "Fix both (#42)"})
+
+    assert fragment.read_text() == source
+
+
+@pytest.mark.parametrize(
     ("detail", "expected"),
     [
         pytest.param("  - subdetail", "  - subdetail", id="nested-list"),
@@ -266,9 +284,46 @@ def test_add_pull_request_links_places_generated_credit_on_primary_item(tmp_path
     )
 
 
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param(
+            "- Fix A.\n\n  - subdetail\n",
+            "- Fix A (:pr:`42`) by :user:`alice`.\n\n  - subdetail\n",
+            id="nested-list",
+        ),
+        pytest.param(
+            "- Fix A with wrapped\n  details.\n\n  - subdetail\n",
+            "- Fix A with wrapped\n  details (:pr:`42`) by :user:`alice`.\n\n  - subdetail\n",
+            id="wrapped-item",
+        ),
+    ],
+)
+def test_add_pull_request_links_places_generated_rst_credit_on_primary_item(
+    tmp_path: Path, source: str, expected: str
+) -> None:
+    fragment = tmp_path / "+first.bugfix.rst"
+    fragment.write_text(source)
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Fix A (#42)"})
+
+    assert fragment.read_text() == expected
+
+
 def test_add_pull_request_links_rejects_empty_primary_item(tmp_path: Path) -> None:
     fragment = tmp_path / "+first.bugfix.md"
     source = "- \n  - subdetail\n"
+    fragment.write_text(source)
+
+    with pytest.raises(ValueError, match="primary change item has no text"):
+        _link(tmp_path, "tox-dev/example", {fragment.name: "Fix A (#42)"})
+
+    assert fragment.read_text() == source
+
+
+def test_add_pull_request_links_rejects_empty_rst_primary_item(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.bugfix.rst"
+    source = "-\n\n  - subdetail\n"
     fragment.write_text(source)
 
     with pytest.raises(ValueError, match="primary change item has no text"):
