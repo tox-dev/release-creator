@@ -7,7 +7,6 @@ from textwrap import dedent
 lazy from collections.abc import Callable
 
 import pytest
-lazy from pytest_mock import MockerFixture
 
 from release_creator.notes.render import ReleaseContext, render_markdown, render_rst
 
@@ -490,8 +489,7 @@ def test_render_markdown_checks_reference_after_unclosed_code_span() -> None:
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
 
-def test_render_markdown_checks_reference_after_unclosed_formatter_output(mocker: MockerFixture) -> None:
-    mocker.patch("release_creator.notes.render.mdformat.text", autospec=True, side_effect=lambda text, **_: text)
+def test_render_markdown_checks_reference_after_unclosed_formatter_output() -> None:
     changelog = (
         "## 1.2.3 (today)\n\n### Fixed\n\n"
         "- Document ``literal` and fix ([#5](https://github.com/tox-dev/example/pull/5)) by @mallory.\n"

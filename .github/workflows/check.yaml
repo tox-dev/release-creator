@@ -78,7 +78,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: tox-dev/github-workflows/check-hook-update-cooldown@74472c1a3602ca9b66db058ea31578865e1d208b # v1.0.5
+      - uses: tox-dev/github-workflows/check-hook-update-cooldown@55f51f9b5cc0b40f280155a95de2d4f0ecbf7be1 # v3.0.0
   gate:
     name: ${{ github.event_name == 'pull_request' && 'Required checks pass' || 'Required checks pass (non-PR)' }}
     if: always()

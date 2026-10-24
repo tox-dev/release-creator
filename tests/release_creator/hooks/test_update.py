@@ -1,5 +1,7 @@
 """Behavioral tests for pre-commit dependency updates."""
 
+import json
+import os
 import subprocess  # ruff: ignore[suspicious-subprocess-import]  # CompletedProcess models the uv boundary.
 import sys
 from pathlib import Path
@@ -170,6 +172,79 @@ def test_resolves_real_universal_closure(
         "closure-child==2.0.0",
         'closure-color==0.4.6; sys_platform == "win32"',
     ]
+
+
+def test_hooks_update_runs_isolated_resolver(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    script = tmp_path / "resolver.py"
+    script.write_text(
+        dedent("""\
+            import json
+            import os
+            import sys
+            from pathlib import Path
+
+            Path(os.environ["RESOLVER_LOG"]).write_text(json.dumps({
+                "arguments": sys.argv[1:],
+                "input": sys.stdin.read(),
+                "index": os.environ.get("UV_INDEX_URL"),
+                "pip_index": os.environ.get("PIP_INDEX_URL"),
+                "certificate": os.environ.get("SSL_CERT_FILE"),
+            }))
+            print("packaging==26.1")
+            """),
+        encoding="utf-8",
+    )
+    executable = tmp_path / ("uv.cmd" if sys.platform == "win32" else "uv")
+    executable.write_text(
+        f'@echo off\n"{sys.executable}" "{script}" %*\n'
+        if sys.platform == "win32"
+        else f"#!{sys.executable}\n{script.read_text(encoding='utf-8')}",
+        encoding="utf-8",
+    )
+    if sys.platform != "win32":
+        executable.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("RESOLVER_LOG", str(tmp_path / "resolver.json"))
+    monkeypatch.setenv("UV_INDEX_URL", "https://evil.invalid/simple/")
+    monkeypatch.setenv("PIP_INDEX_URL", "https://evil.invalid/simple/")
+    monkeypatch.setenv("SSL_CERT_FILE", str(tmp_path / "untrusted.pem"))
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(
+        "repos:\n  - repo: local\n    hooks:\n      - id: format\n"
+        "        language: python\n        additional_dependencies: [packaging>=26]\n",
+        encoding="utf-8",
+    )
+
+    update_pins(config, "7 days", "3.15")
+
+    assert safe_load(config.read_text(encoding="utf-8"))["repos"][0]["hooks"][0]["additional_dependencies"] == [
+        "packaging>=26",
+        "packaging==26.1",
+    ]
+    invocation = json.loads((tmp_path / "resolver.json").read_text(encoding="utf-8"))
+    assert invocation == {
+        "arguments": [
+            "pip",
+            "compile",
+            "-",
+            "--universal",
+            "--quiet",
+            "--no-header",
+            "--no-annotate",
+            "--no-config",
+            "--no-sources",
+            "--default-index",
+            "https://pypi.org/simple/",
+            "--exclude-newer",
+            "7 days",
+            "--python-version",
+            "3.15",
+        ],
+        "input": "packaging>=26\n",
+        "index": None,
+        "pip_index": None,
+        "certificate": None,
+    }
 
 
 def test_ignores_ambient_uv_resolution_settings(
