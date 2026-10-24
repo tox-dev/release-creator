@@ -79,6 +79,8 @@ jobs:
       pull-requests: read
     steps:
       - uses: tox-dev/github-workflows/check-hook-update-cooldown@13c5d50919f11fe2988b41a0acee48ca2488c1d6 # v3.0.1
+        with:
+          release-app-client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
   gate:
     name: ${{ github.event_name == 'pull_request' && 'Required checks pass' || 'Required checks pass (non-PR)' }}
     if: always()
