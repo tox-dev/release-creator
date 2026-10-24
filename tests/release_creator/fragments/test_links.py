@@ -200,6 +200,73 @@ def test_add_pull_request_links_before_trailing_code(tmp_path: Path, extension: 
 
 
 @pytest.mark.parametrize(
+    ("extension", "code", "link"),
+    [
+        pytest.param(
+            "md",
+            "```text\nhttps://github.com/tox-dev/example/pull/42\n```",
+            "([#42](https://github.com/tox-dev/example/pull/42))",
+            id="markdown-fence",
+        ),
+        pytest.param("rst", ".. code-block:: text\n\n  :pr:`42`", "(:pr:`42`)", id="rst-code-block"),
+        pytest.param(
+            "rst",
+            ".. code-block:: text\n  :caption: https://github.com/tox-dev/example/pull/42\n\n  sample",
+            "(:pr:`42`)",
+            id="rst-directive-option",
+        ),
+    ],
+)
+def test_add_pull_request_links_ignores_reference_in_code(tmp_path: Path, extension: str, code: str, link: str) -> None:
+    fragment = tmp_path / f"42.feature.{extension}"
+    fragment.write_text(f"Document this example.\n\n{code}\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Document this example (#42)"})
+
+    result = fragment.read_text()
+    assert result.startswith(f"Document this example {link} by ")
+    assert result.endswith(f"\n\n{code}\n")
+
+
+@pytest.mark.parametrize(
+    ("extension", "literal", "link"),
+    [
+        pytest.param(
+            "md",
+            "`https://github.com/tox-dev/example/pull/42`",
+            "([#42](https://github.com/tox-dev/example/pull/42))",
+            id="markdown",
+        ),
+        pytest.param(
+            "rst",
+            "``https://github.com/tox-dev/example/pull/42``",
+            "(:pr:`42`)",
+            id="rst",
+        ),
+    ],
+)
+def test_add_pull_request_links_ignores_inline_code_reference(
+    tmp_path: Path, extension: str, literal: str, link: str
+) -> None:
+    fragment = tmp_path / f"42.feature.{extension}"
+    fragment.write_text(f"Document {literal} behavior.\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Document this example (#42)"})
+
+    assert fragment.read_text().startswith(f"Document {literal} behavior {link} by ")
+
+
+def test_add_pull_request_links_recognizes_reference_after_unclosed_rst_literal(tmp_path: Path) -> None:
+    fragment = tmp_path / "42.feature.rst"
+    source = "Document malformed ``literal and :pr:`42`.\n"
+    fragment.write_text(source)
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Document this example (#42)"})
+
+    assert fragment.read_text() == "Document malformed ``literal and :pr:`42` by :user:`alice`.\n"
+
+
+@pytest.mark.parametrize(
     "code",
     [
         pytest.param(".. code-block:: python\n\n      print(1)", id="nested-directive"),

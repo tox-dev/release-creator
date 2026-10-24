@@ -76,6 +76,22 @@ def test_fragment_commits_from_git_follows_rename(git_repository: tuple[Path, st
     }
 
 
+def test_fragment_commits_from_git_ignores_nested_same_name(git_repository: tuple[Path, str]) -> None:
+    repository, git = git_repository
+    directory = repository / "changelog.d"
+    directory.mkdir()
+    (directory / "+same.feature.md").write_text("Live news.\n")
+    assert run_text([git, "-C", str(repository), "add", "changelog.d"]).returncode == 0
+    assert run_text([git, "-C", str(repository), "commit", "-qm", "Live news"]).returncode == 0
+    original = run_text([git, "-C", str(repository), "rev-parse", "HEAD"]).stdout.strip()
+    (directory / "archive").mkdir()
+    (directory / "archive" / "+same.feature.md").write_text("Archived news.\n")
+    assert run_text([git, "-C", str(repository), "add", "changelog.d"]).returncode == 0
+    assert run_text([git, "-C", str(repository), "commit", "-qm", "Archived news"]).returncode == 0
+
+    assert fragment_git.fragment_commits_from_git(directory) == {"+same.feature.md": original}
+
+
 def test_fragment_commits_from_git_rejects_uncommitted_fragment(git_repository: tuple[Path, str]) -> None:
     tmp_path, git = git_repository
     (tmp_path / "README.md").write_text("Project.\n", encoding="utf-8")

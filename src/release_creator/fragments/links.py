@@ -8,6 +8,8 @@ lazy from dataclasses import dataclass
 lazy from pathlib import Path
 lazy from typing import Final, Literal
 
+lazy from markdown_it import MarkdownIt
+
 lazy from release_creator.fragments.knope import changeset_parts
 lazy from release_creator.fragments.names import fragment_number, pending_changesets, pending_fragments
 lazy from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor
@@ -98,7 +100,7 @@ def _link_text(
     target: _LinkTarget,
 ) -> str:
     fragment = target.fragment
-    linked = _has_pull_request_link(content, target.repository, target.number)
+    linked = _has_pull_request_link(content, target.repository, target.number, fragment.suffix)
     if not target.knope and fragment_number(fragment) is None and linked:
         msg = f"pull request already linked in {fragment}"
         raise ValueError(msg)
@@ -130,11 +132,60 @@ def _link_text(
     return _append_pull_request_link(content, target, handle)
 
 
-def _has_pull_request_link(content: str, repository: str, number: str) -> bool:
+def _has_pull_request_link(content: str, repository: str, number: str, extension: str) -> bool:
     return any(
         (match["repository"] == repository and match["number"] == number) or match["rst_number"] == number
-        for match in _RE_PULL_REQUEST_LINK.finditer(content)
+        for text in (_markdown_prose(content) if extension == ".md" else _rst_prose(content))
+        for match in _RE_PULL_REQUEST_LINK.finditer(text)
     )
+
+
+def _markdown_prose(content: str) -> list[str]:
+    prose: list[str] = []
+    for token in MarkdownIt().parse(content):
+        for child in token.children or ():
+            if child.type in {"text", "html_inline"}:
+                prose.append(child.content)
+            elif child.type == "link_open" and isinstance(destination := child.attrGet("href"), str):
+                prose.append(destination)
+            elif child.type == "code_inline" and prose and prose[-1].endswith((":pr:", ":pull:")):
+                prose.append(f":pr:`{child.content}`")
+    return prose
+
+
+def _rst_prose(content: str) -> list[str]:
+    lines = content.splitlines()
+    code: set[int] = set()
+    prose: list[str] = []
+    for index, line in enumerate(lines):
+        if index in code:
+            continue
+        stripped = line.lstrip()
+        if not stripped.startswith((".. code-block::", ".. code::", ".. sourcecode::")):
+            prose.append(_without_rst_inline_literals(line))
+        if not (stripped.startswith((".. code-block::", ".. code::", ".. sourcecode::")) or stripped.endswith("::")):
+            continue
+        cursor = index + 1
+        while cursor < len(lines) and not lines[cursor].strip():
+            cursor += 1
+        if cursor >= len(lines) or _indent_width(lines[cursor]) <= _indent_width(line):
+            continue
+        while cursor < len(lines) and (not lines[cursor].strip() or _indent_width(lines[cursor]) > _indent_width(line)):
+            code.add(cursor)
+            cursor += 1
+    return prose
+
+
+def _without_rst_inline_literals(line: str) -> str:
+    parts: list[str] = []
+    start = 0
+    while (opening := line.find("``", start)) >= 0:
+        if (closing := line.find("``", opening + 2)) < 0:
+            break
+        parts.append(line[start:opening])
+        start = closing + 2
+    parts.append(line[start:])
+    return "".join(parts)
 
 
 def _append_pull_request_link(content: str, target: _LinkTarget, author: str | None) -> str:

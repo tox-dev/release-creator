@@ -317,7 +317,11 @@ def test_validate_news_cli_reports_count(
     [
         pytest.param("---\ndefault: security\n---\n\n# Remove a distrusted root\n", 1, "", id="custom-type"),
         pytest.param("---\ndefault: patch\n---\n\n# Fix a bug\n", 1, "", id="built-in-type"),
+        pytest.param("---\ndefault: patch # maintenance fix\n---\n\n# Fix a bug\n", 1, "", id="yaml-comment"),
         pytest.param("---\ndefault: unknown\n---\n\n# Fix a bug\n", 0, "unsupported changeset type", id="type"),
+        pytest.param(
+            "---\ndefault: [patch\n---\n\n# Fix a bug\n", 0, "invalid changeset front matter", id="invalid-yaml"
+        ),
         pytest.param("---\n---\n\n# Fix a bug\n", 0, "empty changeset front matter", id="empty-front-matter"),
         pytest.param("---\ndefault: patch\n---\n\n# \n", 0, "empty changeset summary", id="empty-summary"),
         pytest.param("Fix a bug\n", 0, "missing YAML front matter", id="missing-front-matter"),

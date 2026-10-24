@@ -50,6 +50,20 @@ def test_add_release_anchors_preserves_other_anchors() -> None:
     )
 
 
+def test_add_release_anchors_ignores_fenced_headings_and_anchors() -> None:
+    changelog = (
+        '# Changelog\n\n```markdown\n<a name="release-1-2-3"></a>\n## 1.2.3\n### Fixed\n```\n\n## 1.2.3\n\n### Fixed\n'
+    )
+
+    result = add_release_anchors(changelog)
+
+    assert result == (
+        '# Changelog\n\n```markdown\n<a name="release-1-2-3"></a>\n## 1.2.3\n### Fixed\n```\n\n'
+        '<a name="release-1-2-3"></a>\n\n## 1.2.3\n\n'
+        '<a name="release-1-2-3-fixed"></a>\n\n### Fixed\n'
+    )
+
+
 @pytest.mark.parametrize(
     "changelog",
     [

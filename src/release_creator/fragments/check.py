@@ -5,6 +5,8 @@ lazy import tomllib
 lazy from fnmatch import fnmatch
 lazy from pathlib import Path
 
+lazy import yaml
+
 lazy from release_creator.fragments.knope import changeset_parts, knope_kinds, load_knope_package
 lazy from release_creator.fragments.names import fragment_category
 lazy from release_creator.process import required_executable, run_text
@@ -105,14 +107,22 @@ def changed_changesets(config: Path, base: str) -> int:
         if path.parent != directory or path.suffix != ".md" or path.name == "README.md":
             continue
         frontmatter, _, _ = changeset_parts(path, path.read_text(encoding="utf-8"))
-        entries = frontmatter.removeprefix("---\n").partition("---\n")[0].splitlines()
-        if not entries:
+        try:
+            entries = yaml.safe_load(frontmatter[4:].partition("\n---\n")[0])
+        except yaml.YAMLError as error:
+            msg = f"invalid changeset front matter in {path}"
+            raise ValueError(msg) from error
+        if not isinstance(entries, dict) or not entries:
             msg = f"empty changeset front matter in {path}"
             raise ValueError(msg)
-        for entry in entries:
-            package, separator, kind = entry.partition(":")
-            if not separator or not package.strip() or kind.strip() not in categories:
-                msg = f"unsupported changeset type in {path}: {entry}"
+        for package, kind in entries.items():
+            if (
+                not isinstance(package, str)
+                or not package.strip()
+                or not isinstance(kind, str)
+                or kind not in categories
+            ):
+                msg = f"unsupported changeset type in {path}: {package}: {kind}"
                 raise ValueError(msg)
         count += 1
     return count

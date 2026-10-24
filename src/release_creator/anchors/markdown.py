@@ -4,6 +4,7 @@
 lazy import re
 lazy from typing import Final, cast
 
+lazy from markdown_it import MarkdownIt
 lazy from packaging.version import InvalidVersion, Version
 
 lazy from release_creator.anchors.names import release_anchor
@@ -51,7 +52,10 @@ def add_release_anchors(changelog: str) -> str:
 def _collect_anchors(lines: list[str]) -> set[str]:
     anchors: set[str] = set()
     version: str | None = None
-    for line in lines:
+    code_lines = _code_lines(lines)
+    for index, line in enumerate(lines):
+        if index in code_lines:
+            continue
         if (heading := _version_heading(line)) is not None:
             version = heading
             anchors.add(release_anchor(version))
@@ -62,10 +66,15 @@ def _collect_anchors(lines: list[str]) -> set[str]:
 
 def _strip_anchors(lines: list[str], anchors: set[str]) -> list[str]:
     cleaned: list[str] = []
+    code_lines = _code_lines(lines)
     line_index = 0
     while line_index < len(lines):
         line = lines[line_index]
-        if (match := _RE_ANCHOR.fullmatch(line)) is not None and match["anchor"] in anchors:
+        if (
+            line_index not in code_lines
+            and (match := _RE_ANCHOR.fullmatch(line)) is not None
+            and match["anchor"] in anchors
+        ):
             line_index += 1
             if line_index < len(lines) and not lines[line_index]:
                 line_index += 1
@@ -78,7 +87,11 @@ def _strip_anchors(lines: list[str], anchors: set[str]) -> list[str]:
 def _insert_anchors(lines: list[str]) -> str:
     result: list[str] = []
     version = None
-    for line in lines:
+    code_lines = _code_lines(lines)
+    for index, line in enumerate(lines):
+        if index in code_lines:
+            result.append(line)
+            continue
         if (heading := _version_heading(line)) is not None:
             version = heading
             anchor = release_anchor(version)
@@ -91,6 +104,15 @@ def _insert_anchors(lines: list[str]) -> str:
             result.append("")
         result.extend((f'<a name="{anchor}"></a>', "", line))
     return f"{'\n'.join(result).rstrip('\n')}\n"
+
+
+def _code_lines(lines: list[str]) -> set[int]:
+    return {
+        index
+        for token in MarkdownIt().parse("\n".join(lines))
+        if token.type in {"fence", "code_block"} and token.map is not None
+        for index in range(*token.map)
+    }
 
 
 def _version_heading(line: str) -> str | None:
