@@ -627,6 +627,14 @@ def test_add_pull_request_links_ignores_repeated_html_inside_code(tmp_path: Path
             "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n",
             id="inline-code",
         ),
+        pytest.param(
+            'Add [docs](https://example.com "![x by [@alice](https://github.com/alice)](image.png)") '
+            "then ![x by [@alice](https://github.com/alice)](image.png) feature.\n",
+            'Add [docs](https://example.com "![x by [@alice](https://github.com/alice)](image.png)") '
+            "then ![x by [@alice](https://github.com/alice)](image.png) feature "
+            "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n",
+            id="repeated-in-link-title",
+        ),
     ],
 )
 def test_add_pull_request_links_ignores_image_alt_credit(tmp_path: Path, source: str, expected: str) -> None:
@@ -636,6 +644,53 @@ def test_add_pull_request_links_ignores_image_alt_credit(tmp_path: Path, source:
     _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
 
     assert fragment.read_text() == expected
+
+
+@pytest.mark.parametrize(
+    "earlier",
+    [
+        pytest.param("`![x](image.png)`", id="code"),
+        pytest.param('[docs](https://example.com "![x](image.png)")', id="link-title"),
+        pytest.param('<span title="![x](image.png)">docs</span>', id="html-attribute"),
+        pytest.param("<!-- ![x](image.png) -->", id="comment"),
+        pytest.param("![![x](image.png)](other.png)", id="image-alt"),
+        pytest.param("\\![x](image.png)", id="escaped-image"),
+        pytest.param("![x]", id="plain-image-label"),
+    ],
+)
+def test_add_pull_request_links_maps_image_after_similar_text(tmp_path: Path, earlier: str) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    fragment.write_text(f"Add {earlier} then ![x](image.png) feature.\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == (
+        f"Add {earlier} then ![x](image.png) feature "
+        "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n"
+    )
+
+
+def test_add_pull_request_links_maps_repeated_images(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    fragment.write_text("Add ![x](image.png) and ![x](image.png) feature.\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == (
+        "Add ![x](image.png) and ![x](image.png) feature "
+        "([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n"
+    )
+
+
+def test_add_pull_request_links_rejects_ambiguous_image_source(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    source = "Add ![x](bad url) then ![x](image.png) feature.\n"
+    fragment.write_text(source)
+
+    with pytest.raises(ValueError, match="cannot locate Markdown token"):
+        _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == source
 
 
 def test_add_pull_request_links_ignores_nested_link_title_credit(tmp_path: Path) -> None:

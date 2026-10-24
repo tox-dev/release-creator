@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 lazy import re
+lazy from collections import Counter
 lazy from dataclasses import dataclass
 lazy from pathlib import Path
 lazy from typing import Final, Literal
@@ -236,9 +237,9 @@ def _markdown_credit_prose(content: str, lines: list[str]) -> str:
         if index not in visible_lines:
             lines[index] = "\0" * len(lines[index])
     masked = list(_mask_delimited(_mask_markdown_code("".join(lines)), "<!--", "-->"))
-    for start, end in _markdown_hidden_spans(content, "".join(masked), tokens):
-        masked[start:end] = "\0" * (end - start)
     for start, end in _markdown_target_spans("".join(masked)):
+        masked[start:end] = "\0" * (end - start)
+    for start, end in _markdown_hidden_spans(content, "".join(masked), tokens):
         masked[start:end] = "\0" * (end - start)
     return "".join(masked)
 
@@ -247,26 +248,38 @@ def _markdown_hidden_spans(content: str, visible: str, tokens: list[Token]) -> l
     spans: list[tuple[int, int]] = []
     cursor = 0
     html_literal_start: int | None = None
-    for token in tokens:
-        for child in token.children or ():
-            if child.type == "html_inline" and not child.content.startswith("<!--"):
-                start = _visible_start(content, visible, child.content, cursor)
-                spans.append((start, start + len(child.content)))
-                html_literal_start = _html_literal_span(child.content, start, html_literal_start, spans)
-                cursor = start + len(child.content)
-            elif child.type == "image":
-                marker = f"![{child.content}]"
-                start = _visible_start(content, visible, marker, cursor)
-                spans.append((start, start + len(marker)))
-                cursor = start + len(marker)
+    children = [
+        child
+        for token in tokens
+        for child in token.children or ()
+        if child.type == "image" or (child.type == "html_inline" and not child.content.startswith("<!--"))
+    ]
+    remaining = Counter(f"![{child.content}]" if child.type == "image" else child.content for child in children)
+    for child in children:
+        marker = f"![{child.content}]" if child.type == "image" else child.content
+        start = _visible_start(content, visible, marker, cursor, remaining[marker])
+        spans.append((start, start + len(marker)))
+        if child.type == "html_inline":
+            html_literal_start = _html_literal_span(child.content, start, html_literal_start, spans)
+        cursor = start + len(marker)
+        remaining[marker] -= 1
     return spans
 
 
-def _visible_start(content: str, visible: str, marker: str, cursor: int) -> int:
-    start = content.index(marker, cursor)
-    while visible[start] == "\0":
-        start = content.index(marker, start + 1)
-    return start
+def _visible_start(content: str, visible: str, marker: str, cursor: int, remaining: int) -> int:
+    candidates: list[int] = []
+    while (start := content.find(marker, cursor)) >= 0:
+        if visible[start] != "\0" and not _escaped(content, start):
+            candidates.append(start)
+        cursor = start + 1
+    if marker.startswith("![") and len(candidates) > remaining:
+        candidates = [
+            start for start in candidates if content[start + len(marker) : start + len(marker) + 1] in {"(", "["}
+        ]
+    if len(candidates) != remaining:
+        msg = "cannot locate Markdown token in fragment source"
+        raise ValueError(msg)
+    return candidates[0]
 
 
 def _markdown_target_spans(content: str) -> list[tuple[int, int]]:
