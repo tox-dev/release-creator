@@ -9,10 +9,12 @@ lazy from pathlib import Path
 lazy from typing import Final, Literal
 
 lazy from markdown_it import MarkdownIt
+lazy from markdown_it.token import Token
 
 lazy from release_creator.fragments.knope import changeset_parts
 lazy from release_creator.fragments.names import fragment_number, pending_changesets, pending_fragments
 lazy from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor
+lazy from release_creator.fragments.shape import markdown_visible_children, validate_towncrier_fragment
 lazy from release_creator.github import MARKDOWN_AUTHOR
 
 _RE_PULL_REQUEST_LINK: Final = re.compile(
@@ -27,7 +29,7 @@ _RE_AUTHOR_MARKER: Final = re.compile(
     r"""
     (?:,?\s+)                     # Optional comma and whitespace before the credit
     by\s+                         # Credit marker and following whitespace
-    (?=\[@|:user:`|`@)            # Supported Markdown or RST author syntax
+    (?=(?:\*{1,2})?(?:\[@|:user:`|`@))  # Supported author syntax, optionally emphasized in RST
     """,
     re.VERBOSE,
 )
@@ -45,6 +47,19 @@ _RE_AUTHOR_SEPARATOR: Final = re.compile(
     ^[ \t]*(?P<separator>,(?:[ \t]*and)?|and)[ \t]*  # Continue a shared author list
     """,
     re.VERBOSE,
+)
+_RE_HTML_BREAK: Final = re.compile(
+    r"""
+    <(?P<name>br|hr)  # HTML line or horizontal break
+    (?P<attributes>(?:[^>"']|"[^"]*"|'[^']*')*)>  # Attributes may contain quoted >
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+_RE_RST_INLINE_LITERAL: Final = re.compile(
+    r"""
+    ``(?P<text>.*?)``  # RST inline literal, including escaped role syntax
+    """,
+    re.DOTALL | re.VERBOSE,
 )
 type _LinkMode = Literal["towncrier", "knope"]
 
@@ -79,6 +94,8 @@ def _link_fragment(
         msg = f"no pull request data for {fragment}"
         raise ValueError(msg)
     content = fragment.read_text(encoding="utf-8")
+    if mode == "towncrier":
+        validate_towncrier_fragment(content, fragment)
     target = _LinkTarget(
         fragment=fragment,
         repository=repository,
@@ -110,8 +127,9 @@ def _link_text(
     if not target.knope and fragment_number(fragment) is None and linked:
         msg = f"pull request already linked in {fragment}"
         raise ValueError(msg)
-    if (match := _RE_AUTHOR_MARKER.search(content)) is not None:
-        handles = {handle.casefold() for handle in _credited_handles(content[match.end() :], fragment.suffix)}
+    credit_prose = _credit_prose(content, fragment.suffix)
+    if (match := _RE_AUTHOR_MARKER.search(credit_prose)) is not None:
+        handles = {handle.casefold() for handle in _credited_handles(credit_prose[match.end() :], fragment.suffix)}
         handle = target.author.handle.casefold()
         if target.author.handle == "ghost":
             msg = f"cannot verify explicit credit for deleted pull request author in {fragment}"
@@ -124,6 +142,10 @@ def _link_text(
             raise ValueError(msg)
         if linked:
             return content
+        if fragment.suffix == ".md":
+            return _append_pull_request_link(
+                content, target, None, anchor=_markdown_credit_anchor(content, target.author.handle)
+            )
         return (
             f"{content[: match.start()]} {_pull_request_link(target.repository, target.number, fragment.suffix)} "
             f"by {content[match.end() :]}"
@@ -148,60 +170,138 @@ def _has_pull_request_link(content: str, repository: str, number: str, extension
 
 def _markdown_prose(content: str) -> list[str]:
     prose: list[str] = []
-    for token in MarkdownIt().parse(content):
-        for child in token.children or ():
-            if child.type in {"text", "html_inline"}:
-                prose.append(child.content)
-            elif child.type == "link_open" and isinstance(destination := child.attrGet("href"), str):
-                prose.append(destination)
-            elif child.type == "code_inline" and prose and prose[-1].endswith((":pr:", ":pull:")):
-                prose.append(f":pr:`{child.content}`")
+    for child, _ in markdown_visible_children(MarkdownIt().parse(content)):
+        if child is None:
+            continue
+        if child.type == "text":
+            prose.append(child.content)
+        elif child.type == "link_open" and isinstance(destination := child.attrGet("href"), str):
+            prose.append(destination)
+        elif child.type == "code_inline" and prose and prose[-1].endswith((":pr:", ":pull:")):
+            prose.append(f":pr:`{child.content}`")
     return prose
 
 
 def _rst_prose(content: str) -> list[str]:
     lines = content.splitlines()
-    code: set[int] = set()
-    prose: list[str] = []
+    hidden = _rst_hidden_lines(lines)
+    return [_RE_RST_INLINE_LITERAL.sub("", line) for index, line in enumerate(lines) if index not in hidden]
+
+
+def _rst_hidden_lines(lines: list[str]) -> set[int]:
+    hidden: set[int] = set()
     for index, line in enumerate(lines):
-        if index in code:
+        if index in hidden:
             continue
         stripped = line.lstrip()
-        if not stripped.startswith((".. code-block::", ".. code::", ".. sourcecode::")):
-            prose.append(_without_rst_inline_literals(line))
-        if not (stripped.startswith((".. code-block::", ".. code::", ".. sourcecode::")) or stripped.endswith("::")):
+        directive = stripped.startswith((".. code-block::", ".. code::", ".. sourcecode::"))
+        comment = _rst_comment(stripped)
+        if directive or comment:
+            hidden.add(index)
+        if not (directive or comment or stripped.rstrip().endswith("::")):
             continue
         cursor = index + 1
         while cursor < len(lines) and not lines[cursor].strip():
             cursor += 1
-        if cursor >= len(lines) or _indent_width(lines[cursor]) <= _indent_width(line):
-            continue
         while cursor < len(lines) and (not lines[cursor].strip() or _indent_width(lines[cursor]) > _indent_width(line)):
-            code.add(cursor)
+            hidden.add(cursor)
             cursor += 1
-    return prose
+    return hidden
 
 
-def _without_rst_inline_literals(line: str) -> str:
-    parts: list[str] = []
-    start = 0
-    while (opening := line.find("``", start)) >= 0:
-        if (closing := line.find("``", opening + 2)) < 0:
-            break
-        parts.append(line[start:opening])
-        start = closing + 2
-    parts.append(line[start:])
-    return "".join(parts)
+def _rst_comment(line: str) -> bool:
+    if not line.startswith(".. "):
+        return False
+    first = line[3:].split(maxsplit=1)
+    return not first or not first[0].endswith("::")
 
 
-def _append_pull_request_link(content: str, target: _LinkTarget, author: str | None) -> str:
+def _credit_prose(content: str, extension: str) -> str:
+    if extension == ".md":
+        return _markdown_credit_prose(content)
+    lines = content.splitlines(keepends=True)
+    for index in _rst_hidden_lines(lines):
+        lines[index] = "\0" * len(lines[index])
+    return _RE_RST_INLINE_LITERAL.sub(lambda match: "\0" * len(match.group()), "".join(lines))
+
+
+def _markdown_credit_prose(content: str) -> str:
+    return " ".join(block for block, _ in _markdown_credit_blocks(content))
+
+
+def _markdown_credit_anchor(content: str, author: str) -> int:
+    blocks = _markdown_credit_blocks(content)
+    if sum(1 for _ in _RE_AUTHOR_MARKER.finditer(" ".join(block for block, _ in blocks))) > 1:
+        msg = "split multiple credited changes into separate fragments"
+        raise ValueError(msg)
+    credited = [end for block, end in blocks if _RE_AUTHOR_MARKER.search(block)]
+    end_line = (
+        credited[0]
+        if credited
+        else next(
+            end
+            for block, end in blocks
+            if any(match["handle"].casefold() == author.casefold() for match in MARKDOWN_AUTHOR.finditer(block))
+        )
+    )
+    return sum(map(len, content.splitlines(keepends=True)[:end_line]))
+
+
+def _markdown_credit_blocks(content: str) -> list[tuple[str, int]]:
+    blocks: list[tuple[str, int]] = []
+    children: list[Token] = []
+    end_line = 0
+    for child, line in markdown_visible_children(MarkdownIt().parse(content)):
+        if child is None:
+            blocks.append((_markdown_credit_children(children), end_line))
+            children = []
+        else:
+            children.append(child)
+            end_line = line
+    blocks.append((_markdown_credit_children(children), end_line))
+    return blocks
+
+
+def _markdown_credit_children(children: list[Token]) -> str:
+    prose: list[str] = []
+    link_destination: str | None = None
+    link_text: list[str] = []
+    link_plain = True
+    for child in children:
+        if child.type == "link_open" and isinstance(destination := child.attrGet("href"), str):
+            link_destination = destination
+            link_text = []
+            link_plain = True
+        elif child.type == "link_close" and link_destination is not None:
+            if link_plain and link_text:
+                prose.append(f"[{''.join(link_text)}]({link_destination})")
+            link_destination = None
+        elif child.type == "text":
+            (link_text if link_destination is not None else prose).append(
+                child.content if link_destination is not None else child.content.replace("[", "\0")
+            )
+        elif link_destination is not None and child.type not in {"em_open", "em_close", "strong_open", "strong_close"}:
+            link_plain = False
+        elif child.type in {"softbreak", "hardbreak"} or (
+            child.type == "html_inline" and _RE_HTML_BREAK.fullmatch(child.content) is not None
+        ):
+            prose.append(" ")
+    return "".join(prose)
+
+
+def _append_pull_request_link(
+    content: str, target: _LinkTarget, author: str | None, *, anchor: int | None = None
+) -> str:
     link = _pull_request_link(target.repository, target.number, target.fragment.suffix)
-    before, after = _split_trailing_code(content, target.fragment.suffix)
+    if anchor is None:
+        before, after = _split_trailing_code(content, target.fragment.suffix)
+    else:
+        before = content[:anchor].rstrip()
+        after = content[len(before) :]
     if not before:
-        suffix = f"{link}"
-        if author is not None:
-            suffix += f" by {_author_credit(author, target.fragment.suffix)}"
-        return f"{after.rstrip()}\n\n{suffix}{'' if target.knope else '.'}"
+        opening, _, body = after.partition("\n")
+        suffix = f"{link} by {_author_credit(author, target.fragment.suffix)}" if author is not None else link
+        return f"{opening[:-2]} {suffix}::\n{body.rstrip()}"
     content = f"{before.removesuffix('.')} {link}"
     if author is not None:
         content += f" by {_author_credit(author, target.fragment.suffix)}"
@@ -215,27 +315,11 @@ def _split_trailing_code(content: str, suffix: str) -> tuple[str, str]:
         before = content[:position].rstrip()
         return before, content[len(before) :]
     if suffix == ".md":
-        opening = next(
-            (
-                index
-                for index in range(len(lines) - 1, -1, -1)
-                if lines[index].strip() and not lines[index].startswith("    ")
-            ),
-            None,
-        )
-        if (
-            opening is None
-            and any(line.strip() for line in lines)
-            and all(not line.strip() or line.startswith("    ") for line in lines)
-        ):
-            return "", content
-        if (
-            opening is not None
-            and opening < len(lines) - 2
-            and not lines[opening + 1].strip()
-            and all(not line.strip() or line.startswith("    ") for line in lines[opening + 2 :])
-        ):
-            position = sum(map(len, lines[: opening + 1]))
+        visible_ends = [
+            token.map[1] for token in MarkdownIt().parse(content) if token.type == "inline" and token.map is not None
+        ]
+        if visible_ends and any(line.strip() for line in lines[visible_ends[-1] :]):
+            position = sum(map(len, lines[: visible_ends[-1]]))
             before = content[:position].rstrip()
             return before, content[len(before) :]
     if suffix == ".rst" and (opening := _trailing_rst_code_opening(lines)) is not None:
@@ -249,11 +333,13 @@ def _trailing_rst_code_opening(lines: list[str]) -> int | None:
     for index, line in enumerate(lines):
         stripped = line.lstrip()
         if not (
-            stripped.startswith((".. code-block::", ".. code::", ".. sourcecode::")) or stripped.rstrip().endswith("::")
+            stripped.startswith((".. code-block::", ".. code::", ".. sourcecode::"))
+            or stripped.rstrip().endswith("::")
+            or _rst_comment(stripped)
         ):
             continue
         body = [following for following in lines[index + 1 :] if following.strip()]
-        if body and all(_indent_width(following) > _indent_width(line) for following in body):
+        if all(_indent_width(following) > _indent_width(line) for following in body):
             return index
     return None
 
@@ -295,11 +381,13 @@ def _author_credit(author: str, extension: str) -> str:
 
 def _credited_handles(credit_text: str, extension: str) -> set[str]:
     pattern = _RE_RST_USER if extension == ".rst" else MARKDOWN_AUTHOR
-    remaining = credit_text.lstrip()
+    remaining = credit_text.lstrip().lstrip("*") if extension == ".rst" else credit_text.lstrip()
     handles: set[str] = set()
     while (author := pattern.match(remaining)) is not None:
         handles.add(author["handle"] or author["link_handle"] if extension == ".rst" else author["handle"])
         remaining = remaining[author.end() :]
+        if extension == ".rst":
+            remaining = remaining.lstrip("*")
         if (separator := _RE_AUTHOR_SEPARATOR.match(remaining)) is None:
             break
         remaining = remaining[separator.end() :]

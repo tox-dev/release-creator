@@ -526,7 +526,7 @@ Fixed
 ~~~~~
 
 - Keep verified new-contributor credits when GitHub links the contributor's first pull request with a URL (`#4
-  <https://github.com/tox-dev/release-creator/pull/4>`__).
+  <https://github.com/tox-dev/release-creator/pull/4>`__) by :user:`gaborbernat`.
 
 .. _release-0-1-0:
 

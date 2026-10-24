@@ -102,6 +102,11 @@ Write one fragment per user-visible change, including multiple changes in one pu
 user-visible change needs no fragment. A bot pull request needs a fragment only when that pull request supplies one. The
 command does not decide whether a change is newsworthy; review that before merging.
 
+Write the Towncrier fragment as prose. The supported templates add the list bullet around it. Lists, block quotes,
+tables, headings, and raw RST directives in a fragment can move its link or credit outside that item, so both the PR
+news check and the release linker reject them. Code blocks remain supported. Use another fragment file for another
+change.
+
 For Towncrier, the linker processes filenames beginning with ``+`` and numeric filenames in the fragment directory. It
 requires GitHub to identify the merged PR for its introducing commit. A named fragment that already links its pull
 request is rejected; a numeric fragment can retain an existing link. A failed GitHub lookup or a credit that omits the

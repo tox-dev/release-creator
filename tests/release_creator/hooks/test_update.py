@@ -208,9 +208,25 @@ def test_ignores_ambient_uv_resolution_settings(
     assert safe_load(config.read_text(encoding="utf-8"))["repos"][0]["hooks"][0]["additional_dependencies"] == [
         "packaging==26.1"
     ]
-    assert execute.call_args.args[0][execute.call_args.args[0].index("--default-index") + 1] == (
-        "https://pypi.org/simple/"
-    )
+    assert execute.call_args.args[0] == [
+        "uv",
+        "pip",
+        "compile",
+        "-",
+        "--universal",
+        "--quiet",
+        "--no-header",
+        "--no-annotate",
+        "--no-config",
+        "--no-sources",
+        "--default-index",
+        "https://pypi.org/simple/",
+        "--exclude-newer",
+        "7 days",
+        "--python-version",
+        "3.15",
+    ]
+    assert execute.call_args.kwargs["input"] == "packaging\n"
     assert all("evil.invalid" not in value for value in execute.call_args.kwargs["env"].values())
 
 

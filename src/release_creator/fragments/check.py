@@ -9,6 +9,7 @@ lazy import yaml
 
 lazy from release_creator.fragments.knope import changeset_parts, knope_kinds, load_knope_package
 lazy from release_creator.fragments.names import fragment_category
+lazy from release_creator.fragments.shape import validate_towncrier_fragment
 lazy from release_creator.process import required_executable, run_text
 
 
@@ -65,9 +66,10 @@ def _validate_changed_fragment(
     if fragment_category(path, categories) is None:
         msg = f"unsupported changelog fragment: {path}"
         raise ValueError(msg)
-    if not path.read_text(encoding="utf-8").strip():
+    if not (content := path.read_text(encoding="utf-8")).strip():
         msg = f"empty changelog fragment: {path}"
         raise ValueError(msg)
+    validate_towncrier_fragment(content, path)
     return 1
 
 

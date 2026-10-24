@@ -24,7 +24,7 @@ def render_rst_section(source: str, tag: str, repository: str) -> str:
     :param repository: GitHub owner and repository for role links.
     :returns: Markdown body with release categories and warnings.
     """
-    _register_roles()
+    register_roles()
     body: list[str] = []
     for block in _parse_document(source, repository).children:
         if isinstance(block, nodes.target):
@@ -35,7 +35,9 @@ def render_rst_section(source: str, tag: str, repository: str) -> str:
     return "\n\n".join(body)
 
 
-def _register_roles() -> None:
+def register_roles() -> None:
+    """Use the same GitHub roles in fragments and release notes."""
+
     def github_role(
         name: str,
         rawtext: str,
@@ -186,18 +188,18 @@ def _render_item(item: nodes.list_item, depth: int) -> str:
 
 
 def _render_paragraph(node: nodes.Node) -> str:
-    return " ".join(_render_inline(node).split()).replace(" - by ", " by ")
+    return _render_inline(node).strip().replace(" - by ", " by ")
 
 
 def _render_inline(node: nodes.Node) -> str:
     if isinstance(node, nodes.Text):
-        value = _escape_text(node.astext())
+        value = _escape_text(_normalize_prose(node.astext()))
     elif isinstance(node, nodes.title_reference):
         value = _code_span(node.rawsource[1:-1])
     elif isinstance(node, nodes.literal):
         value = _code_span(node.astext())
     elif isinstance(node, nodes.reference):
-        label = node.astext()
+        label = _normalize_prose(node.astext()).strip()
         url = node.get("refuri")
         is_profile = (
             label.startswith("@")
@@ -216,8 +218,15 @@ def _render_inline(node: nodes.Node) -> str:
     return value
 
 
+def _normalize_prose(value: str) -> str:
+    words = value.split()
+    if not words:
+        return " "
+    return f"{' ' if value[0].isspace() else ''}{' '.join(words)}{' ' if value[-1].isspace() else ''}"
+
+
 def _escape_text(value: str) -> str:
-    for character in ("\\", "`", "*", "_", "~", "[", "]", "<", ">"):
+    for character in ("\\", "`", "*", "_", "~", "[", "]", "<", ">", "&"):
         value = value.replace(character, f"\\{character}")
     return value
 
@@ -268,10 +277,11 @@ def _is_credit(item: nodes.Node) -> bool:
         isinstance(item, nodes.list_item)
         and len(item) == 1
         and isinstance(item[0], nodes.paragraph)
-        and item[0].astext().startswith("by ")
+        and item[0].rawsource.startswith("by :user:`")
     )
 
 
 __all__ = [
+    "register_roles",
     "render_rst_section",
 ]

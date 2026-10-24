@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@74472c1a3602ca9b66db058ea31578865e1d208b # v1.0.5
+    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@13c5d50919f11fe2988b41a0acee48ca2488c1d6 # v3.0.1
     permissions:
       contents: read
   previous:
@@ -23,12 +23,12 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           version: latest-known
           python-version: "3.15"
           enable-cache: false
-      - uses: tox-dev/github-workflows/install-locked-tools@74472c1a3602ca9b66db058ea31578865e1d208b # v1.0.5
+      - uses: tox-dev/github-workflows/install-locked-tools@13c5d50919f11fe2988b41a0acee48ca2488c1d6 # v3.0.1
         with:
           groups: project-runtime
           venv: ${{ runner.temp }}/release-tools
@@ -80,12 +80,12 @@ jobs:
         with:
           name: python-package-distributions
           path: dist
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           version: latest-known
           python-version: "3.15"
           enable-cache: false
-      - uses: tox-dev/github-workflows/install-locked-tools@74472c1a3602ca9b66db058ea31578865e1d208b # v1.0.5
+      - uses: tox-dev/github-workflows/install-locked-tools@13c5d50919f11fe2988b41a0acee48ca2488c1d6 # v3.0.1
         with:
           groups: release-notes project-runtime
           venv: ${{ runner.temp }}/release-tools
@@ -94,7 +94,7 @@ jobs:
         run: |
           uv pip install --python "$RUNNER_TEMP/release-tools/bin/python" --no-deps dist/release_creator-*.whl
           echo "$RUNNER_TEMP/release-tools/bin" >>"$GITHUB_PATH"
-      - uses: tox-dev/github-workflows/render-release-notes@74472c1a3602ca9b66db058ea31578865e1d208b # v1.0.5
+      - uses: tox-dev/github-workflows/render-release-notes@13c5d50919f11fe2988b41a0acee48ca2488c1d6 # v3.0.1
         with:
           tag: ${{ github.ref_name }}
           previous: ${{ needs.previous.outputs.tag }}
@@ -131,7 +131,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           version: latest-known
           python-version: "3.15"
@@ -140,7 +140,7 @@ jobs:
         with:
           name: python-package-distributions
           path: dist
-      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@74472c1a3602ca9b66db058ea31578865e1d208b # v1.0.5
+      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@13c5d50919f11fe2988b41a0acee48ca2488c1d6 # v3.0.1
         with:
           project: release-creator
           version: ${{ github.ref_name }}
@@ -156,7 +156,7 @@ jobs:
         with:
           name: final-github-release-notes
           path: ${{ runner.temp }}
-      - uses: tox-dev/github-workflows/publish-github-release@74472c1a3602ca9b66db058ea31578865e1d208b # v1.0.5
+      - uses: tox-dev/github-workflows/publish-github-release@13c5d50919f11fe2988b41a0acee48ca2488c1d6 # v3.0.1
         env:
           GH_TOKEN: ${{ github.token }}
         with:
