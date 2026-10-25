@@ -180,6 +180,12 @@ def _config_root(source: str) -> MappingNode:
     return root
 
 
+def _reject_merge_keys(mapping: MappingNode, kind: str) -> None:
+    if any(isinstance(key, ScalarNode) and key.value == "<<" for key, _ in mapping.value):
+        msg = f"YAML merge keys in {kind} cannot be updated safely"
+        raise ValueError(msg)
+
+
 def _reject_duplicate_keys(root: MappingNode) -> None:
     seen: set[int] = set()
     pending: list[Node] = [root]
@@ -201,23 +207,6 @@ def _reject_duplicate_keys(root: MappingNode) -> None:
                 pending.append(value)
         elif isinstance(node, SequenceNode):
             pending.extend(node.value)
-
-
-def _shared_nodes(root: MappingNode) -> set[int]:
-    seen: set[int] = set()
-    shared: set[int] = set()
-    pending: list[Node] = [root]
-    while pending:
-        node = pending.pop()
-        if id(node) in seen:
-            shared.add(id(node))
-            continue
-        seen.add(id(node))
-        if isinstance(node, MappingNode):
-            pending.extend(child for pair in node.value for child in pair)
-        elif isinstance(node, SequenceNode):
-            pending.extend(node.value)
-    return shared
 
 
 def _default_python_version(root: MappingNode, fallback: str) -> str:
@@ -397,10 +386,21 @@ def _reject_shared_hooks(root: MappingNode, repositories: SequenceNode) -> None:
         raise ValueError(msg)
 
 
-def _reject_merge_keys(mapping: MappingNode, kind: str) -> None:
-    if any(isinstance(key, ScalarNode) and key.value == "<<" for key, _ in mapping.value):
-        msg = f"YAML merge keys in {kind} cannot be updated safely"
-        raise ValueError(msg)
+def _shared_nodes(root: MappingNode) -> set[int]:
+    seen: set[int] = set()
+    shared: set[int] = set()
+    pending: list[Node] = [root]
+    while pending:
+        node = pending.pop()
+        if id(node) in seen:
+            shared.add(id(node))
+            continue
+        seen.add(id(node))
+        if isinstance(node, MappingNode):
+            pending.extend(child for pair in node.value for child in pair)
+        elif isinstance(node, SequenceNode):
+            pending.extend(node.value)
+    return shared
 
 
 def _hook_language(hook: Node, languages: dict[str, str], *, require_id: bool) -> str | None:

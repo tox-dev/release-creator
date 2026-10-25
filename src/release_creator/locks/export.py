@@ -67,6 +67,21 @@ def export_lock(root: Path, *, check: bool = False, keep_uv_lock: bool = False) 
         )
 
 
+def _committed_metadata(output: Path) -> _LockMetadata:
+    with output.open("rb") as stream:
+        tool = tomllib.load(stream).get("tool", {}).get("release-creator", {})
+    if (
+        not isinstance(created := tool.get("created-at"), datetime)
+        or created.tzinfo is None
+        or created > datetime.now(tz=UTC)
+    ):
+        msg = f"project lock has no valid creation time: {output}"
+        raise ValueError(msg)
+    return _LockMetadata(
+        created_at=created, uv_version=version if isinstance(version := tool.get("uv-version"), str) else None
+    )
+
+
 @dataclass(frozen=True, kw_only=True)
 class _LockMetadata:
     created_at: datetime
@@ -151,6 +166,15 @@ def _render_lock(project: Path, uv: str, committed: _LockMetadata | None, *, kee
         "packages": records,
         "tool": {"release-creator": {"created-at": created_at, "uv-version": uv_version}},
     })
+
+
+def _resolver_version(uv: str, directory: Path, committed: _LockMetadata | None) -> str:
+    version = _run_uv(uv, directory, "--version").split()[1]
+    if committed is not None and committed.uv_version != version:
+        recorded = f"was resolved with uv {committed.uv_version}" if committed.uv_version else "records no uv version"
+        msg = f"project lock {recorded}, but uv {version} is running; refresh the lock with the same uv"
+        raise ValueError(msg)
+    return version
 
 
 def _resolve_packages(compiler: _Compiler, selections: _Selections) -> list[_TomlTable]:
@@ -272,30 +296,6 @@ def _restore_exports(
             output.unlink(missing_ok=True)
         elif not output.exists() or output.read_bytes() != previous_output:
             output.write_bytes(previous_output)
-
-
-def _committed_metadata(output: Path) -> _LockMetadata:
-    with output.open("rb") as stream:
-        tool = tomllib.load(stream).get("tool", {}).get("release-creator", {})
-    if (
-        not isinstance(created := tool.get("created-at"), datetime)
-        or created.tzinfo is None
-        or created > datetime.now(tz=UTC)
-    ):
-        msg = f"project lock has no valid creation time: {output}"
-        raise ValueError(msg)
-    return _LockMetadata(
-        created_at=created, uv_version=version if isinstance(version := tool.get("uv-version"), str) else None
-    )
-
-
-def _resolver_version(uv: str, directory: Path, committed: _LockMetadata | None) -> str:
-    version = _run_uv(uv, directory, "--version").split()[1]
-    if committed is not None and committed.uv_version != version:
-        recorded = f"was resolved with uv {committed.uv_version}" if committed.uv_version else "records no uv version"
-        msg = f"project lock {recorded}, but uv {version} is running; refresh the lock with the same uv"
-        raise ValueError(msg)
-    return version
 
 
 def _package_cutoffs(data: _TomlTable) -> dict[str, str]:

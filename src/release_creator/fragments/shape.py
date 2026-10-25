@@ -24,12 +24,6 @@ _RE_HTML_TAG: Final = re.compile(
     """,
     re.VERBOSE | re.IGNORECASE,
 )
-_RE_COLLAPSIBLE_TAG: Final = re.compile(
-    r"""
-    <\s*(?:details|summary)\b  # Collapsed HTML hides its body on GitHub
-    """,
-    re.VERBOSE | re.IGNORECASE,
-)
 
 
 def validate_towncrier_fragment(content: str, fragment: Path) -> None:
@@ -102,7 +96,7 @@ def _feed_html_block(parser: _BlockLiteralParser, content: str) -> None:
 
 
 def _reject_collapsible(content: str) -> None:
-    if _RE_COLLAPSIBLE_TAG.search(content) is not None:
+    if re.search(r"<\s*(?:details|summary)\b", content, re.IGNORECASE) is not None:
         msg = "collapsible HTML sections are unsupported in changelog fragments"
         raise ValueError(msg)
 
