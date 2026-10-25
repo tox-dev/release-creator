@@ -6,6 +6,7 @@ from __future__ import annotations
 lazy import re
 lazy from collections.abc import Iterator
 lazy from dataclasses import dataclass
+lazy from itertools import accumulate
 lazy from pathlib import Path
 lazy from typing import Final, Literal
 
@@ -14,9 +15,8 @@ lazy from markdown_it.token import Token
 
 lazy from release_creator.fragments.knope import changeset_parts
 lazy from release_creator.fragments.names import fragment_number, pending_changesets, pending_fragments
-lazy from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor, PullRequestCredit
+lazy from release_creator.fragments.pull_requests import PullRequest, PullRequestCredit
 lazy from release_creator.fragments.shape import markdown_visible_children, validate_towncrier_fragment
-lazy from release_creator.github import MARKDOWN_AUTHOR
 
 _RE_AUTHOR_MARKER: Final = re.compile(
     r"""
@@ -29,21 +29,6 @@ _RE_AUTHOR_MARKER: Final = re.compile(
 _RE_USER_ROLE: Final = re.compile(
     r"""
     :user:`(?P<handle>[A-Za-z0-9-]+)`  # GitHub user role, with or without a credit marker
-    """,
-    re.VERBOSE | re.IGNORECASE,
-)
-_RE_BARE_HANDLE: Final = re.compile(
-    r"""
-    @(?P<handle>[A-Za-z0-9-]+)  # Bare GitHub handle after a credit marker
-    """,
-    re.VERBOSE,
-)
-_RE_RST_USER: Final = re.compile(
-    r"""
-    :user:`(?P<handle>[A-Za-z0-9-]+)`  # RST GitHub user role
-    |                                 # Or
-    `@(?P<link_handle>[A-Za-z0-9-]+)  # Explicit profile link text
-    \ <https://(?:www\.)?github\.com/(?P=link_handle)/?>`_  # Matching profile URL
     """,
     re.VERBOSE | re.IGNORECASE,
 )
@@ -92,7 +77,6 @@ def _link_fragment(
         fragment=fragment,
         repository=repository,
         number=pull_request.number,
-        author=pull_request.author,
         credits=pull_request.credits,
         knope=mode == "knope",
     )
@@ -107,7 +91,6 @@ class _LinkTarget:
     fragment: Path
     repository: str
     number: str
-    author: PullRequestAuthor
     credits: tuple[PullRequestCredit, ...]
     knope: bool
 
@@ -124,7 +107,7 @@ def _link_text(
     credit_prose = _credit_prose(content, fragment.suffix)
     match = _RE_AUTHOR_MARKER.search(credit_prose)
     if match is not None or _RE_USER_ROLE.search(credit_prose) is not None:
-        return _keep_explicit_credit(content, target, credit_prose, match, linked=linked)
+        return _keep_explicit_credit(content, target, match, linked=linked)
     credit = _credit_list(target.credits, fragment.suffix)
     if linked:
         before, after = _split_trailing_code(content, fragment.suffix)
@@ -138,36 +121,14 @@ def _credit_list(credited: tuple[PullRequestCredit, ...], extension: str) -> str
     return f"{', '.join(names[:-1])} and {names[-1]}" if len(names) > 1 else names[0]
 
 
-def _keep_explicit_credit(
-    content: str, target: _LinkTarget, credit_prose: str, match: re.Match[str] | None, *, linked: bool
-) -> str:
+def _keep_explicit_credit(content: str, target: _LinkTarget, match: re.Match[str] | None, *, linked: bool) -> str:
     fragment = target.fragment
-    handles = {
-        handle.casefold()
-        for handle in (
-            _credited_handles(credit_prose[match.end() :], fragment.suffix)
-            if match is not None
-            else {role["handle"] for role in _RE_USER_ROLE.finditer(credit_prose)}
-        )
-    }
-    handle = target.author.handle.casefold()
-    if target.author.handle == "ghost":
-        msg = f"cannot verify explicit credit for deleted pull request author in {fragment}"
-        raise ValueError(msg)
-    if target.author.is_bot and handle in handles:
-        msg = f"bot author @{target.author.handle} must not be credited in {fragment}"
-        raise ValueError(msg)
-    if not target.author.is_bot and handle not in handles:
-        msg = f"pull request author @{target.author.handle} is missing from the explicit credit in {fragment}"
-        raise ValueError(msg)
     if linked:
         return content
     if match is None:
         return _append_pull_request_link(content, target, None)
     if fragment.suffix == ".md":
-        return _append_pull_request_link(
-            content, target, None, anchor=_markdown_credit_anchor(content, target.author.handle)
-        )
+        return _append_pull_request_link(content, target, None, anchor=_markdown_credit_anchor(content))
     return (
         f"{content[: match.start()]} {_pull_request_link(target.repository, target.number, fragment.suffix)} "
         f"by {content[match.end() :]}"
@@ -282,21 +243,14 @@ def _markdown_credit_prose(content: str) -> str:
     return " ".join(block for block, _ in _markdown_credit_blocks(content))
 
 
-def _markdown_credit_anchor(content: str, author: str) -> int:
+def _markdown_credit_anchor(content: str) -> int:
     blocks = _markdown_credit_blocks(content)
-    if sum(1 for _ in _RE_AUTHOR_MARKER.finditer(" ".join(block for block, _ in blocks))) > 1:
+    markers = list(_RE_AUTHOR_MARKER.finditer(" ".join(block for block, _ in blocks)))
+    if len(markers) > 1:
         msg = "split multiple credited changes into separate fragments"
         raise ValueError(msg)
-    credited = [end for block, end in blocks if _RE_AUTHOR_MARKER.search(block)]
-    end_line = (
-        credited[0]
-        if credited
-        else next(
-            end
-            for block, end in blocks
-            if any(match["handle"].casefold() == author.casefold() for match in MARKDOWN_AUTHOR.finditer(block))
-        )
-    )
+    limits = accumulate(len(block) + 1 for block, _ in blocks)
+    end_line = next(end for limit, (_, end) in zip(limits, blocks, strict=True) if markers[0].end() < limit)
     return sum(map(len, content.splitlines(keepends=True)[:end_line]))
 
 
@@ -441,31 +395,6 @@ def _pull_request_link(repository: str, number: str, extension: str) -> str:
 
 def _author_credit(author: str, extension: str) -> str:
     return f":user:`{author}`" if extension == ".rst" else f"[@{author}](https://github.com/{author})"
-
-
-def _credited_handles(credit_text: str, extension: str) -> set[str]:
-    pattern = _RE_RST_USER if extension == ".rst" else MARKDOWN_AUTHOR
-    remaining = credit_text.lstrip().lstrip("*") if extension == ".rst" else credit_text.lstrip()
-    handles: set[str] = set()
-    while (
-        author := pattern.match(remaining) or _RE_USER_ROLE.match(remaining) or _RE_BARE_HANDLE.match(remaining)
-    ) is not None:
-        handles.add(next(handle for handle in author.groupdict().values() if handle))
-        remaining = remaining[author.end() :]
-        if extension == ".rst":
-            remaining = remaining.lstrip("*")
-        if (
-            separator := re.match(
-                r"""
-                ^[ \t]*(?P<separator>,(?:[ \t]*and)?|and)[ \t]*  # Continue a shared author list
-                """,
-                remaining,
-                flags=re.VERBOSE,
-            )
-        ) is None:
-            break
-        remaining = remaining[separator.end() :]
-    return handles
 
 
 def _pull_request_url(repository: str, number: str) -> str:

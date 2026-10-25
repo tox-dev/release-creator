@@ -1,16 +1,6 @@
 """Validate repository names used in GitHub URLs and API paths."""
 
-# ruff: file-ignore[lazy-import-immediately-resolved]  # Shared regexes compile when the module loads.
 lazy import re
-lazy from typing import Final
-
-MARKDOWN_AUTHOR: Final = re.compile(
-    r"""
-    \[@(?P<handle>[A-Za-z0-9-]+)\]  # Markdown GitHub handle
-    \(https://(?:www\.)?github\.com/(?P=handle)/?\)  # Matching profile link
-    """,
-    re.VERBOSE | re.IGNORECASE,
-)
 
 
 def validate_repository(repository: str) -> None:
@@ -36,6 +26,5 @@ def validate_repository(repository: str) -> None:
 
 
 __all__ = [
-    "MARKDOWN_AUTHOR",
     "validate_repository",
 ]

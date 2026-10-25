@@ -319,15 +319,16 @@ def test_add_pull_request_links_rejects_multiple_credited_changes(tmp_path: Path
     assert fragment.read_text() == source
 
 
-def test_add_pull_request_links_rejects_formatted_wrong_author_credit(tmp_path: Path) -> None:
+def test_add_pull_request_links_keeps_formatted_other_author_credit(tmp_path: Path) -> None:
     fragment = tmp_path / "+first.feature.md"
-    source = "Add a feature by [**@mallory**](https://github.com/mallory).\n"
-    fragment.write_text(source)
+    fragment.write_text("Add a feature by [**@mallory**](https://github.com/mallory).\n")
 
-    with pytest.raises(ValueError, match="author @alice is missing"):
-        _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
 
-    assert fragment.read_text() == source
+    assert fragment.read_text() == (
+        "Add a feature by [**@mallory**](https://github.com/mallory) "
+        "([#42](https://github.com/tox-dev/example/pull/42)).\n"
+    )
 
 
 def test_add_pull_request_links_accepts_formatted_author_credit(tmp_path: Path) -> None:
@@ -390,31 +391,26 @@ def test_add_pull_request_links_accepts_oxford_comma_credit(tmp_path: Path) -> N
     assert fragment.read_text() == f"Add a feature by {credit} ([#42](https://github.com/tox-dev/example/pull/42)).\n"
 
 
-@pytest.mark.parametrize(
-    ("extension", "credit"),
-    [
-        pytest.param(
-            "md",
-            "by [@mallory](https://github.com/mallory), reviewed by [@alice](https://github.com/alice)",
-            id="markdown",
-        ),
-        pytest.param("rst", "by :user:`mallory`, reviewed by :user:`alice`", id="rst"),
-    ],
-)
-def test_add_pull_request_links_does_not_count_reviewer_as_author(tmp_path: Path, extension: str, credit: str) -> None:
-    fragment = tmp_path / f"+first.feature.{extension}"
-    source = f"Add a feature {credit}.\n"
+def test_add_pull_request_links_rejects_markdown_credit_and_reviewer(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.md"
+    source = (
+        "Add a feature by [@mallory](https://github.com/mallory), reviewed by [@alice](https://github.com/alice).\n"
+    )
     fragment.write_text(source)
 
-    with pytest.raises(ValueError, match="author @alice is missing"):
-        _link(
-            tmp_path,
-            "tox-dev/example",
-            {fragment.name: "Add release notes (#42)"},
-            {"42": PullRequestAuthor(handle="alice", is_bot=False)},
-        )
+    with pytest.raises(ValueError, match="split multiple credited changes"):
+        _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
 
     assert fragment.read_text() == source
+
+
+def test_add_pull_request_links_keeps_rst_credit_and_reviewer(tmp_path: Path) -> None:
+    fragment = tmp_path / "+first.feature.rst"
+    fragment.write_text("Add a feature by :user:`mallory`, reviewed by :user:`alice`.\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == "Add a feature (:pr:`42`) by :user:`mallory`, reviewed by :user:`alice`.\n"
 
 
 @pytest.mark.parametrize(
@@ -862,15 +858,14 @@ def test_add_pull_request_links_ignores_nested_link_title_credit(tmp_path: Path)
         pytest.param("Add \\[docs](", id="escaped-open"),
     ],
 )
-def test_add_pull_request_links_rejects_visible_credit_after_nonlink_target(tmp_path: Path, prefix: str) -> None:
+def test_add_pull_request_links_keeps_visible_credit_after_nonlink_target(tmp_path: Path, prefix: str) -> None:
     fragment = tmp_path / "+first.feature.md"
-    source = f'{prefix}https://example.com "x by [@mallory](https://github.com/mallory)") now.\n'
-    fragment.write_text(source)
+    source = f'{prefix}https://example.com "x by [@mallory](https://github.com/mallory)") now'
+    fragment.write_text(f"{source}.\n")
 
-    with pytest.raises(ValueError, match="author @alice is missing"):
-        _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
 
-    assert fragment.read_text() == source
+    assert fragment.read_text() == f"{source} ([#42](https://github.com/tox-dev/example/pull/42)).\n"
 
 
 def test_add_pull_request_links_ignores_reference_definition_title(tmp_path: Path) -> None:
@@ -886,15 +881,16 @@ def test_add_pull_request_links_ignores_reference_definition_title(tmp_path: Pat
     )
 
 
-def test_add_pull_request_links_rejects_credit_after_backslash_code_closer(tmp_path: Path) -> None:
+def test_add_pull_request_links_keeps_credit_after_backslash_code_closer(tmp_path: Path) -> None:
     fragment = tmp_path / "+first.feature.md"
-    source = "Add `foo\\` by [@mallory](https://github.com/mallory) then `bar` now.\n"
-    fragment.write_text(source)
+    fragment.write_text("Add `foo\\` by [@mallory](https://github.com/mallory) then `bar` now.\n")
 
-    with pytest.raises(ValueError, match="author @alice is missing"):
-        _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
 
-    assert fragment.read_text() == source
+    assert fragment.read_text() == (
+        "Add `foo\\` by [@mallory](https://github.com/mallory) then `bar` now "
+        "([#42](https://github.com/tox-dev/example/pull/42)).\n"
+    )
 
 
 @pytest.mark.parametrize(
@@ -1190,46 +1186,6 @@ def test_add_pull_request_links_matches_credit_case(tmp_path: Path) -> None:
     )
 
 
-def test_add_pull_request_links_reports_deleted_author_credit(tmp_path: Path) -> None:
-    fragment = tmp_path / "42.feature.md"
-    fragment.write_text("Add a feature by [@alice](https://github.com/alice).\n")
-
-    with pytest.raises(ValueError, match="cannot verify explicit credit for deleted pull request author"):
-        _link(
-            tmp_path,
-            "tox-dev/example",
-            {fragment.name: "Add a feature (#42)"},
-            {"42": PullRequestAuthor(handle="ghost", is_bot=False)},
-        )
-
-
-@pytest.mark.parametrize(
-    "second_name",
-    [pytest.param("+second.feature.md", id="named"), pytest.param("43.feature.md", id="numbered")],
-)
-def test_add_pull_request_links_rejects_a_mismatched_author_without_partial_writes(
-    tmp_path: Path, second_name: str
-) -> None:
-    first = tmp_path / "+first.feature.md"
-    first.write_text("Add a feature.\n")
-    second = tmp_path / second_name
-    second.write_text("Fix a bug by [@bob](https://github.com/bob).\n")
-
-    with pytest.raises(ValueError, match="pull request author @alice is missing"):
-        _link(
-            tmp_path,
-            "tox-dev/example",
-            {first.name: "Add release notes (#42)", second.name: "Add release notes (#43)"},
-            {
-                "42": PullRequestAuthor(handle="alice", is_bot=False),
-                "43": PullRequestAuthor(handle="alice", is_bot=False),
-            },
-        )
-
-    assert first.read_text() == "Add a feature.\n"
-    assert second.read_text() == "Fix a bug by [@bob](https://github.com/bob).\n"
-
-
 @pytest.mark.parametrize(
     "case",
     [
@@ -1280,25 +1236,76 @@ def test_add_pull_request_links_rejects_invalid_input(
 
 
 @pytest.mark.parametrize(
-    ("extension", "credit"),
+    ("extension", "credit", "expected"),
     [
-        pytest.param("md", "[@dependabot](https://github.com/dependabot)", id="markdown"),
-        pytest.param("md", "[**@dependabot**](https://github.com/dependabot)", id="markdown-formatted"),
-        pytest.param("rst", ":user:`dependabot`", id="rst"),
-        pytest.param("rst", "**:user:`dependabot`**", id="rst-formatted"),
+        pytest.param(
+            "md",
+            "[@dependabot](https://github.com/dependabot)",
+            "Fix a bug by [@dependabot](https://github.com/dependabot) "
+            "([#42](https://github.com/tox-dev/example/pull/42)).\n",
+            id="markdown",
+        ),
+        pytest.param("rst", "**:user:`dependabot`**", "Fix a bug (:pr:`42`) by **:user:`dependabot`**.\n", id="rst"),
     ],
 )
-def test_add_pull_request_links_rejects_bot_credits(tmp_path: Path, extension: str, credit: str) -> None:
+def test_add_pull_request_links_keeps_hand_written_bot_credit(
+    tmp_path: Path, extension: str, credit: str, expected: str
+) -> None:
     fragment = tmp_path / f"+fix.bugfix.{extension}"
     fragment.write_text(f"Fix a bug by {credit}.\n")
 
-    with pytest.raises(ValueError, match="bot author @dependabot must not be credited"):
-        _link(
-            tmp_path,
-            "tox-dev/example",
-            {fragment.name: "Automate updates (#42)"},
-            {"42": PullRequestAuthor(handle="dependabot", is_bot=True)},
-        )
+    _link(
+        tmp_path,
+        "tox-dev/example",
+        {fragment.name: "Automate updates (#42)"},
+        {"42": PullRequestAuthor(handle="dependabot", is_bot=True)},
+    )
+
+    assert fragment.read_text() == expected
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "expected"),
+    [
+        pytest.param(
+            "+first.feature.md",
+            "Fix it by @bob.\n",
+            "Fix it by @bob ([#42](https://github.com/tox-dev/example/pull/42)).\n",
+            id="markdown-bare-handle",
+        ),
+        pytest.param("+first.feature.rst", "Fix it by @bob.\n", "Fix it (:pr:`42`) by @bob.\n", id="rst-bare-handle"),
+        pytest.param(
+            "+first.feature.rst", "Thanks :user:`bob`.\n", "Thanks :user:`bob` (:pr:`42`).\n", id="rst-user-role"
+        ),
+        pytest.param(
+            "+first.feature.md",
+            "Thanks :user:`bob`.\n",
+            "Thanks :user:`bob` ([#42](https://github.com/tox-dev/example/pull/42)).\n",
+            id="markdown-user-role",
+        ),
+        pytest.param(
+            "43.feature.md",
+            "Fix a bug by [@bob](https://github.com/bob).\n",
+            "Fix a bug by [@bob](https://github.com/bob) ([#42](https://github.com/tox-dev/example/pull/42)).\n",
+            id="numbered-other-author",
+        ),
+        pytest.param(
+            "+first.feature.md",
+            "Add a feature by\n\n@bob.\n",
+            "Add a feature by\n\n@bob ([#42](https://github.com/tox-dev/example/pull/42)).\n",
+            id="markdown-bare-handle-after-paragraph",
+        ),
+    ],
+)
+def test_add_pull_request_links_keeps_other_hand_written_credit(
+    tmp_path: Path, filename: str, content: str, expected: str
+) -> None:
+    fragment = tmp_path / filename
+    fragment.write_text(content)
+
+    _link(tmp_path, "tox-dev/example", {filename: "Add release notes (#42)"})
+
+    assert fragment.read_text() == expected
 
 
 @pytest.mark.parametrize(
@@ -1390,10 +1397,6 @@ def test_add_pull_request_links_detects_wider_attribution(
     [
         pytest.param("+first.feature.md", "Fix #42.\n", "already linked", id="markdown-bare-reference"),
         pytest.param("+first.feature.rst", "Fix #42.\n", "already linked", id="rst-bare-reference"),
-        pytest.param("+first.feature.md", "Fix it by @bob.\n", "@alice is missing", id="markdown-bare-handle"),
-        pytest.param("+first.feature.rst", "Fix it by @bob.\n", "@alice is missing", id="rst-bare-handle"),
-        pytest.param("+first.feature.rst", "Thanks :user:`bob`.\n", "@alice is missing", id="rst-user-role"),
-        pytest.param("+first.feature.md", "Thanks :user:`bob`.\n", "@alice is missing", id="markdown-user-role"),
     ],
 )
 def test_add_pull_request_links_rejects_wider_attribution(
