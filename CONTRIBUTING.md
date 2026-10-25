@@ -15,15 +15,17 @@ For Python support changes, use a `feature` fragment for both additions and drop
 selects a minor release. New releases will not install on a dropped Python version. Users who need that version can
 install an older release. State the exact version change. Reserve `breaking` for changes that require a major release.
 
-Write a complete sentence and credit verified human authors:
+Write a complete sentence with no credit or pull request reference:
 
 ```rst
-Render GitHub notes without wrapped bullets by :user:`gaborbernat`.
+Render GitHub notes without wrapped bullets.
 ```
 
-For multiple authors, join linked handles with `by x, y and z`. Do not credit reviewers or bots. Bot PRs need no
-fragment unless they supply a user-facing change; a bot-only fragment may omit `by`. Apply `skip news` to maintenance
-work. This label may be added after opening the PR, and it does not suppress checks for a supplied fragment.
+`validate-news` rejects a fragment that credits someone (`by @handle`, a `:user:` role) or references a pull request (a
+PR link, `:pr:`, a bare `#123`). After merge, the `fragments` linker adds the PR link and credits the PR author and
+every author and co-author of the merge commit. It drops AI assistant identities and credits bots only when they are the
+only author. Bot PRs need no fragment unless they supply a user-facing change. Apply `skip news` to maintenance work.
+This label may be added after opening the PR, and it does not suppress checks for a supplied fragment.
 
 ## Release process
 

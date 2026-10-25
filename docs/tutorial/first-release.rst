@@ -64,9 +64,9 @@ Add ``changelog.d/+cache.bugfix.md`` to the pull request:
 
     Avoid stale cache reads.
 
-The filename needs no pull request number. The sentence describes the change for users, and the linked handle credits
-its author. Write another fragment if the same pull request also changes another user-visible behavior. Routine
-maintenance needs no fragment.
+The filename needs no pull request number. The sentence describes the change for users and carries no credit or pull
+request reference; ``validate-news`` rejects both, and the linker adds them after merge. Write another fragment if the
+same pull request also changes another user-visible behavior. Routine maintenance needs no fragment.
 
 Squash-merge the pull request as ``Fix stale cache reads (#42)``. On the default branch, link the merged PR before
 Towncrier deletes the fragment:
@@ -76,7 +76,8 @@ Towncrier deletes the fragment:
     uvx --from release-creator release-creator fragments \
       --repository owner/project
 
-The command finds the squash commit, reads the human PR author through the GitHub CLI, and edits the fragment to read:
+The command finds the squash commit, reads the PR author and the merge commit's authors and co-authors through the
+GitHub CLI, and edits the fragment to read:
 
 .. code-block:: markdown
 
@@ -84,8 +85,8 @@ The command finds the squash commit, reads the human PR author through the GitHu
 
 It fails if GitHub cannot associate the introducing commit with one merged PR, the PR author cannot be read, or the
 fragment already has a PR link. In GitHub Actions, give the job ``pull-requests: read`` and set ``GH_TOKEN`` to
-``github.token``. Bot PRs receive no automatic credit. See :doc:`linking named fragments <../how-to/link-fragments>` for
-the required checkout history.
+``github.token``. AI assistant co-authors are dropped, and a bot is credited only when it is the only author. See
+:doc:`linking named fragments <../how-to/link-fragments>` for the required checkout history.
 
 3. Check the version and build the changelog
 ============================================

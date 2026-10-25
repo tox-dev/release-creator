@@ -43,17 +43,19 @@ uvx --from 'release-creator' release-creator notes \
   --artifact-url https://pypi.org/project/example/1.2.3/ > release-notes.md
 ```
 
-The changelog is the source of truth. The command does not infer changes from commits or generate an author list. Add
-verified human credits to changelog entries before release; omit bot credits. The GitHub Release may add a
+The changelog is the source of truth. The command does not infer changes from commits or generate an author list.
+Fragments carry no hand-written credits or PR references; `validate-news` rejects them. The GitHub Release may add a
 `New Contributors` section by passing `--generated-notes` with the body from GitHub's generate-notes API. Human
 first-time contributors remain listed even when their PR did not need a changelog entry. The generated-notes banner and
 other generated sections are discarded.
 
 Named Towncrier fragments need no issue or PR number. Before Towncrier builds the changelog, run
 `release-creator fragments --repository owner/repo`. The command reads the commits that introduced pending fragments,
-asks GitHub which squash-merged pull request owns each commit, and adds its PR link and human author credit. The
-checkout needs complete fragment history, and `gh` needs read access to the repository. Merge commits and rebase merges
-cannot identify a fragment's PR through its introducing commit; use squash merges.
+asks GitHub which squash-merged pull request owns each commit, and adds its PR link and a credit computed from the merge
+commit: the PR author first, then every other author and co-author. AI assistant identities are dropped, and bots are
+credited only when they are the only author. The checkout needs complete fragment history, and `gh` needs read access to
+the repository. Merge commits and rebase merges cannot identify a fragment's PR through its introducing commit; use
+squash merges.
 
 The `tags` command calculates a version from pending fragments, validates numeric tags, and selects the preceding tag
 for GitHub comparisons:

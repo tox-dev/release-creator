@@ -26,9 +26,9 @@ Why fragments come before the changelog
 =======================================
 
 Someone writing a change does not know the pull request number yet. A named fragment lets them describe the user-visible
-result when they write the code. After squash merge, ``fragments`` reads the commit subject and adds the PR link and,
-when enabled, its human author. One pull request may carry several fragments, so each distinct change keeps its own
-entry. Towncrier later collects those entries and removes their fragment files.
+result when they write the code. After squash merge, ``fragments`` reads the commit subject and adds the PR link and the
+credit computed from its merge commit's authors. One pull request may carry several fragments, so each distinct change
+keeps its own entry. Towncrier later collects those entries and removes their fragment files.
 
 Towncrier's template sets the changelog layout and stable anchors. Each project configures its own fragment categories.
 The project owner decides whether a change is user-visible and which category fits it; neither Towncrier nor
@@ -45,6 +45,7 @@ links. It does not build a change list from commit subjects.
 
 GitHub's generated notes can identify first-time contributors. When supplied, ``notes`` keeps human ``New Contributors``
 lines even when their PR did not need a changelog entry. It discards GitHub's generated change list and banner. It does
-not check changelog credits: the fragment linker adds the merged PR author, and ``validate-news`` rejects fragments that
-credit someone by hand. A bot pull request has no news entry unless it supplies a fragment for a user-visible change,
-and the bot is never credited as an author.
+not check changelog credits: the fragment linker credits the merged PR's author and its merge commit's authors and
+co-authors, without AI assistants, and ``validate-news`` rejects fragments that credit someone by hand. A bot pull
+request has no news entry unless it supplies a fragment for a user-visible change, and a bot is credited only when it is
+the only author.
