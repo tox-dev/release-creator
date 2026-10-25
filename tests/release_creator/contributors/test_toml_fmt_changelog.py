@@ -55,13 +55,12 @@ _CHANGELOG: Final = dedent("""\
     """)
 
 
-def test_notes_package_keeps_anchor_after_heading() -> None:
+def test_notes_package_drops_anchor_after_heading() -> None:
     context = ReleaseContext(tag="pyproject-fmt/2.30.3", repository="tox-dev/toml-fmt", package="pyproject-fmt")
 
     body = render_markdown(_CHANGELOG, context)
 
     assert body == (
-        '<a name="release-pyproject-fmt-2-30-3"></a>\n\n'
         '<a name="release-pyproject-fmt-2-30-3-added"></a>\n\n'
         "### Features\n\n"
         "- **Require 3.11 and default to 3.15.** ([#480](https://github.com/tox-dev/toml-fmt/pull/480)) by "

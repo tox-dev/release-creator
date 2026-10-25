@@ -170,7 +170,10 @@ def _extract_body(changelog: str, context: ReleaseContext) -> str:
         )
     ]
     start, end = markdown_section(lines, context.tag, context.package)
-    return _convert_markdown_body(lines[start + 1 : end], "#### " if context.package is not None else "### ")
+    anchor = _own_anchor(context.tag, context.package)
+    return _convert_markdown_body(
+        [line for line in lines[start + 1 : end] if line != anchor], "#### " if context.package is not None else "### "
+    )
 
 
 def markdown_section(lines: list[str], tag: str, package: str | None) -> tuple[int, int]:
@@ -216,8 +219,7 @@ def markdown_section(lines: list[str], tag: str, package: str | None) -> tuple[i
         msg = f"expected one changelog section for {tag}, found {len(headings)}"
         raise ValueError(msg)
     body = next((index for index in range(headings[0] + 1, stop) if lines[index].strip()), stop)
-    prefix = f"{package.replace('.', '-')}-" if package is not None else ""
-    if body < stop and lines[body] == f'<a name="release-{prefix}{version.replace(".", "-")}"></a>':
+    if body < stop and lines[body] == _own_anchor(tag, package):
         body += 1
     end = next(
         (
@@ -233,6 +235,11 @@ def markdown_section(lines: list[str], tag: str, package: str | None) -> tuple[i
         stop,
     )
     return headings[0], end
+
+
+def _own_anchor(tag: str, package: str | None) -> str:
+    prefix = f"{package.replace('.', '-')}-" if package is not None else ""
+    return f'<a name="release-{prefix}{tag.rsplit("/", 1)[-1].removeprefix("v").replace(".", "-")}"></a>'
 
 
 def _is_version_anchor(line: str, package: str | None) -> bool:
