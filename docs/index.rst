@@ -3,7 +3,7 @@
 #################
 
 ``release-creator`` links changelog fragments to squash pull requests, validates release tags, renders GitHub Release
-notes, previews draft news in documentation, and refreshes pre-commit dependency pins.
+notes, and refreshes pre-commit dependency pins.
 Install a published version with ``uvx --from release-creator release-creator``.
 
 Run each command at the stage it serves:
@@ -23,9 +23,6 @@ Run each command at the stage it serves:
     - - :doc:`notes <how-to/render-notes>`
       - After the changelog and tag exist
       - Prints the GitHub Release body from the tagged changelog
-    - - :doc:`changelog <how-to/preview-changelog>`
-      - Before each pull request documentation build
-      - Writes Knope history with pending changesets under Draft
     - - :doc:`marketplace <how-to/check-marketplace>`
       - Before retrying a JetBrains Marketplace plugin upload
       - Compares signed ZIP members with the published version
@@ -51,7 +48,6 @@ The :doc:`changelog <changelog>` includes an ``Unreleased`` section in PR builds
 
     how-to/link-fragments
     how-to/render-notes
-    how-to/preview-changelog
     how-to/check-marketplace
     how-to/select-release-tag
     how-to/update-hooks
