@@ -142,17 +142,6 @@ _RE_MARKDOWN_LINK_DEFINITION: Final = re.compile(
     """,
     re.VERBOSE | re.IGNORECASE,
 )
-_LITERAL_HTML_TAGS: Final = frozenset({
-    "code",
-    "kbd",
-    "pre",
-    "samp",
-    "script",
-    "style",
-    "textarea",
-    "template",
-    "noscript",
-})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -295,7 +284,6 @@ def _shared_credit_group(line: str, first: re.Match[str], second: re.Match[str])
 
 
 def _visible_lines(notes: str, repository: str) -> Iterator[str]:
-    parser = _RawHtmlLinkParser()
     items: list[list[str]] = []
     for token in MarkdownIt().parse(notes):
         if token.type == "list_item_open":
@@ -303,30 +291,22 @@ def _visible_lines(notes: str, repository: str) -> Iterator[str]:
         elif token.type == "list_item_close":
             yield " ".join(items.pop())
         elif token.type == "html_block":
-            parser.feed(token.content)
-            yield from parser.take_text().splitlines()
+            yield from _html_text(token.content).splitlines()
         elif token.type == "inline":
-            line = _visible_inline(token.children or [], parser, repository)
+            line = _visible_inline(token.children or [], repository)
             if items:
                 items[-1].append(line)
             else:
                 yield line
-    parser.close()
-    if parser.in_literal():
-        msg = "unclosed HTML literal element in release notes"
-        raise ValueError(msg)
 
 
-def _visible_inline(children: list[Token], parser: _RawHtmlLinkParser, repository: str) -> str:
+def _visible_inline(children: list[Token], repository: str) -> str:
     parts: list[str] = []
     index = 0
     while index < len(children):
         child = children[index]
         if child.type == "html_inline":
-            parser.feed(child.content)
-            parts.append(parser.take_text())
-        elif parser.in_literal():
-            pass
+            parts.append(_html_text(child.content))
         elif child.type == "link_open":
             end = next(
                 position for position in range(index + 1, len(children)) if children[position].type == "link_close"
@@ -340,6 +320,17 @@ def _visible_inline(children: list[Token], parser: _RawHtmlLinkParser, repositor
             parts.append(" ")
         index += 1
     return "".join(parts)
+
+
+def _html_text(content: str) -> str:
+    # Each HTML token must be complete: a comment left open here hides the Markdown that follows it on GitHub.
+    parser = _RawHtmlParser()
+    parser.feed(content)
+    if parser.rawdata:
+        msg = "incomplete HTML markup in release notes"
+        raise ValueError(msg)
+    parser.close()
+    return parser.text()
 
 
 def _visible_link(label: str, url: str, repository: str) -> str:
@@ -663,49 +654,28 @@ def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
     return "\n".join(body).strip()
 
 
-class _RawHtmlLinkParser(HTMLParser):
+class _RawHtmlParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self._text: list[str] = []
-        self._literal_tags: list[str] = []
 
-    def in_literal(self) -> bool:
-        return bool(self._literal_tags)
-
-    def take_text(self) -> str:
-        content = "".join(self._text)
-        self._text.clear()
-        return content
+    def text(self) -> str:
+        return "".join(self._text)
 
     @override
     def handle_data(self, data: str) -> None:
-        if not self.in_literal():
-            self._text.append(data)
+        self._text.append(data)
 
     @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in _LITERAL_HTML_TAGS:
-            self._literal_tags.append(tag)
-        elif not self.in_literal() and tag == "a" and any(name == "href" for name, _ in attrs):
+        if tag == "a" and any(name == "href" for name, _ in attrs):
             msg = "raw HTML links are unsupported in release notes"
             raise ValueError(msg)
-        elif not self.in_literal() and tag in {"br", "hr"}:
-            self._text.append(" ")
-
-    @override
-    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in _LITERAL_HTML_TAGS:
-            msg = "self-closing HTML literal elements are unsupported in release notes"
+        if tag in {"details", "summary"}:
+            msg = "collapsible HTML sections are unsupported in release notes"
             raise ValueError(msg)
-        super().handle_startendtag(tag, attrs)
-
-    @override
-    def handle_endtag(self, tag: str) -> None:
-        if tag in _LITERAL_HTML_TAGS:
-            if not self._literal_tags or self._literal_tags[-1] != tag:
-                msg = "mismatched HTML literal elements in release notes"
-                raise ValueError(msg)
-            self._literal_tags.pop()
+        if tag in {"br", "hr"}:
+            self._text.append(" ")
 
 
 def _is_comparison_line(line: str) -> bool:

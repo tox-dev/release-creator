@@ -132,6 +132,10 @@ def test_markdown_template_preserves_prose_continuations(tmp_path: Path, source:
             "mismatched HTML literal elements",
             id="crossed-block-tags",
         ),
+        pytest.param("Add support.\n\n<div><!--\n\nby someone\n", "incomplete HTML markup", id="open-comment"),
+        pytest.param("Add support.\n\n<!--\n", "incomplete HTML markup", id="trailing-comment"),
+        pytest.param("Add <details>support</details>.\n", "collapsible HTML sections", id="inline-details"),
+        pytest.param("Add support.\n\n<summary>x</summary>\n", "collapsible HTML sections", id="block-summary"),
     ],
 )
 def test_markdown_template_rejects_malformed_literal_before_build(tmp_path: Path, source: str, error: str) -> None:

@@ -1156,42 +1156,36 @@ def test_render_markdown_matches_author_handle_case_insensitively() -> None:
         pytest.param("noscript", id="noscript"),
     ],
 )
-def test_render_markdown_ignores_hidden_html_credit_and_reference(tag: str) -> None:
-    changelog = (
-        "## 1.2.3 (today)\n\n### Fixed\n\n"
-        f'- Change <{tag} title="x > y">#5 by @mallory</{tag}> and fix (#5) by @alice.\n'
-    )
+@pytest.mark.parametrize(
+    "credit",
+    [
+        pytest.param("#5 by @mallory", id="text"),
+        pytest.param("[#5](https://github.com/tox-dev/example/pull/5) by @mallory", id="markdown-link"),
+    ],
+)
+def test_render_markdown_checks_credit_inside_inline_html(tag: str, credit: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Fixed\n\n- Fix things <{tag}>{credit}</{tag}>.\n"
     generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
 
-    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
-
-    assert result == (
-        "### Bug fixes\n\n"
-        f'- Change <{tag} title="x > y">#5 by @mallory</{tag}> and fix (#5) by @alice.\n\n'
-        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
-    )
+    with pytest.raises(ValueError, match="pull request #5 does not include @alice"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
 
 @pytest.mark.parametrize(
     "tag",
     [
-        pytest.param("code", id="code"),
-        pytest.param("kbd", id="kbd"),
-        pytest.param("pre", id="pre"),
-        pytest.param("samp", id="samp"),
-        pytest.param("script", id="script"),
         pytest.param("style", id="style"),
         pytest.param("textarea", id="textarea"),
-        pytest.param("template", id="template"),
-        pytest.param("noscript", id="noscript"),
+        pytest.param("code", id="code"),
     ],
 )
-def test_render_markdown_rejects_credit_only_inside_html_literal(tag: str) -> None:
-    changelog = f"## 1.2.3 (today)\n\n### Fixed\n\n- Change (#5) <{tag}>by @alice</{tag}>.\n"
+def test_render_markdown_accepts_prose_naming_html_element(tag: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Fixed\n\n- Keep <{tag}> elements (#5) by @alice.\n"
     generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
 
-    with pytest.raises(ValueError, match="pull request #5 does not include @alice"):
-        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert f"- Keep <{tag}> elements (#5) by @alice." in result
 
 
 def test_render_markdown_rejects_credit_only_inside_html_block() -> None:
@@ -1295,36 +1289,50 @@ def test_render_markdown_keeps_distinct_list_items_separate() -> None:
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
 
-def test_render_markdown_rejects_self_closing_literal() -> None:
-    changelog = '## 1.2.3 (today)\n\n### Fixed\n\n- Change (#5) <code title="x > y"/> by @alice.\n'
+@pytest.mark.parametrize(
+    "item",
+    [
+        pytest.param(
+            "- Fix [#5](https://github.com/tox-dev/example/pull/5) by\n\n"
+            "  <div><!--\n\n  @alice,\n\n  <div>--></div>\n\n  @mallory",
+            id="comment-across-blocks",
+        ),
+        pytest.param("- Fix (#5) by @alice.\n  <!--\n  x\n- Other (#6) by @bob.", id="unclosed-comment"),
+        pytest.param("- Fix (#5) by @alice.\n  <div><![CDATA[x", id="unclosed-cdata"),
+        pytest.param("- Fix (#5) by @alice.\n  <style>\n  x", id="unclosed-raw-text"),
+    ],
+)
+def test_render_markdown_rejects_incomplete_html(item: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Fixed\n\n{item}\n"
+
+    with pytest.raises(ValueError, match="incomplete HTML markup in release notes"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+
+def test_render_markdown_hides_complete_html_comment() -> None:
+    changelog = "## 1.2.3 (today)\n\n### Fixed\n\n- Fix (#5) by <!-- @alice, --> @mallory.\n"
     generated = "* Fix by @alice in https://github.com/tox-dev/example/pull/5\n"
 
-    with pytest.raises(ValueError, match="self-closing HTML literal elements are unsupported"):
+    with pytest.raises(ValueError, match="pull request #5 does not include @alice"):
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
 
 @pytest.mark.parametrize(
-    ("item", "error"),
+    "item",
     [
-        pytest.param("- Add support.\n  <pre>hidden", "unclosed HTML literal element", id="unclosed-block"),
         pytest.param(
-            "- Add support.\n  <pre/>",
-            "self-closing HTML literal elements are unsupported",
-            id="self-closing-block",
+            "- Fix ([#5](https://github.com/tox-dev/example/pull/5)) by "
+            "<details>@alice <summary>@mallory</summary></details>",
+            id="inline",
         ),
-        pytest.param("- Add support </kbd>.", "mismatched HTML literal elements", id="unmatched-inline-closing"),
-        pytest.param("- Add support.\n  </kbd>", "mismatched HTML literal elements", id="unmatched-block-closing"),
-        pytest.param(
-            "- Add support.\n  <code><kbd>sample</code></kbd>",
-            "mismatched HTML literal elements",
-            id="crossed-block-tags",
-        ),
+        pytest.param("- Fix (#5) by @alice.\n  <details>\n  notes\n  </details>", id="block"),
+        pytest.param("- Fix (#5) by @alice <summary>x</summary>.", id="summary"),
     ],
 )
-def test_render_markdown_rejects_malformed_literal(item: str, error: str) -> None:
+def test_render_markdown_rejects_collapsible_html(item: str) -> None:
     changelog = f"## 1.2.3 (today)\n\n### Fixed\n\n{item}\n"
 
-    with pytest.raises(ValueError, match=error):
+    with pytest.raises(ValueError, match="collapsible HTML sections are unsupported"):
         render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
 
 
@@ -1365,9 +1373,9 @@ def test_render_markdown_checks_pull_reference_in_html_block() -> None:
         ### Fixed
 
         - Fix the parser.
-          <details>
+          <div>
           #42 by @mallory
-          </details>
+          </div>
         """)
     generated = "* Fix the parser by @alice in https://github.com/tox-dev/example/pull/42\n"
 

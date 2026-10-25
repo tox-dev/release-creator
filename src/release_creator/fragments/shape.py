@@ -24,6 +24,12 @@ _RE_HTML_TAG: Final = re.compile(
     """,
     re.VERBOSE | re.IGNORECASE,
 )
+_RE_COLLAPSIBLE_TAG: Final = re.compile(
+    r"""
+    <\s*(?:details|summary)\b  # Collapsed HTML hides its body on GitHub
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
 
 
 def validate_towncrier_fragment(content: str, fragment: Path) -> None:
@@ -65,7 +71,7 @@ def markdown_visible_children(tokens: list[Token]) -> list[tuple[Token | None, i
     has_inline = False
     for token in tokens:
         if token.type == "html_block":
-            block_parser.feed(token.content)
+            _feed_html_block(block_parser, token.content)
             continue
         if token.type != "inline":
             continue
@@ -74,8 +80,10 @@ def markdown_visible_children(tokens: list[Token]) -> list[tuple[Token | None, i
             visible.append((None, end_line))
         has_inline = True
         for child in token.children or ():
-            if child.type == "html_inline" and _update_literal_stack(child.content, hidden):
-                continue
+            if child.type == "html_inline":
+                _reject_collapsible(child.content)
+                if _update_literal_stack(child.content, hidden):
+                    continue
             if not hidden:
                 visible.append((child, end_line))
     block_parser.close()
@@ -83,6 +91,20 @@ def markdown_visible_children(tokens: list[Token]) -> list[tuple[Token | None, i
         msg = "unclosed HTML literal element in changelog fragment"
         raise ValueError(msg)
     return visible
+
+
+def _feed_html_block(parser: _BlockLiteralParser, content: str) -> None:
+    _reject_collapsible(content)
+    parser.feed(content)
+    if parser.rawdata:
+        msg = "incomplete HTML markup in changelog fragment"
+        raise ValueError(msg)
+
+
+def _reject_collapsible(content: str) -> None:
+    if _RE_COLLAPSIBLE_TAG.search(content) is not None:
+        msg = "collapsible HTML sections are unsupported in changelog fragments"
+        raise ValueError(msg)
 
 
 def _update_literal_stack(content: str, hidden: list[str]) -> bool:
