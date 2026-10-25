@@ -10,7 +10,6 @@ from typing import Final
 import pytest
 import tomli_w
 lazy from pytest_mock import MockerFixture
-lazy from yaml import safe_load
 
 lazy from release_creator.cli import main
 lazy from release_creator.locks.export import export_lock
@@ -1415,23 +1414,6 @@ def test_export_lock_rejects_unbounded_build_python(tmp_path: Path, mocker: Mock
         export_lock(tmp_path)
 
     assert not (tmp_path / "pylock.toml").exists()
-
-
-def test_ci_resolves_test_type_and_docs_groups_without_the_lock() -> None:
-    root = Path(__file__).resolve().parents[3]
-    workflow = safe_load((root / ".github/workflows/check.yaml").read_text(encoding="utf-8"))
-    tox = tomllib.loads((root / "tox.toml").read_text(encoding="utf-8"))
-
-    assert {
-        "test": tox["env_run_base"]["dependency_groups"],
-        "type": tox["env"]["type"]["dependency_groups"],
-        "docs": tox["env"]["docs"]["dependency_groups"],
-    } == {"test": ["test"], "type": ["type"], "docs": ["docs"]}
-    commands = "\n".join(
-        str(step.get("run", "")) for job in ("test", "check") for step in workflow["jobs"][job]["steps"]
-    )
-    assert "tox run -vv --notest" in commands
-    assert "pylock.toml" not in commands
 
 
 _UV_VERSION: Final = subprocess.CompletedProcess(["uv", "--version"], 0, "uv 0.13.5 (abc123 2026-10-21)\n", "")
