@@ -14,9 +14,10 @@ Use ``--next auto`` in a release workflow. ``--directory`` defaults to ``changel
 
     git tag --list | uvx --from release-creator release-creator tags --next auto
 
-An ``*.breaking.md`` fragment requests a major bump. Otherwise, an ``*.feature.md`` fragment requests a minor bump;
-other fragments request a patch bump. If several kinds are present, the largest bump wins. From ``1.2.3``, a feature
-produces ``1.3.0`` and a bug fix alone produces ``1.2.4``. With no numeric tags, a feature produces ``0.1.0``.
+An ``*.breaking.md`` or ``*.removal.md`` fragment requests a major bump, since removing an interface breaks its callers.
+Otherwise, an ``*.feature.md`` fragment requests a minor bump; other fragments request a patch bump. If several kinds
+are present, the largest bump wins. From ``1.2.3``, a feature produces ``1.3.0`` and a bug fix alone produces ``1.2.4``.
+With no numeric tags, a feature produces ``0.1.0``.
 
 For repositories with ``v``-prefixed release tags, add ``--prefix v``. Existing ``v1.2.3`` and ``1.2.3`` tags both count
 when selecting the next version; the option controls the new tag's spelling:

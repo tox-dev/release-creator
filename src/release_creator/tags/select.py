@@ -40,7 +40,7 @@ def next_tag(bump: str, tags: list[str], fragments: list[str], prefix: str = "")
 
 def _auto_bump(fragments: list[str]) -> str:
     categories = {fragment_category(Path(fragment)) for fragment in fragments}
-    return "major" if "breaking" in categories else "minor" if "feature" in categories else "patch"
+    return "major" if categories & {"breaking", "removal"} else "minor" if "feature" in categories else "patch"
 
 
 def _finalizes_prerelease(current: Version, bump: str) -> bool:
