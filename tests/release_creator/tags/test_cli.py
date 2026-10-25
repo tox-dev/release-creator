@@ -81,7 +81,7 @@ def test_tags_next_scopes_package(
     monkeypatch.setattr(
         sys,
         "stdin",
-        StringIO(f"{package}/{latest}\nother-package/99.99.99\n1.0.0\n"),
+        StringIO(f"{package}/{latest}\nother-package/99.99.99\n99.0.0\n"),
     )
 
     main()
@@ -143,7 +143,7 @@ def test_tags_previous_scopes_package(
     monkeypatch.setattr(
         sys,
         "stdin",
-        StringIO("pyproject-fmt/2.30.2\npyproject-fmt/2.30.3\ntox-toml-fmt/99.0.0\n2.30.3\n"),
+        StringIO("pyproject-fmt/2.30.2\npyproject-fmt/2.30.3\ntox-toml-fmt/99.0.0\n2.30.4rc1\n"),
     )
 
     main()
