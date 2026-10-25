@@ -171,6 +171,7 @@ def _config_root(source: str) -> MappingNode:
     if not isinstance(root, MappingNode):
         msg = "pre-commit configuration must be a YAML mapping"
         raise TypeError(msg)
+    _reject_merge_keys(root, "the configuration root")
     _reject_duplicate_keys(root)
     return root
 

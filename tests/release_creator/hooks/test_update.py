@@ -1417,6 +1417,23 @@ def test_rejects_repository_merge_with_hidden_source(tmp_path: Path, upstream_py
     assert config.read_text(encoding="utf-8") == source
 
 
+@pytest.mark.parametrize("check", [pytest.param(True, id="check"), pytest.param(False, id="update")])
+def test_rejects_root_merge_hiding_repositories(tmp_path: Path, mocker: MockerFixture, check: bool) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    source = (
+        f"x-base: &base\n  repos:\n    - repo: https://example.invalid/hook\n      rev: {'0' * 40}\n"
+        "      hooks:\n        - id: x\n<<: *base\n"
+    )
+    config.write_text(source, encoding="utf-8")
+    assert safe_load(source)["repos"][0]["repo"] == "https://example.invalid/hook"
+    run = mocker.patch("release_creator.process.subprocess.run", autospec=True)
+
+    with pytest.raises(ValueError, match="YAML merge keys in the configuration root"):
+        (check_pins if check else update_pins)(config, "7 days", "3.15")
+
+    run.assert_not_called()
+
+
 def test_keeps_flow_dependencies_with_a_trailing_managed_comment(tmp_path: Path, mocker: MockerFixture) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
     config.write_text("additional_dependencies: [packaging==26, click==8] # release-creator managed\n")
