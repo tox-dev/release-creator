@@ -3,8 +3,8 @@
 #################
 
 ``release-creator`` links changelog fragments to squash pull requests, validates release tags, renders GitHub Release
-notes, previews draft news in documentation, and refreshes pre-commit dependency pins. Install a published version with
-``uvx --from release-creator release-creator``.
+notes, and previews draft news in documentation. Install a published version with ``uvx --from release-creator
+release-creator``.
 
 Run each command at the stage it serves:
 
@@ -29,9 +29,6 @@ Run each command at the stage it serves:
     - - :doc:`marketplace <how-to/check-marketplace>`
       - Before retrying a JetBrains Marketplace plugin upload
       - Compares signed ZIP members with the published version
-    - - :doc:`hooks <how-to/update-hooks>`
-      - During the weekly pre-commit update
-      - Updates exact hook dependency pins without rewriting other YAML
 
 Start with the tutorial for a complete release. Use the how-to guides for an existing project. The reference lists flags
 and input formats; the explanation covers the source of each part of a GitHub Release.
@@ -54,7 +51,6 @@ The :doc:`changelog <changelog>` includes an ``Unreleased`` section in PR builds
     how-to/preview-changelog
     how-to/check-marketplace
     how-to/select-release-tag
-    how-to/update-hooks
 
 .. toctree::
     :caption: Reference

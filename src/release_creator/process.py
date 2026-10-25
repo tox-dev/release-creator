@@ -1,6 +1,5 @@
 """Run local tools with captured UTF-8 output."""
 
-lazy import os
 lazy import shlex
 lazy import shutil
 lazy import subprocess  # ruff: ignore[suspicious-subprocess-import]  # Callers pass argument lists without a shell.
@@ -38,19 +37,6 @@ def run_text(
         raise ValueError(msg) from error
 
 
-def isolated_uv_env() -> dict[str, str]:
-    """Copy the environment without uv, pip, or TLS trust overrides, so uv reaches PyPI with the system CA store.
-
-    :returns: Environment for a uv resolver process.
-    """
-    return {
-        name: value
-        for name, value in os.environ.items()
-        if not name.startswith(("UV_", "PIP_"))
-        and name not in {"SSL_CERT_FILE", "SSL_CERT_DIR", "SSL_CLIENT_CERT", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"}
-    }
-
-
 def required_executable(name: str) -> str:
     """Find a command on PATH.
 
@@ -65,7 +51,6 @@ def required_executable(name: str) -> str:
 
 
 __all__ = [
-    "isolated_uv_env",
     "required_executable",
     "run_text",
 ]
