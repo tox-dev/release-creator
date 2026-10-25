@@ -232,7 +232,8 @@ def _python_version(value: Node | str | None, fallback: str, system_version: str
         return fallback
     if value == "python3":
         return system_version
-    version = value.removeprefix("python")
+    # Markers do not distinguish free-threaded builds, so python3.14t resolves like python3.14.
+    version = value.removeprefix("python").removesuffix("t")
     if version == value or not version.startswith("3."):
         msg = f"unsupported Python hook language_version: {value}"
         raise ValueError(msg)

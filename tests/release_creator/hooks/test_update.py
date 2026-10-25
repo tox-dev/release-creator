@@ -1281,6 +1281,7 @@ def test_explicit_python3_uses_runner_version(tmp_path: Path, mocker: MockerFixt
     [
         pytest.param("python3", "3.15", id="interpreter-major"),
         pytest.param("default", "3.15", id="default"),
+        pytest.param("python3.14t", "3.14", id="free-threaded"),
     ],
 )
 def test_resolves_generic_python_hook_version(
