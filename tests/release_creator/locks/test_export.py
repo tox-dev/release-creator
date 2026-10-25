@@ -270,9 +270,7 @@ def test_export_lock_selects_all_workspace_runtime_dependencies(tmp_path: Path, 
             subprocess.CompletedProcess(
                 [],
                 0,
-                _dated(
-                    '[[packages]]\nname = "bare"\nversion = "1.0"\n[[packages]]\nname = "packaging"\nversion = "24.2"\n'
-                ),
+                _dated('[[packages]]\nname = "packaging"\nversion = "24.2"\n'),
                 "",
             ),
         ],
@@ -283,12 +281,92 @@ def test_export_lock_selects_all_workspace_runtime_dependencies(tmp_path: Path, 
     assert [
         (package["name"], package["marker"])
         for package in tomllib.loads((tmp_path / "pylock.toml").read_text())["packages"]
-    ] == [
-        ("bare", '"project-runtime" in dependency_groups'),
-        ("packaging", '"project-runtime" in dependency_groups'),
-    ]
+    ] == [("packaging", '"project-runtime" in dependency_groups')]
     assert {"pip", "compile", "--no-sources"} <= set(run.call_args_list[1].args[0])
-    assert run.call_args_list[1].kwargs["input"] == "bare==1\npackaging==24.2\n"
+    assert run.call_args_list[1].kwargs["input"] == "packaging==24.2\n"
+
+
+@pytest.mark.parametrize(
+    ("extra", "expected"),
+    [
+        pytest.param('["demo[socks]"]', ["idna>=3", "pysocks>=1.7"], id="self-extra"),
+        pytest.param(
+            "[\"demo[socks]; sys_platform == 'linux'\"]",
+            ['idna>=3; sys_platform == "linux"', 'pysocks>=1.7; sys_platform == "linux"'],
+            id="marker",
+        ),
+        pytest.param(
+            "[\"demo[socks]; python_version < '3.16'\"]",
+            ['idna>=3; python_version < "3.16"', 'pysocks>=1.7; sys_platform == "win32" and python_version < "3.16"'],
+            id="combined-marker",
+        ),
+    ],
+)
+def test_export_lock_inlines_self_referencing_extra(
+    tmp_path: Path, mocker: MockerFixture, extra: str, expected: list[str]
+) -> None:
+    socks = "[\"pysocks>=1.7; sys_platform == 'win32'\"]" if "python_version" in extra else '["pysocks>=1.7"]'
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "1"\nrequires-python = ">=3.15"\ndependencies = ["idna>=3"]\n'
+        f"[project.optional-dependencies]\nsocks = {socks}\nall = {extra}\n"
+    )
+    mocker.patch("shutil.which", return_value="uv")
+    selections: list[list[str]] = []
+
+    def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if command[1] == "--version":
+            return _UV_VERSION
+        if command[-1] == "pylock.toml" or "--extra" not in command:
+            return subprocess.CompletedProcess(command, 0, "packages = []\n", "")
+        if command[command.index("--extra") + 1] == "all":
+            selections.append(
+                tomllib.loads(Path(command[3]).read_text(encoding="utf-8"))["project"]["optional-dependencies"]["all"]
+            )
+        return subprocess.CompletedProcess(command, 0, "packages = []\n", "")
+
+    mocker.patch("subprocess.run", autospec=True, side_effect=run)
+
+    export_lock(tmp_path)
+
+    assert selections == [expected]
+
+
+def test_export_lock_inlines_workspace_member_extra(tmp_path: Path, mocker: MockerFixture) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "root"\nversion = "1"\nrequires-python = ">=3.15"\ndependencies = ["common[fast]>=2"]\n'
+        '[tool.uv.workspace]\nmembers = ["common"]\n[tool.uv.sources]\ncommon = { workspace = true }\n'
+    )
+    (tmp_path / "common").mkdir()
+    (tmp_path / "common" / "pyproject.toml").write_text(
+        '[project]\nname = "common"\nversion = "99"\nrequires-python = ">=3.15"\ndependencies = ["root"]\n'
+        '[project.optional-dependencies]\nfast = ["orjson>=3"]\n'
+    )
+    mocker.patch("shutil.which", return_value="uv")
+    run = mocker.patch(
+        "subprocess.run",
+        autospec=True,
+        side_effect=[_UV_VERSION, *[subprocess.CompletedProcess([], 0, "packages = []\n", "")] * 2],
+    )
+
+    export_lock(tmp_path)
+
+    assert run.call_args_list[1].kwargs["input"] == "orjson>=3\n"
+
+
+def test_export_lock_rejects_unknown_workspace_member_extra(tmp_path: Path, mocker: MockerFixture) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "1"\nrequires-python = ">=3.15"\n'
+        '[project.optional-dependencies]\nall = ["demo[missing]"]\n'
+    )
+    mocker.patch("shutil.which", return_value="uv")
+    mocker.patch(
+        "subprocess.run",
+        autospec=True,
+        side_effect=[_UV_VERSION, subprocess.CompletedProcess([], 0, "packages = []\n", "")],
+    )
+
+    with pytest.raises(ValueError, match="workspace member demo has no extra missing"):
+        export_lock(tmp_path)
 
 
 def test_export_lock_keeps_published_self_dependency_in_group(tmp_path: Path, mocker: MockerFixture) -> None:

@@ -91,6 +91,9 @@ The command reads ``pyproject.toml`` and writes ``pylock.toml`` in the current d
 from ``[project].requires-python``. It reserves the ``project-runtime`` group name for the lock's runtime selection. An
 existing ``build`` group is combined with the backend requirements.
 
-At a uv workspace root, the command includes every listed member and combines their groups and extras. Members must
-declare the same ``requires-python`` range; a mismatch fails before writing a lock. The root can omit ``[project]`` when
-its members provide that range.
+At a uv workspace root, the command includes every listed member and combines their groups and extras. A runtime
+dependency or extra that names a workspace member, or the project itself as in ``all = ["demo[socks]"]``, is replaced by
+that member's dependencies and selected extras, because the member is installed from source rather than PyPI. Dependency
+groups keep their PyPI meaning, so a release tool can still depend on the published project. Members must declare the
+same ``requires-python`` range; a mismatch fails before writing a lock. The root can omit ``[project]`` when its members
+provide that range.

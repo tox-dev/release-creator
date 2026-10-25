@@ -14,6 +14,7 @@ lazy from typing import cast
 lazy from urllib.parse import urlsplit
 
 lazy import tomli_w
+lazy from packaging.markers import Marker
 lazy from packaging.requirements import InvalidRequirement, Requirement
 lazy from packaging.specifiers import SpecifierSet
 lazy from packaging.utils import canonicalize_name
@@ -159,11 +160,19 @@ def _resolve_packages(compiler: _Compiler, selections: _Selections) -> list[_Tom
     packages: dict[str, _TomlTable] = {}
     markers: dict[str, set[str]] = defaultdict(set)
     projects = selections.projects
-    runtime = [
-        requirement
+    members = {
+        canonicalize_name(cast("str", _table(item, "project")["name"])): _table(item, "project")
         for _, item in projects
-        for requirement in cast("list[str]", _table(item, "project").get("dependencies", []))
-    ]
+        if "name" in _table(item, "project")
+    }
+    runtime = _inline_members(
+        [
+            requirement
+            for _, item in projects
+            for requirement in cast("list[str]", _table(item, "project").get("dependencies", []))
+        ],
+        members,
+    )
     _add_selection(
         packages,
         markers,
@@ -181,13 +190,16 @@ def _resolve_packages(compiler: _Compiler, selections: _Selections) -> list[_Tom
             "dependency_groups",
         )
     for extra in selections.extras:
-        extra_requirements = [
-            requirement
-            for _, item in projects
-            for requirement in cast(
-                "list[str]", _table(_table(item, "project"), "optional-dependencies").get(extra, [])
-            )
-        ]
+        extra_requirements = _inline_members(
+            [
+                requirement
+                for _, item in projects
+                for requirement in cast(
+                    "list[str]", _table(_table(item, "project"), "optional-dependencies").get(extra, [])
+                )
+            ],
+            members,
+        )
         _add_selection(
             packages,
             markers,
@@ -204,6 +216,46 @@ def _resolve_packages(compiler: _Compiler, selections: _Selections) -> list[_Tom
             "dependency_groups",
         )
     return _package_records(packages, markers)
+
+
+def _inline_members(
+    requirements: list[str], members: dict[str, _TomlTable], expanded: frozenset[tuple[str, str | None]] = frozenset()
+) -> list[str]:
+    # With --no-sources uv would resolve a workspace member, or the project's own extra, from PyPI.
+    inlined: list[str] = []
+    for text in requirements:
+        requirement = Requirement(text)
+        if (name := canonicalize_name(requirement.name)) not in members:
+            inlined.append(text)
+            continue
+        optional = {
+            canonicalize_name(extra): cast("list[str]", dependencies)
+            for extra, dependencies in _table(members[name], "optional-dependencies").items()
+        }
+        parts = {(name, None), *((name, canonicalize_name(extra)) for extra in requirement.extras)}
+        if missing := sorted(extra for _, extra in parts if extra is not None and extra not in optional):
+            msg = f"workspace member {requirement.name} has no extra {missing[0]}"
+            raise ValueError(msg)
+        nested = [
+            dependency
+            for _, extra in sorted(parts - expanded, key=lambda part: part[1] or "")
+            for dependency in (
+                cast("list[str]", members[name].get("dependencies", [])) if extra is None else optional[extra]
+            )
+        ]
+        inlined.extend(
+            _with_marker(dependency, requirement.marker)
+            for dependency in _inline_members(nested, members, expanded | parts)
+        )
+    return list(dict.fromkeys(inlined))
+
+
+def _with_marker(text: str, marker: Marker | None) -> str:
+    if marker is None:
+        return text
+    requirement = Requirement(text)
+    requirement.marker = marker if requirement.marker is None else Marker(f"({requirement.marker}) and ({marker})")
+    return str(requirement)
 
 
 def _restore_exports(
