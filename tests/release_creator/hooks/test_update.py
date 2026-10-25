@@ -172,6 +172,23 @@ def test_resolves_real_universal_closure(
     ]
 
 
+def test_real_uv_accepts_hook_resolution_arguments(tmp_path: Path) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(
+        "repos:\n  - repo: local\n    hooks:\n      - id: lint\n        language: python\n"
+        '        additional_dependencies: ["packaging>=24,<24.3"]\n',
+        encoding="utf-8",
+    )
+
+    update_pins(config, "7 days", "3.15")
+
+    assert safe_load(config.read_text(encoding="utf-8"))["repos"][0]["hooks"][0]["additional_dependencies"] == [
+        "packaging>=24,<24.3",
+        "packaging==24.2",
+    ]
+    check_pins(config, "7 days", "3.15")
+
+
 def test_ignores_ambient_uv_resolution_settings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture
 ) -> None:
