@@ -33,6 +33,14 @@ _RE_USER_ROLE: Final = re.compile(
     """,
     re.VERBOSE | re.IGNORECASE,
 )
+_RE_TRAILING_CREDIT: Final = re.compile(
+    r"""
+    (?:^|\s)by\s+                     # Credit marker at a word boundary
+    (?:\\.|[^\s.!?\\])(?:\\.|[^.!?\\])*  # Credited text; escaped punctuation does not end the sentence
+    [.!?]?$                            # Up to the end of the entry
+    """,
+    re.VERBOSE,
+)
 _RE_RST_INLINE_LITERAL: Final = re.compile(
     r"""
     ``(?P<text>.*?)``  # RST inline literal, including escaped role syntax
@@ -112,6 +120,8 @@ def _link_text(
     credit = _credit_list(target.credits, fragment.suffix)
     if linked:
         before, after = _split_trailing_code(content, fragment.suffix)
+        if _RE_TRAILING_CREDIT.search(before) is not None:
+            return content
         suffix = "" if target.knope else "."
         return f"{before.removesuffix('.')} by {credit}{suffix}{after}"
     return _append_pull_request_link(content, target, credit)

@@ -1589,3 +1589,77 @@ def test_add_pull_request_links_escapes_unlinked_name_in_rst(tmp_path: Path) -> 
     )
 
     assert document.astext() == f"Add a feature (#42) by {_MARKUP_NAME}."
+
+
+@pytest.mark.parametrize(
+    ("filename", "name", "expected"),
+    [
+        pytest.param(
+            "42.feature.md",
+            "Carol",
+            "Fix a bug ([#42](https://github.com/tox-dev/example/pull/42)) by Carol.\n",
+            id="markdown",
+        ),
+        pytest.param("42.feature.rst", "Carol", "Fix a bug (:pr:`42`) by Carol.\n", id="rst"),
+        pytest.param(
+            "42.feature.md",
+            "J. R. Doe!",
+            "Fix a bug ([#42](https://github.com/tox-dev/example/pull/42)) by J\\. R\\. Doe\\!.\n",
+            id="markdown-escaped-punctuation",
+        ),
+        pytest.param("42.feature.rst", "J. R. Doe", "Fix a bug (:pr:`42`) by J\\. R\\. Doe.\n", id="rst-escaped-dot"),
+    ],
+)
+def test_add_pull_request_links_rerun_keeps_unlinked_credit(
+    tmp_path: Path, filename: str, name: str, expected: str
+) -> None:
+    fragment = tmp_path / filename
+    fragment.write_text("Fix a bug.\n")
+    author = PullRequestAuthor(handle="dependabot", is_bot=True)
+    pull = PullRequest(number="42", author=author, credits=(PullRequestCredit(name=name, linked=False),))
+
+    for _ in range(2):
+        add_pull_request_links(tmp_path, "tox-dev/example", {filename: pull})
+
+    assert fragment.read_text() == expected
+
+
+def test_add_pull_request_links_knope_rerun_keeps_unlinked_credit(tmp_path: Path) -> None:
+    fragment = tmp_path / "trust-roots.md"
+    fragment.write_text("---\ndefault: security\n---\n\n# Remove a root\n")
+    author = PullRequestAuthor(handle="dependabot", is_bot=True)
+    pull = PullRequest(number="42", author=author, credits=(PullRequestCredit(name="Carol", linked=False),))
+
+    for _ in range(2):
+        add_pull_request_links(tmp_path, "tox-dev/example", {fragment.name: pull}, mode="knope")
+
+    assert fragment.read_text() == (
+        "---\ndefault: security\n---\n\n# Remove a root ([#42](https://github.com/tox-dev/example/pull/42)) by Carol\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("filename", "expected"),
+    [
+        pytest.param(
+            "+first.feature.md",
+            "Fix a crash caused by stale caches ([#42](https://github.com/tox-dev/example/pull/42)) "
+            "by [@alice](https://github.com/alice).\n",
+            id="markdown",
+        ),
+        pytest.param(
+            "+first.feature.rst",
+            "Fix a crash caused by stale caches (:pr:`42`) by :user:`alice`.\n",
+            id="rst",
+        ),
+    ],
+)
+def test_add_pull_request_links_credits_unlinked_fragment_ending_in_by_prose(
+    tmp_path: Path, filename: str, expected: str
+) -> None:
+    fragment = tmp_path / filename
+    fragment.write_text("Fix a crash caused by stale caches.\n")
+
+    _link(tmp_path, "tox-dev/example", {filename: "Add release notes (#42)"})
+
+    assert fragment.read_text() == expected
