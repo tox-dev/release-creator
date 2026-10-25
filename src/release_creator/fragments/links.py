@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 lazy import re
+lazy from collections.abc import Iterator
 lazy from dataclasses import dataclass
 lazy from pathlib import Path
 lazy from typing import Final, Literal
@@ -139,9 +140,36 @@ def _link_text(
     return _append_pull_request_link(content, target, handle)
 
 
+def has_hand_written_credit(content: str, extension: str) -> bool:
+    """Detect an author credit the way the linker does before it adds one.
+
+    :param content: Fragment text.
+    :param extension: Fragment suffix, ``.md`` or ``.rst``.
+    :returns: Whether the visible prose already credits an author.
+    """
+    return _RE_AUTHOR_MARKER.search(_credit_prose(content, extension)) is not None
+
+
+def has_hand_written_pull_request_link(content: str, extension: str) -> bool:
+    """Detect a pull request link the way the linker does before it adds one.
+
+    :param content: Fragment text.
+    :param extension: Fragment suffix, ``.md`` or ``.rst``.
+    :returns: Whether the visible prose links any pull request.
+    """
+    return any(_pull_request_links(content, extension))
+
+
 def _has_pull_request_link(content: str, repository: str, number: str, extension: str) -> bool:
     return any(
         (match["repository"] == repository and match["number"] == number) or match["rst_number"] == number
+        for match in _pull_request_links(content, extension)
+    )
+
+
+def _pull_request_links(content: str, extension: str) -> Iterator[re.Match[str]]:
+    return (
+        match
         for text in (_markdown_prose(content) if extension == ".md" else _rst_prose(content))
         for match in re.finditer(
             r"""
@@ -404,4 +432,6 @@ def _pull_request_url(repository: str, number: str) -> str:
 
 __all__ = [
     "add_pull_request_links",
+    "has_hand_written_credit",
+    "has_hand_written_pull_request_link",
 ]

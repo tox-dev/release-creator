@@ -141,6 +141,68 @@ def test_changed_fragments_rejects_rst_structure(news_repository: Path, content:
     assert fragment.read_text() == content
 
 
+@pytest.mark.parametrize(
+    ("suffix", "content", "error"),
+    [
+        pytest.param(
+            ".md", "Add a feature by [@alice](https://github.com/alice).\n", "author credit", id="markdown-credit"
+        ),
+        pytest.param(
+            ".md",
+            "Add a feature by **[@alice](https://github.com/alice)**.\n",
+            "author credit",
+            id="markdown-emphasized-credit",
+        ),
+        pytest.param(
+            ".md",
+            "Add a feature ([#5](https://github.com/tox-dev/example/pull/5)).\n",
+            "pull request link",
+            id="markdown-pull-link",
+        ),
+        pytest.param(
+            ".md",
+            "Add a feature, see https://github.com/other/example/pull/5.\n",
+            "pull request link",
+            id="markdown-pull-url",
+        ),
+        pytest.param(".md", "Add a feature :pr:`5`.\n", "pull request link", id="markdown-pr-role"),
+        pytest.param(".md", "Add `by [@alice](https://github.com/alice)` syntax.\n", "", id="markdown-code-credit"),
+        pytest.param(".md", "Fix [#5](https://github.com/tox-dev/example/issues/5).\n", "", id="markdown-issue-link"),
+        pytest.param(".rst", "Add a feature by :user:`alice`.\n", "author credit", id="rst-user-role"),
+        pytest.param(
+            ".rst",
+            "Add a feature by `@alice <https://github.com/alice>`_.\n",
+            "author credit",
+            id="rst-profile-link",
+        ),
+        pytest.param(".rst", "Add a feature :pr:`5`.\n", "pull request link", id="rst-pr-role"),
+        pytest.param(".rst", "Add a feature :pull:`5`.\n", "pull request link", id="rst-pull-role"),
+        pytest.param(
+            ".rst",
+            "Add a feature, see https://github.com/tox-dev/example/pull/5.\n",
+            "pull request link",
+            id="rst-pull-url",
+        ),
+        pytest.param(".rst", "Document ``by :user:`alice` and :pr:`5``` roles.\n", "", id="rst-literal"),
+        pytest.param(".rst", "Fix :issue:`5`.\n", "", id="rst-issue-role"),
+    ],
+)
+def test_changed_fragments_rejects_hand_written_attribution(
+    news_repository: Path, suffix: str, content: str, error: str
+) -> None:
+    config = news_repository / "pyproject.toml"
+    config.write_text(config.read_text().replace("CHANGELOG.md", f"CHANGELOG{suffix}"), encoding="utf-8")
+    (news_repository / f"changelog.d/+topic.feature{suffix}").write_text(content, encoding="utf-8")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+
+    if error:
+        with pytest.raises(ValueError, match=f"hand-written {error} in changelog fragment"):
+            changed_fragments(config, "main")
+    else:
+        assert changed_fragments(config, "main") == 1
+
+
 def test_changed_fragments_ignores_towncrier_template(news_repository: Path) -> None:
     config = news_repository / "pyproject.toml"
     config.write_text(config.read_text() + 'template = "changelog.d/template.jinja2"\n')

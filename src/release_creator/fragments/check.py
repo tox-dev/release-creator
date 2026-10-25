@@ -8,6 +8,7 @@ lazy from pathlib import Path
 lazy import yaml
 
 lazy from release_creator.fragments.knope import changeset_parts, knope_kinds, load_knope_package
+lazy from release_creator.fragments.links import has_hand_written_credit, has_hand_written_pull_request_link
 lazy from release_creator.fragments.names import fragment_category
 lazy from release_creator.fragments.shape import validate_towncrier_fragment
 lazy from release_creator.process import required_executable, run_text
@@ -70,6 +71,12 @@ def _validate_changed_fragment(
         msg = f"empty changelog fragment: {path}"
         raise ValueError(msg)
     validate_towncrier_fragment(content, path)
+    if has_hand_written_credit(content, suffix):
+        msg = f"hand-written author credit in changelog fragment; the fragments linker adds it: {path}"
+        raise ValueError(msg)
+    if has_hand_written_pull_request_link(content, suffix):
+        msg = f"hand-written pull request link in changelog fragment; the fragments linker adds it: {path}"
+        raise ValueError(msg)
     return 1
 
 
