@@ -167,7 +167,23 @@ def test_changed_fragments_rejects_rst_structure(news_repository: Path, content:
         ),
         pytest.param(".md", "Add a feature :pr:`5`.\n", "pull request link", id="markdown-pr-role"),
         pytest.param(".md", "Add `by [@alice](https://github.com/alice)` syntax.\n", "", id="markdown-code-credit"),
-        pytest.param(".md", "Fix [#5](https://github.com/tox-dev/example/issues/5).\n", "", id="markdown-issue-link"),
+        pytest.param(
+            ".md",
+            "Fix [#5](https://github.com/tox-dev/example/issues/5).\n",
+            "pull request link",
+            id="markdown-issue-link-label",
+        ),
+        pytest.param(
+            ".md", "Fix [the issue](https://github.com/tox-dev/example/issues/5).\n", "", id="markdown-issue-link"
+        ),
+        pytest.param(".md", "Add a feature by @alice.\n", "author credit", id="markdown-bare-handle"),
+        pytest.param(".md", "Add a feature by :user:`alice`.\n", "author credit", id="markdown-user-role"),
+        pytest.param(".md", "Add a feature for :user:`alice`.\n", "author credit", id="markdown-user-role-anywhere"),
+        pytest.param(".md", "Add a feature `:user:` `alice`.\n", "", id="markdown-user-role-in-code"),
+        pytest.param(".md", "Fix #5.\n", "pull request link", id="markdown-bare-reference"),
+        pytest.param(".md", "Fix `#5`.\n", "", id="markdown-bare-reference-in-code"),
+        pytest.param(".md", "Fix issue#5 and #a5.\n", "", id="markdown-not-bare-reference"),
+        pytest.param(".md", "Fix it.\n\n```\nby @alice #5\n```\n", "", id="markdown-fence"),
         pytest.param(".rst", "Add a feature by :user:`alice`.\n", "author credit", id="rst-user-role"),
         pytest.param(
             ".rst",
@@ -185,6 +201,11 @@ def test_changed_fragments_rejects_rst_structure(news_repository: Path, content:
         ),
         pytest.param(".rst", "Document ``by :user:`alice` and :pr:`5``` roles.\n", "", id="rst-literal"),
         pytest.param(".rst", "Fix :issue:`5`.\n", "", id="rst-issue-role"),
+        pytest.param(".rst", "Add a feature by @alice.\n", "author credit", id="rst-bare-handle"),
+        pytest.param(".rst", "Thanks :user:`alice` for the feature.\n", "author credit", id="rst-user-role-anywhere"),
+        pytest.param(".rst", "Fix #5.\n", "pull request link", id="rst-bare-reference"),
+        pytest.param(".rst", "Fix ``#5`` and ``by @alice``.\n", "", id="rst-bare-forms-in-literal"),
+        pytest.param(".rst", "Fix it::\n\n    by @alice :user:`alice` #5\n", "", id="rst-literal-block"),
     ],
 )
 def test_changed_fragments_rejects_hand_written_attribution(

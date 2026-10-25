@@ -991,15 +991,8 @@ def test_add_pull_request_links_accepts_balanced_nested_html_literals(tmp_path: 
     )
 
 
-@pytest.mark.parametrize(
-    "anchor",
-    [
-        pytest.param('<a href="https://github.com/tox-dev/example/pull/42">#42</a>', id="labeled"),
-        pytest.param('<a href="https://github.com/tox-dev/example/pull/42"></a>', id="empty"),
-        pytest.param('<a href="https://github.com/tox-dev/example/pull/42" style="display:none">#42</a>', id="hidden"),
-    ],
-)
-def test_add_pull_request_links_adds_visible_link_beside_html_anchor(tmp_path: Path, anchor: str) -> None:
+def test_add_pull_request_links_adds_visible_link_beside_empty_html_anchor(tmp_path: Path) -> None:
+    anchor = '<a href="https://github.com/tox-dev/example/pull/42"></a>'
     fragment = tmp_path / "42.feature.md"
     fragment.write_text(f"Add parser ({anchor}).\n")
 
@@ -1009,6 +1002,22 @@ def test_add_pull_request_links_adds_visible_link_beside_html_anchor(tmp_path: P
         f"Add parser ({anchor}) ([#42](https://github.com/tox-dev/example/pull/42)) "
         "by [@alice](https://github.com/alice).\n"
     )
+
+
+@pytest.mark.parametrize(
+    "anchor",
+    [
+        pytest.param('<a href="https://github.com/tox-dev/example/pull/42">#42</a>', id="labeled"),
+        pytest.param('<a href="https://github.com/tox-dev/example/pull/42" style="display:none">#42</a>', id="hidden"),
+    ],
+)
+def test_add_pull_request_links_treats_html_anchor_label_as_bare_reference(tmp_path: Path, anchor: str) -> None:
+    fragment = tmp_path / "42.feature.md"
+    fragment.write_text(f"Add parser ({anchor}).\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+
+    assert fragment.read_text() == f"Add parser ({anchor}) by [@alice](https://github.com/alice).\n"
 
 
 def test_add_pull_request_links_rejects_unmatched_html_close(tmp_path: Path) -> None:
@@ -1286,3 +1295,150 @@ def test_add_pull_request_links_rejects_bot_credits(tmp_path: Path, extension: s
             {fragment.name: "Automate updates (#42)"},
             {"42": PullRequestAuthor(handle="dependabot", is_bot=True)},
         )
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "expected"),
+    [
+        pytest.param(
+            "+first.feature.md",
+            "Add a feature by @alice.\n",
+            "Add a feature by @alice ([#42](https://github.com/tox-dev/example/pull/42)).\n",
+            id="markdown-bare-handle",
+        ),
+        pytest.param(
+            "+first.feature.rst",
+            "Add a feature by @alice.\n",
+            "Add a feature (:pr:`42`) by @alice.\n",
+            id="rst-bare-handle",
+        ),
+        pytest.param(
+            "+first.feature.md",
+            "Add a feature by :user:`alice`.\n",
+            "Add a feature by :user:`alice` ([#42](https://github.com/tox-dev/example/pull/42)).\n",
+            id="markdown-user-role",
+        ),
+        pytest.param(
+            "+first.feature.md",
+            "Thanks :user:`alice` for the feature.\n",
+            "Thanks :user:`alice` for the feature ([#42](https://github.com/tox-dev/example/pull/42)).\n",
+            id="markdown-user-role-anywhere",
+        ),
+        pytest.param(
+            "+first.feature.rst",
+            "Thanks :user:`alice` for the feature.\n",
+            "Thanks :user:`alice` for the feature (:pr:`42`).\n",
+            id="rst-user-role-anywhere",
+        ),
+        pytest.param(
+            "42.feature.rst",
+            "Thanks :user:`alice` for the feature (:pr:`42`).\n",
+            "Thanks :user:`alice` for the feature (:pr:`42`).\n",
+            id="rst-user-role-anywhere-linked",
+        ),
+        pytest.param(
+            "42.feature.md",
+            "Fix #42.\n",
+            "Fix #42 by [@alice](https://github.com/alice).\n",
+            id="markdown-bare-reference",
+        ),
+        pytest.param(
+            "42.feature.rst",
+            "Fix #42.\n",
+            "Fix #42 by :user:`alice`.\n",
+            id="rst-bare-reference",
+        ),
+        pytest.param(
+            "+first.feature.md",
+            "Fix a regression from #41.\n",
+            "Fix a regression from #41 ([#42](https://github.com/tox-dev/example/pull/42)) "
+            "by [@alice](https://github.com/alice).\n",
+            id="markdown-other-bare-reference",
+        ),
+        pytest.param(
+            "+first.feature.md",
+            "Document `by @bob`, `:user:` `bob` and `#42`.\n",
+            "Document `by @bob`, `:user:` `bob` and `#42` ([#42](https://github.com/tox-dev/example/pull/42)) "
+            "by [@alice](https://github.com/alice).\n",
+            id="markdown-code",
+        ),
+        pytest.param(
+            "+first.feature.rst",
+            "Document ``by @bob``, ``:user:`bob``` and ``#42``.\n",
+            "Document ``by @bob``, ``:user:`bob``` and ``#42`` (:pr:`42`) by :user:`alice`.\n",
+            id="rst-literal",
+        ),
+    ],
+)
+def test_add_pull_request_links_detects_wider_attribution(
+    tmp_path: Path, filename: str, content: str, expected: str
+) -> None:
+    fragment = tmp_path / filename
+    fragment.write_text(content)
+
+    _link(tmp_path, "tox-dev/example", {filename: "Add release notes (#42)"})
+
+    assert fragment.read_text() == expected
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "message"),
+    [
+        pytest.param("+first.feature.md", "Fix #42.\n", "already linked", id="markdown-bare-reference"),
+        pytest.param("+first.feature.rst", "Fix #42.\n", "already linked", id="rst-bare-reference"),
+        pytest.param("+first.feature.md", "Fix it by @bob.\n", "@alice is missing", id="markdown-bare-handle"),
+        pytest.param("+first.feature.rst", "Fix it by @bob.\n", "@alice is missing", id="rst-bare-handle"),
+        pytest.param("+first.feature.rst", "Thanks :user:`bob`.\n", "@alice is missing", id="rst-user-role"),
+        pytest.param("+first.feature.md", "Thanks :user:`bob`.\n", "@alice is missing", id="markdown-user-role"),
+    ],
+)
+def test_add_pull_request_links_rejects_wider_attribution(
+    tmp_path: Path, filename: str, content: str, message: str
+) -> None:
+    fragment = tmp_path / filename
+    fragment.write_text(content)
+
+    with pytest.raises(ValueError, match=message):
+        _link(tmp_path, "tox-dev/example", {filename: "Add release notes (#42)"})
+
+    assert fragment.read_text() == content
+
+
+@pytest.mark.parametrize(
+    ("heading", "expected"),
+    [
+        pytest.param(
+            "Remove a root by @alice",
+            "Remove a root by @alice ([#42](https://github.com/tox-dev/example/pull/42))",
+            id="bare-handle",
+        ),
+        pytest.param(
+            "Remove a root for :user:`alice`",
+            "Remove a root for :user:`alice` ([#42](https://github.com/tox-dev/example/pull/42))",
+            id="user-role",
+        ),
+        pytest.param(
+            "Remove a root from #41",
+            "Remove a root from #41 ([#42](https://github.com/tox-dev/example/pull/42)) "
+            "by [@alice](https://github.com/alice)",
+            id="other-bare-reference",
+        ),
+    ],
+)
+def test_add_pull_request_links_knope_detects_wider_attribution(tmp_path: Path, heading: str, expected: str) -> None:
+    fragment = tmp_path / "trust-roots.md"
+    fragment.write_text(f"---\ndefault: security\n---\n\n# {heading}\n")
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Patch trust roots (#42)"}, mode="knope")
+
+    assert fragment.read_text() == f"---\ndefault: security\n---\n\n# {expected}\n"
+
+
+def test_add_pull_request_links_knope_keeps_bare_reference(tmp_path: Path) -> None:
+    fragment = tmp_path / "trust-roots.md"
+    content = "---\ndefault: security\n---\n\n# Remove a root (#42) by @alice\n"
+    fragment.write_text(content)
+
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Patch trust roots (#42)"}, mode="knope")
+
+    assert fragment.read_text() == content

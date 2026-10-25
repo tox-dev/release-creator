@@ -22,7 +22,19 @@ _RE_AUTHOR_MARKER: Final = re.compile(
     r"""
     (?:,?\s+)                     # Optional comma and whitespace before the credit
     by\s+                         # Credit marker and following whitespace
-    (?=(?:\*{1,2})?(?:\[@|:user:`|`@))  # Supported author syntax, optionally emphasized in RST
+    (?=(?:\*{1,2})?(?:\[@|:user:`|`@|@[A-Za-z0-9-]))  # Supported author syntax, optionally emphasized in RST
+    """,
+    re.VERBOSE,
+)
+_RE_USER_ROLE: Final = re.compile(
+    r"""
+    :user:`(?P<handle>[A-Za-z0-9-]+)`  # GitHub user role, with or without a credit marker
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+_RE_BARE_HANDLE: Final = re.compile(
+    r"""
+    @(?P<handle>[A-Za-z0-9-]+)  # Bare GitHub handle after a credit marker
     """,
     re.VERBOSE,
 )
@@ -108,28 +120,9 @@ def _link_text(
         msg = f"pull request already linked in {fragment}"
         raise ValueError(msg)
     credit_prose = _credit_prose(content, fragment.suffix)
-    if (match := _RE_AUTHOR_MARKER.search(credit_prose)) is not None:
-        handles = {handle.casefold() for handle in _credited_handles(credit_prose[match.end() :], fragment.suffix)}
-        handle = target.author.handle.casefold()
-        if target.author.handle == "ghost":
-            msg = f"cannot verify explicit credit for deleted pull request author in {fragment}"
-            raise ValueError(msg)
-        if target.author.is_bot and handle in handles:
-            msg = f"bot author @{target.author.handle} must not be credited in {fragment}"
-            raise ValueError(msg)
-        if not target.author.is_bot and handle not in handles:
-            msg = f"pull request author @{target.author.handle} is missing from the explicit credit in {fragment}"
-            raise ValueError(msg)
-        if linked:
-            return content
-        if fragment.suffix == ".md":
-            return _append_pull_request_link(
-                content, target, None, anchor=_markdown_credit_anchor(content, target.author.handle)
-            )
-        return (
-            f"{content[: match.start()]} {_pull_request_link(target.repository, target.number, fragment.suffix)} "
-            f"by {content[match.end() :]}"
-        )
+    match = _RE_AUTHOR_MARKER.search(credit_prose)
+    if match is not None or _RE_USER_ROLE.search(credit_prose) is not None:
+        return _keep_explicit_credit(content, target, credit_prose, match, linked=linked)
     handle = target.author.handle if not target.author.is_bot else None
     if linked:
         before, after = _split_trailing_code(content, fragment.suffix)
@@ -140,6 +133,42 @@ def _link_text(
     return _append_pull_request_link(content, target, handle)
 
 
+def _keep_explicit_credit(
+    content: str, target: _LinkTarget, credit_prose: str, match: re.Match[str] | None, *, linked: bool
+) -> str:
+    fragment = target.fragment
+    handles = {
+        handle.casefold()
+        for handle in (
+            _credited_handles(credit_prose[match.end() :], fragment.suffix)
+            if match is not None
+            else {role["handle"] for role in _RE_USER_ROLE.finditer(credit_prose)}
+        )
+    }
+    handle = target.author.handle.casefold()
+    if target.author.handle == "ghost":
+        msg = f"cannot verify explicit credit for deleted pull request author in {fragment}"
+        raise ValueError(msg)
+    if target.author.is_bot and handle in handles:
+        msg = f"bot author @{target.author.handle} must not be credited in {fragment}"
+        raise ValueError(msg)
+    if not target.author.is_bot and handle not in handles:
+        msg = f"pull request author @{target.author.handle} is missing from the explicit credit in {fragment}"
+        raise ValueError(msg)
+    if linked:
+        return content
+    if match is None:
+        return _append_pull_request_link(content, target, None)
+    if fragment.suffix == ".md":
+        return _append_pull_request_link(
+            content, target, None, anchor=_markdown_credit_anchor(content, target.author.handle)
+        )
+    return (
+        f"{content[: match.start()]} {_pull_request_link(target.repository, target.number, fragment.suffix)} "
+        f"by {content[match.end() :]}"
+    )
+
+
 def has_hand_written_credit(content: str, extension: str) -> bool:
     """Detect an author credit the way the linker does before it adds one.
 
@@ -147,7 +176,8 @@ def has_hand_written_credit(content: str, extension: str) -> bool:
     :param extension: Fragment suffix, ``.md`` or ``.rst``.
     :returns: Whether the visible prose already credits an author.
     """
-    return _RE_AUTHOR_MARKER.search(_credit_prose(content, extension)) is not None
+    prose = _credit_prose(content, extension)
+    return _RE_AUTHOR_MARKER.search(prose) is not None or _RE_USER_ROLE.search(prose) is not None
 
 
 def has_hand_written_pull_request_link(content: str, extension: str) -> bool:
@@ -162,7 +192,8 @@ def has_hand_written_pull_request_link(content: str, extension: str) -> bool:
 
 def _has_pull_request_link(content: str, repository: str, number: str, extension: str) -> bool:
     return any(
-        (match["repository"] == repository and match["number"] == number) or match["rst_number"] == number
+        (match["repository"] == repository and match["number"] == number)
+        or number in {match["rst_number"], match["bare_number"]}
         for match in _pull_request_links(content, extension)
     )
 
@@ -176,6 +207,8 @@ def _pull_request_links(content: str, extension: str) -> Iterator[re.Match[str]]
             https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/(?P<number>\d+)  # Markdown PR link
             |                                                                                       # Or
             :(?:pr|pull):`(?P<rst_number>\d+)`                                                     # RST PR role
+            |                                                                                       # Or
+            \B\#(?P<bare_number>\d+)\b                                                             # Bare reference
             """,
             text,
             flags=re.VERBOSE,
@@ -297,6 +330,8 @@ def _markdown_credit_children(children: list[Token]) -> str:
             )
         elif link_destination is not None and child.type not in {"em_open", "em_close", "strong_open", "strong_close"}:
             link_plain = False
+        elif child.type == "code_inline" and prose and prose[-1].endswith(":user:"):
+            prose.append(f"`{child.content}`")
         elif child.type in {"softbreak", "hardbreak"} or (
             child.type == "html_inline"
             and re.fullmatch(
@@ -407,8 +442,10 @@ def _credited_handles(credit_text: str, extension: str) -> set[str]:
     pattern = _RE_RST_USER if extension == ".rst" else MARKDOWN_AUTHOR
     remaining = credit_text.lstrip().lstrip("*") if extension == ".rst" else credit_text.lstrip()
     handles: set[str] = set()
-    while (author := pattern.match(remaining)) is not None:
-        handles.add(author["handle"] or author["link_handle"] if extension == ".rst" else author["handle"])
+    while (
+        author := pattern.match(remaining) or _RE_USER_ROLE.match(remaining) or _RE_BARE_HANDLE.match(remaining)
+    ) is not None:
+        handles.add(next(handle for handle in author.groupdict().values() if handle))
         remaining = remaining[author.end() :]
         if extension == ".rst":
             remaining = remaining.lstrip("*")
