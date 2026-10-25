@@ -705,8 +705,9 @@ def test_adds_hook_dependencies_after_block_scalar(
     assert config.read_text(encoding="utf-8") == first
 
 
-def test_preserves_system_hook_dependencies(
-    tmp_path: Path, mocker: MockerFixture, upstream_python_hook: tuple[Path, str]
+@pytest.mark.parametrize("check", [pytest.param(True, id="check"), pytest.param(False, id="update")])
+def test_rejects_dependencies_on_manifest_system_hook(
+    tmp_path: Path, upstream_python_hook: tuple[Path, str], check: bool
 ) -> None:
     upstream, _ = upstream_python_hook
     (upstream / ".pre-commit-hooks.yaml").write_text(
@@ -735,15 +736,15 @@ def test_preserves_system_hook_dependencies(
         '        additional_dependencies:\n          - "click==8" # release-creator managed\n'
     )
     config.write_text(source, encoding="utf-8")
-    command = mocker.spy(process.subprocess, "run")
 
-    update_pins(config, "7 days", "3.15")
+    with pytest.raises(ValueError, match="only supported for Python hooks: lint uses system"):
+        (check_pins if check else update_pins)(config, "7 days", "3.15")
 
     assert config.read_text(encoding="utf-8") == source
-    assert all(call.args[0][0] != "uv" for call in command.call_args_list)
 
 
-def test_ignores_non_python_hook_dependencies(tmp_path: Path) -> None:
+@pytest.mark.parametrize("check", [pytest.param(True, id="check"), pytest.param(False, id="update")])
+def test_rejects_dependencies_on_configured_node_hook(tmp_path: Path, check: bool) -> None:
     config = tmp_path / ".pre-commit-config.yaml"
     source = (
         "repos:\n  - repo: local\n    hooks:\n      - id: xml\n"
@@ -751,7 +752,8 @@ def test_ignores_non_python_hook_dependencies(tmp_path: Path) -> None:
     )
     config.write_text(source, encoding="utf-8")
 
-    update_pins(config, "7 days", "3.15")
+    with pytest.raises(ValueError, match="only supported for Python hooks: xml uses node"):
+        (check_pins if check else update_pins)(config, "7 days", "3.15")
 
     assert config.read_text(encoding="utf-8") == source
 

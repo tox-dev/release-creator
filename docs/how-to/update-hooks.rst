@@ -20,7 +20,9 @@ removing a pin that is still needed fails the check. The same PyPI-only resoluti
 The command checks out each external hook repository at its frozen commit and reads ``.pre-commit-hooks.yaml``. For
 selected Python hooks, it resolves the repository package with all ``additional_dependencies`` and adds the pinned
 closure to that hook's ``additional_dependencies``. It also resolves dependencies in local hooks. Conditional
-dependencies remain conditional, so a Windows-only package does not install on Linux. Non-Python hooks are unchanged.
+dependencies remain conditional, so a Windows-only package does not install on Linux. A hook whose language is not
+Python, in the configuration or in the hook repository's manifest, cannot declare ``additional_dependencies``, because
+nothing would pin or cool them.
 
 Generated pins have a ``# release-creator managed`` marker. The next update replaces them. Direct pins retain their
 comments and version ranges; ranges and unpinned requirements gain a separate exact pin. A flow-style list becomes a

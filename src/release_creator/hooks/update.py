@@ -320,7 +320,8 @@ def _hook_packages(
         )
         languages = {identifier: entry["language"] for identifier, entry in manifest.items()}
         for hook in hooks.value:
-            if _hook_language(hook, languages, require_id=checkout is not None) not in {None, "python"}:
+            if (language := _hook_language(hook, languages, require_id=checkout is not None)) not in {None, "python"}:
+                _reject_non_python_dependencies(cast("MappingNode", hook), cast("str", language))
                 continue
             hook = cast("MappingNode", hook)
             identifier = _mapping_value(hook, "id")
@@ -347,6 +348,15 @@ def _hook_packages(
                     _manifest_dependencies(manifest.get(cast("ScalarNode", identifier).value, {})),
                 ))
     return packages, missing, python_groups
+
+
+def _reject_non_python_dependencies(hook: MappingNode, language: str) -> None:
+    # Only Python dependencies get cooled exact pins; others would install whatever is newest.
+    if _mapping_key(hook, "additional_dependencies") is not None:
+        identifier = _mapping_value(hook, "id")
+        hook_id = identifier.value if isinstance(identifier, ScalarNode) else "unknown"
+        msg = f"additional_dependencies are only supported for Python hooks: {hook_id} uses {language}"
+        raise ValueError(msg)
 
 
 def _manifest_dependencies(entry: dict[str, object]) -> list[Requirement]:
