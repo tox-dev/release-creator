@@ -179,7 +179,8 @@ def markdown_section(lines: list[str], tag: str, package: str | None) -> tuple[i
     :param lines: Markdown changelog lines.
     :param tag: Release tag or version; a package prefix and a leading ``v`` are ignored.
     :param package: Package whose ``## <package>`` section holds ``### <version>`` headings.
-    :returns: Index of the version heading and the index just past the section's last line.
+    :returns: Index of the version heading and the index just past the section's last line. A version anchor directly
+        after its own heading belongs to the section; the next version heading or anchor ends it.
     :raises ValueError: The package or version section is missing or ambiguous.
     """
     heading_level = "###" if package is not None else "##"
@@ -214,10 +215,14 @@ def markdown_section(lines: list[str], tag: str, package: str | None) -> tuple[i
     if len(headings) != 1:
         msg = f"expected one changelog section for {tag}, found {len(headings)}"
         raise ValueError(msg)
+    body = next((index for index in range(headings[0] + 1, stop) if lines[index].strip()), stop)
+    prefix = f"{package.replace('.', '-')}-" if package is not None else ""
+    if body < stop and lines[body] == f'<a name="release-{prefix}{version.replace(".", "-")}"></a>':
+        body += 1
     end = next(
         (
             index
-            for index in range(headings[0] + 1, stop)
+            for index in range(body, stop)
             if (
                 (match := markdown_version.fullmatch(lines[index])) is not None
                 and _is_version(match["tag"])
