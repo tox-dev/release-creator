@@ -1,0 +1,1 @@
+``hooks`` rejects dependencies that uv would read as an option, URL or path, and ``UV_*``, ``PIP_*`` or ``PYTHON*`` keys in ``default_env`` or a hook's ``env``, since each could install packages the cooldown never checked.

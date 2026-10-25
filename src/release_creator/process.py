@@ -2,7 +2,6 @@
 
 lazy import os
 lazy import shlex
-lazy import shutil
 lazy import subprocess  # ruff: ignore[suspicious-subprocess-import]  # Callers pass argument lists without a shell.
 lazy from collections.abc import Mapping
 lazy from pathlib import Path
@@ -51,21 +50,7 @@ def isolated_uv_env() -> dict[str, str]:
     }
 
 
-def required_executable(name: str) -> str:
-    """Find a command on PATH.
-
-    :param name: Command name.
-    :returns: The command path.
-    :raises FileNotFoundError: The command is unavailable.
-    """
-    if (path := shutil.which(name)) is None:
-        msg = f"{name} is required"
-        raise FileNotFoundError(msg)
-    return path
-
-
 __all__ = [
     "isolated_uv_env",
-    "required_executable",
     "run_text",
 ]
