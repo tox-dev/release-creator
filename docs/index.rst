@@ -2,9 +2,9 @@
  release-creator
 #################
 
-``release-creator`` links changelog fragments to squash pull requests, validates release tags, renders GitHub Release
-notes, and refreshes pre-commit dependency pins.
-Install a published version with ``uvx --from release-creator release-creator``.
+``release-creator`` calculates and validates release tags, prints the changelog section of a release, pins the
+dependency closure of pre-commit hooks, and checks JetBrains Marketplace uploads. Install a published version with ``uvx
+--from release-creator release-creator``.
 
 Run each command at the stage it serves:
 
@@ -14,15 +14,15 @@ Run each command at the stage it serves:
     - - Command
       - When to run it
       - Result
-    - - :doc:`fragments <how-to/link-fragments>`
-      - After squash merge, before Towncrier builds the changelog
-      - Adds the pull request link to each named or numbered fragment
     - - :doc:`tags <how-to/select-release-tag>`
-      - Before preparing a release, then when making the comparison link
-      - Checks the version or prints its predecessor
+      - Before preparing a release
+      - Prints the next version or checks a proposed one
+    - - ``validate-fragment-deletions``
+      - After Towncrier builds the changelog
+      - Fails if the staged patch deletes anything other than consumed fragments
     - - :doc:`notes <how-to/render-notes>`
       - After the changelog and tag exist
-      - Prints the GitHub Release body from the tagged changelog
+      - Prints the tagged changelog section for the GitHub Release body
     - - :doc:`marketplace <how-to/check-marketplace>`
       - Before retrying a JetBrains Marketplace plugin upload
       - Compares signed ZIP members with the published version
@@ -46,7 +46,6 @@ The :doc:`changelog <changelog>` includes an ``Unreleased`` section in PR builds
     :caption: How-to guides
     :hidden:
 
-    how-to/link-fragments
     how-to/render-notes
     how-to/check-marketplace
     how-to/select-release-tag

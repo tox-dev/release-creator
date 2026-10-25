@@ -12,13 +12,7 @@
 ### {{ name }}
 
 {% for text, values in sections[section][category].items() %}
-{% set missing = [] %}
-{% for value in values %}
-{% set reference = namespace(found=false) %}
-{% set parts = (text ~ "\n" ~ (text | replace("/pull/", "/issues/") | replace(":pr:", ":issue:"))).split(value) %}
-{% for index in range(1, parts|length) if (not parts[index - 1] or not parts[index - 1][-1].isalnum()) and (not parts[index] or not parts[index][0].isdigit()) %}{% set reference.found = true %}{% endfor %}
-{% if not reference.found %}{% set _ = missing.append(value) %}{% endif %}{% endfor %}
-- {{ text }}{{ (" (" ~ (missing | join(", ")) ~ ")") if missing else "" }}
+- {{ text }}{{ (" (" ~ (values | join(", ")) ~ ")") if values else "" }}
 {% endfor %}
 
 {% endif %}

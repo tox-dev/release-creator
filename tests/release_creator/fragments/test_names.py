@@ -1,10 +1,10 @@
-"""Fragment filenames shared by linking and release selection."""
+"""Fragment filenames shared by release selection and deletion checks."""
 
 from pathlib import Path
 
 import pytest
 
-from release_creator.fragments.names import fragment_category, fragment_number, pending_fragments
+from release_creator.fragments.names import fragment_category, pending_fragments
 
 
 @pytest.mark.parametrize(
@@ -21,18 +21,6 @@ from release_creator.fragments.names import fragment_category, fragment_number, 
 )
 def test_fragment_category(filename: str, category: str | None) -> None:
     assert fragment_category(Path(filename), {"feature"}) == category
-
-
-@pytest.mark.parametrize(
-    ("filename", "number"),
-    [
-        pytest.param("42.feature.md", "42", id="numbered"),
-        pytest.param("42.feature.1.md", "42", id="counter"),
-        pytest.param("+topic.feature.md", None, id="named"),
-    ],
-)
-def test_fragment_number(filename: str, number: str | None) -> None:
-    assert fragment_number(Path(filename)) == number
 
 
 def test_pending_fragments_accepts_counter(tmp_path: Path) -> None:

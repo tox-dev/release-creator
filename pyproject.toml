@@ -25,15 +25,7 @@ classifiers = [
   "Typing :: Typed",
 ]
 dynamic = [ "readme", "version" ]
-dependencies = [
-  "docutils>=0.22",
-  "markdown-it-py>=4,<5",
-  "mdformat>=1,<2",
-  "mdformat-gfm>=1,<2",
-  "packaging>=26",
-  "pyyaml>=6",
-  "towncrier>=26.9"
-]
+dependencies = [ "packaging>=26", "pyyaml>=6" ]
 urls.Changelog = "https://release-creator.readthedocs.io/en/latest/changelog.html"
 urls.Documentation = "https://release-creator.readthedocs.io/"
 urls.Homepage = "https://release-creator.readthedocs.io/"
@@ -46,7 +38,6 @@ dev = [ { include-group = "test" }, { include-group = "type" }, { include-group 
 test = [
   "covdefaults>=2.3",
   "diff-cover>=10.2",
-  "graphql-core>=3",
   "pytest>=9",
   "pytest-cov>=7",
   "pytest-mock>=3.16",

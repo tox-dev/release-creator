@@ -1,41 +1,24 @@
-"""Keep note options beside their renderer."""
+"""Keep note options beside the section extractor."""
 
 lazy import argparse
 lazy import sys
 lazy from pathlib import Path
 
-lazy from release_creator.notes.render import ReleaseContext, render_markdown, render_rst
+lazy from release_creator.notes.section import release_section
 
 
 def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    """Keep note options with the note command."""
-    notes = commands.add_parser("notes", help="render notes from a tagged changelog")
-    notes.add_argument("--changelog", type=Path, required=True, help="tagged Markdown or reStructuredText changelog")
-    notes.add_argument("--tag", required=True, help="release tag to render")
-    notes.add_argument("--repository", required=True, help="GitHub owner/repository")
-    notes.add_argument("--package", help="package section in a shared Markdown changelog")
-    notes.add_argument("--previous", help="previous tag for the comparison link")
-    notes.add_argument("--artifact-url", help="HTTPS link to the published package or artifact")
-    notes.add_argument("--artifact-label", default="PyPI release", help="text for the artifact link")
-    notes.add_argument("--generated-notes", type=Path, help="GitHub generated notes for New Contributors credits")
-    notes.set_defaults(handler=_render)
+    """Register the changelog section extractor."""
+    notes = commands.add_parser("notes", help="print the changelog section of a release")
+    notes.add_argument("--changelog", type=Path, required=True, help="Markdown or reStructuredText (.rst) changelog")
+    notes.add_argument("--tag", required=True, help="release tag whose version section to print")
+    notes.add_argument("--package", help="heading of the package section in a shared changelog")
+    notes.set_defaults(handler=_print)
 
 
-def _render(args: argparse.Namespace) -> None:
-    context = ReleaseContext(
-        tag=args.tag,
-        repository=args.repository,
-        previous=args.previous,
-        artifact_url=args.artifact_url,
-        artifact_label=args.artifact_label,
-        package=args.package,
-    )
+def _print(args: argparse.Namespace) -> None:
     changelog = args.changelog.read_text(encoding="utf-8")
-    generated = args.generated_notes.read_text(encoding="utf-8") if args.generated_notes is not None else None
-    if args.changelog.suffix == ".rst":
-        sys.stdout.write(render_rst(changelog, context, generated_notes=generated))
-    else:
-        sys.stdout.write(render_markdown(changelog, context, generated_notes=generated))
+    sys.stdout.write(release_section(changelog, args.tag, args.package, rst=args.changelog.suffix == ".rst"))
 
 
 __all__ = [

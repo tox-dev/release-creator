@@ -1,0 +1,1 @@
+``notes`` prints the tagged section in the changelog's own format without its heading and accepts only ``--changelog``, ``--tag`` and ``--package``. It no longer renames categories, checks credits, adds artifact or comparison links, or converts reStructuredText to Markdown, and drops the ``docutils``, ``markdown-it-py``, ``mdformat`` and ``mdformat-gfm`` dependencies.

@@ -1,0 +1,1 @@
+Remove the ``fragments`` and ``validate-news`` commands; check news with ``towncrier check --compare-with`` and let ``gh release create --generate-notes`` credit authors. A ``+name`` fragment no longer gains a pull request link or ``by`` credit in the documentation changelog, and ``towncrier`` is no longer a runtime dependency.
