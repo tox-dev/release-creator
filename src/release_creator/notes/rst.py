@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 lazy from io import StringIO
-lazy from typing import cast
+lazy from typing import Final, cast
 lazy from urllib.parse import quote
 
 lazy from docutils import nodes
@@ -14,6 +14,9 @@ lazy from docutils.utils import SystemMessage
 
 lazy from release_creator.anchors.names import release_anchor
 lazy from release_creator.categories import RELEASE_CATEGORIES
+
+# mdformat drops the escape from a lone ``\~``, which GitHub then renders as strikethrough.
+TILDE_PLACEHOLDER: Final = "\ue000"
 
 
 def render_rst_section(source: str, tag: str, repository: str) -> str:
@@ -226,9 +229,9 @@ def _normalize_prose(value: str) -> str:
 
 
 def _escape_text(value: str) -> str:
-    for character in ("\\", "`", "*", "_", "~", "[", "]", "<", ">", "&"):
+    for character in ("\\", "`", "*", "_", "[", "]", "<", ">", "&"):
         value = value.replace(character, f"\\{character}")
-    return value
+    return value.replace("~", TILDE_PLACEHOLDER)
 
 
 def _escape_url(value: str) -> str:
@@ -282,6 +285,7 @@ def _is_credit(item: nodes.Node) -> bool:
 
 
 __all__ = [
+    "TILDE_PLACEHOLDER",
     "register_roles",
     "render_rst_section",
 ]

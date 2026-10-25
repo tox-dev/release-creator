@@ -18,7 +18,7 @@ lazy from packaging.version import InvalidVersion, Version
 lazy from release_creator.anchors.names import release_anchor
 lazy from release_creator.categories import RELEASE_CATEGORIES
 lazy from release_creator.github import validate_repository
-lazy from release_creator.notes.rst import render_rst_section
+lazy from release_creator.notes.rst import TILDE_PLACEHOLDER, render_rst_section
 
 _RE_RELEASE_PULL: Final = re.compile(
     r"""
@@ -183,8 +183,11 @@ def render_rst(changelog: str, context: ReleaseContext, generated_notes: str | N
     if context.package is not None:
         msg = "package selection requires a Markdown changelog"
         raise ValueError(msg)
-    notes = mdformat.text(_extract_rst_body(changelog, context), options={"wrap": "no"}, extensions={"gfm"}).strip()
-    return _finish(notes, context, generated_notes)
+    if TILDE_PLACEHOLDER in changelog:
+        msg = "changelog contains a private-use character reserved for escaping"
+        raise ValueError(msg)
+    notes = mdformat.text(_extract_rst_body(changelog, context), options={"wrap": "no"}, extensions={"gfm"})
+    return _finish(notes.strip().replace(TILDE_PLACEHOLDER, "\\~"), context, generated_notes)
 
 
 def _finish(notes: str, context: ReleaseContext, generated_notes: str | None) -> str:

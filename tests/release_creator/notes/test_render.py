@@ -2288,7 +2288,8 @@ def test_render_rst_converts_external_link(source: str, expected: str) -> None:
         pytest.param("2*3*4", r"2\*3\*4", id="asterisks"),
         pytest.param("<img src=x>", r"\<img src=x>", id="html-image"),
         pytest.param("<details>", r"\<details>", id="html-details"),
-        pytest.param("~~removed~~", r"\~~removed\~~", id="strikethrough"),
+        pytest.param("~~removed~~", r"\~\~removed\~\~", id="strikethrough"),
+        pytest.param("~y~", r"\~y\~", id="single-tilde"),
     ],
 )
 def test_render_rst_escapes_markdown_syntax(source: str, expected: str) -> None:
@@ -2297,6 +2298,13 @@ def test_render_rst_escapes_markdown_syntax(source: str, expected: str) -> None:
     result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
 
     assert f"- Show {expected}." in result
+
+
+def test_render_rst_rejects_escape_placeholder() -> None:
+    changelog = "1.2.3 (today)\n==============\n\nAdded\n-----\n\n- Show \ue000.\n"
+
+    with pytest.raises(ValueError, match="private-use character reserved for escaping"):
+        render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
 
 
 def test_render_rst_uses_longer_fence_for_backticks() -> None:
