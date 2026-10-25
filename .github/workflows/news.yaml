@@ -24,7 +24,7 @@ jobs:
         run: |
           uv sync --no-default-groups --group release-prepare
           echo "$PWD/.venv/bin" >>"$GITHUB_PATH"
-      - uses: tox-dev/github-workflows/validate-news@13c5d50919f11fe2988b41a0acee48ca2488c1d6 # v3.0.1
+      - uses: tox-dev/github-workflows/validate-news@3f37d2e43f40445bc4c07b6197067e6b7a762e95 # v4.0.0
       - name: Require releasable version
         env:
           BASE_REF: ${{ github.base_ref }}

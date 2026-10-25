@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@13c5d50919f11fe2988b41a0acee48ca2488c1d6 # v3.0.1
+    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@3f37d2e43f40445bc4c07b6197067e6b7a762e95 # v4.0.0
     permissions:
       actions: read
       contents: read
@@ -30,7 +30,7 @@ jobs:
           version: latest-known
           python-version: "3.15"
           enable-cache: false
-      - uses: tox-dev/github-workflows/install-locked-tools@13c5d50919f11fe2988b41a0acee48ca2488c1d6 # v3.0.1
+      - uses: tox-dev/github-workflows/install-locked-tools@3f37d2e43f40445bc4c07b6197067e6b7a762e95 # v4.0.0
         with:
           groups: project-runtime
           venv: ${{ runner.temp }}/release-tools
@@ -92,7 +92,7 @@ jobs:
           version: latest-known
           python-version: "3.15"
           enable-cache: false
-      - uses: tox-dev/github-workflows/install-locked-tools@13c5d50919f11fe2988b41a0acee48ca2488c1d6 # v3.0.1
+      - uses: tox-dev/github-workflows/install-locked-tools@3f37d2e43f40445bc4c07b6197067e6b7a762e95 # v4.0.0
         with:
           groups: release-notes project-runtime
           venv: ${{ runner.temp }}/release-tools
@@ -101,14 +101,13 @@ jobs:
         run: |
           uv pip install --python "$RUNNER_TEMP/release-tools/bin/python" --no-deps dist/release_creator-*.whl
           echo "$RUNNER_TEMP/release-tools/bin" >>"$GITHUB_PATH"
-      - uses: tox-dev/github-workflows/render-release-notes@13c5d50919f11fe2988b41a0acee48ca2488c1d6 # v3.0.1
+      - uses: tox-dev/github-workflows/render-release-notes@3f37d2e43f40445bc4c07b6197067e6b7a762e95 # v4.0.0
         with:
           tag: ${{ github.ref_name }}
           previous: ${{ needs.previous.outputs.tag }}
           changelog: docs/changelog.rst
           artifact-url: https://pypi.org/project/release-creator/${{ github.ref_name }}/
           generated-notes: ${{ runner.temp }}/generated-notes.md
-          output: ${{ runner.temp }}/release-notes.md
       - id: upload
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -148,7 +147,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.build.outputs.distributions-artifact-id }}
           path: dist
-      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@13c5d50919f11fe2988b41a0acee48ca2488c1d6 # v3.0.1
+      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@3f37d2e43f40445bc4c07b6197067e6b7a762e95 # v4.0.0
         with:
           project: release-creator
           version: ${{ github.ref_name }}
@@ -164,7 +163,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.notes.outputs.artifact-id }}
           path: ${{ runner.temp }}
-      - uses: tox-dev/github-workflows/publish-github-release@13c5d50919f11fe2988b41a0acee48ca2488c1d6 # v3.0.1
+      - uses: tox-dev/github-workflows/publish-github-release@3f37d2e43f40445bc4c07b6197067e6b7a762e95 # v4.0.0
         env:
           GH_TOKEN: ${{ github.token }}
         with:
