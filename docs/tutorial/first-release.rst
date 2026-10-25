@@ -84,9 +84,8 @@ The command finds the squash commit, reads the human PR author through the GitHu
 
 It fails if GitHub cannot associate the introducing commit with one merged PR, the PR author cannot be read, or the
 fragment already has a PR link. In GitHub Actions, give the job ``pull-requests: read`` and set ``GH_TOKEN`` to
-``github.token``. For shared authorship, list each human you verified from the PR and include its merged author. Bot PRs
-receive no automatic credit. See :doc:`linking named fragments <../how-to/link-fragments>` for the required checkout
-history.
+``github.token``. Bot PRs receive no automatic credit. See :doc:`linking named fragments <../how-to/link-fragments>` for
+the required checkout history.
 
 3. Check the version and build the changelog
 ============================================

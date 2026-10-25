@@ -77,8 +77,6 @@ Use ``Other changes`` only when converting an older uncategorized release entry 
 from its source. New fragments need a specific user-facing category or the pull request's ``skip news`` label.
 
 GitHub output uses level-three headings and stable ``release-<version>-<category>`` anchors. Each entry may credit one
-or more people with linked ``@handle`` text in the changelog; GitHub uses mentions. Bot authors are not credits. Raw
-HTML hyperlinks in release entries are rejected; use Markdown links for credits. Text and links inside inline HTML
-elements count as visible, because GitHub renders them. Release entries and fragments reject ``<details>`` and
-``<summary>`` and any HTML comment or other markup that one HTML block leaves open, since GitHub would hide the text
-after it.
+or more people with linked ``@handle`` text in the changelog; GitHub uses mentions. Bot authors are not credits.
+Fragments reject ``<details>`` and ``<summary>`` and any HTML comment or other markup that one HTML block leaves open,
+since GitHub would hide the text after it.

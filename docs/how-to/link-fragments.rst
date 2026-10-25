@@ -31,9 +31,9 @@ associated with each commit and adds a linked human credit when the fragment has
 
     Avoid stale cache reads ([#42](https://github.com/owner/project/pull/42)) by [@alice](https://github.com/alice).
 
-Towncrier copies both links into the release section. For shared authorship, list each verified human in the fragment;
-the linker checks that the list includes the merged PR author. It does not credit bot accounts. A bot PR gets no
-automatic author credit, even when that PR supplies a user-visible fragment.
+Towncrier copies both links into the release section. Leave the credit and the pull request link out of the fragment:
+``validate-news`` rejects a fragment that carries either, so only the linker writes them. It does not credit bot
+accounts. A bot PR gets no automatic author credit, even when that PR supplies a user-visible fragment.
 
 Knope changesets
 ================
@@ -82,7 +82,9 @@ Before merge, check the changed fragments against the Towncrier configuration:
 The command prints the number of added or modified fragments. For Towncrier, it reads ``towncrier.toml`` when present
 and otherwise reads ``pyproject.toml``. For Knope, it reads ``knope.toml``. It accepts configured Towncrier fragment
 tables and the optional ``.N`` filename counter. It rejects unknown categories, unsupported names, and empty fragments.
-When fragments changed, it also runs Towncrier's check against the selected base branch to catch conflicts that
+It also rejects a Towncrier fragment whose visible text already credits an author (``by [@alice](...)``, ``by
+:user:`alice```) or links a pull request (a GitHub pull request URL, ``:pr:`42```), using the same detection as the
+linker. When fragments changed, it also runs Towncrier's check against the selected base branch to catch conflicts that
 individual filenames cannot reveal. Set ``orphan_prefix = "+"`` and ``issue_pattern = "\\d+"`` in the Towncrier
 configuration. This accepts ``+topic.feature.md`` while preventing ``topic.feature.md`` from becoming an issue
 reference. It does not change files or decide whether a pull request needs news; the caller uses the count with the

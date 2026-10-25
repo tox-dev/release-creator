@@ -68,12 +68,8 @@ Rules and failure cases
 =======================
 
 The tagged changelog decides which changes appear, their order, their categories, and their authors. ``notes`` does not
-infer changes or people from commits. Add only user-visible changes to the changelog. Credit verified human authors
-there; do not credit bots or reviewers for work they did not author.
-
-Link the pull request credited by each entry. If an entry mentions a different pull request only for context, put ``See
-<URL>`` or ``compare <URL>`` after a comma, semicolon, or sentence boundary. Leave that clause without a ``by`` credit.
-Otherwise ``notes`` treats the URL as another credited pull request and checks its author.
+infer changes or people from commits, and it does not check credits or pull request links: the ``fragments`` linker
+writes them, and ``validate-news`` rejects fragments that carry their own.
 
 ``notes`` requires exactly one section for ``--tag`` and rejects unknown categories. It renames ``Fixed`` to ``Bug
 fixes`` and ``Added`` to ``Features`` while keeping each release bullet on one line. For Markdown, leave empty headings
@@ -118,8 +114,7 @@ GitHub's generated notes may identify first-time contributors. Save its body and
 
 Human ``New Contributors`` lines remain even when their PR did not need a changelog entry. Generated change lists and
 the ``<!-- Release notes generated ... -->`` banner are discarded. This input never decides which changes or changelog
-authors belong in the release. If GitHub omits a referenced PR from its generated notes, the tagged changelog entry must
-already credit its author.
+authors belong in the release.
 
 reStructuredText changelogs
 ===========================

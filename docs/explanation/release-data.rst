@@ -13,15 +13,13 @@ tagged changelog to make the GitHub description.
 
     flowchart LR
        changelog["Tagged changelog"] --> render["release-creator notes"]
-       changelog -. "Credited authors" .-> filter["Verify contributors"]
-       generated["GitHub generated notes"] --> filter
-       filter --> render
+       generated["GitHub generated notes"] -- "New Contributors" --> render
        render --> release["GitHub Release body"]
        classDef source fill:#dbeafe,stroke:#2563eb,color:#0f172a;
        classDef step fill:#ede9fe,stroke:#7c3aed,color:#0f172a;
        classDef result fill:#dcfce7,stroke:#16a34a,color:#0f172a;
        class changelog,generated source;
-       class filter,render step;
+       class render step;
        class release result;
 
 Why fragments come before the changelog
@@ -46,8 +44,7 @@ description tied to reviewed release entries. The changelog supplies their order
 links. It does not build a change list from commit subjects.
 
 GitHub's generated notes can identify first-time contributors. When supplied, ``notes`` keeps human ``New Contributors``
-lines even when their PR did not need a changelog entry. It discards GitHub's generated change list and banner. For a PR
-listed by GitHub, it checks the author against the changelog credit. GitHub can omit a PR from generated notes for an
-older tag; that entry must carry a credit in the tagged changelog. The fragment linker adds the merged PR author and
-checks explicit shared credits against that author. A bot pull request has no news entry unless it supplies a fragment
-for a user-visible change, and the bot is never credited as an author.
+lines even when their PR did not need a changelog entry. It discards GitHub's generated change list and banner. It does
+not check changelog credits: the fragment linker adds the merged PR author, and ``validate-news`` rejects fragments that
+credit someone by hand. A bot pull request has no news entry unless it supplies a fragment for a user-visible change,
+and the bot is never credited as an author.
