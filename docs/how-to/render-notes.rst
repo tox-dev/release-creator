@@ -115,6 +115,11 @@ release holds several of their pull requests, only the earliest counts. Co-autho
 assistant accounts (``claude``, ``codex``, ``CommandCodeBot``, ``Copilot``) are skipped. The command needs ``gh`` with
 read access to the repository and edits only Towncrier changelogs; Knope projects do not use it.
 
+For a shared Markdown changelog, pass the package name, as in ``--package pyproject-fmt``. The command then edits the
+``### 1.2.3`` section under ``## pyproject-fmt``, found as ``notes --package`` finds it, and the subsection gets a
+``#### New Contributors`` heading and a ``release-pyproject-fmt-1-2-3-new-contributors`` anchor, matching that package's
+categories.
+
 When someone is new, the command appends a subsection at the end of the version section, with the same anchor and
 heading markup as the categories. In Markdown:
 

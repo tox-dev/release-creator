@@ -4,35 +4,41 @@ lazy import re
 lazy from pathlib import Path
 
 lazy from release_creator.contributors.lookup import FirstContribution, first_contributions
+lazy from release_creator.notes.render import markdown_section
 
 
-def add_new_contributors(changelog: Path, version: str, repository: str) -> None:
+def add_new_contributors(changelog: Path, version: str, repository: str, package: str | None = None) -> None:
     """Credit first-time pull request authors at the end of a release section.
 
     :param changelog: Built Markdown or reStructuredText changelog, edited in place.
     :param version: Version whose section receives the subsection.
     :param repository: GitHub owner and repository.
+    :param package: Package section of a shared Markdown changelog that holds the version.
     :raises ValueError: The changelog format, section, or existing subsection is unsupported.
     """
     if changelog.suffix not in {".md", ".rst"}:
         msg = f"unsupported changelog format: {changelog}"
         raise ValueError(msg)
+    if package is not None and changelog.suffix == ".rst":
+        msg = "package selection requires a Markdown changelog"
+        raise ValueError(msg)
     lines = changelog.read_text(encoding="utf-8").splitlines()
     rst = changelog.suffix == ".rst"
-    start, end = _rst_section(lines, version) if rst else _markdown_section(lines, version)
+    start, end = _rst_section(lines, version) if rst else _markdown_section(lines, version, package)
     section = "\n".join(lines[start:end])
-    if re.search(r"^(?:### )?New Contributors$", section, re.MULTILINE) is not None:
+    if re.search(r"^(?:####? )?New Contributors$", section, re.MULTILINE) is not None:
         msg = f"New Contributors already present for {version}"
         raise ValueError(msg)
     pattern = r":(?:pr|pull):`(\d+)`" if rst else rf"https://github\.com/{re.escape(repository)}/pull/(\d+)"
     numbers = list(dict.fromkeys(re.findall(pattern, section)))
     if not numbers or not (contributions := first_contributions(repository, numbers)):
         return
-    anchor = f"release-{version.replace('.', '-')}-new-contributors"
+    release = f"{package}-{version}" if package is not None else version
+    anchor = f"release-{release.replace('.', '-')}-new-contributors"
     block = (
         _rst_block(contributions, anchor, _rst_category_underline(lines[start:end]))
         if rst
-        else _markdown_block(contributions, anchor, repository)
+        else _markdown_block(contributions, anchor, repository, "####" if package is not None else "###")
     )
     tail = lines[end:]
     while tail and not tail[0].strip():
@@ -41,16 +47,20 @@ def add_new_contributors(changelog: Path, version: str, repository: str) -> None
     changelog.write_text("\n".join(updated) + "\n", encoding="utf-8")
 
 
-def _markdown_section(lines: list[str], version: str) -> tuple[int, int]:
-    heading = re.compile(rf"## {re.escape(version)}(?: \(.*\))?")
-    starts = [index for index, line in enumerate(lines) if heading.fullmatch(line)]
-    if len(starts) != 1:
-        msg = f"expected one changelog section for {version}, found {len(starts)}"
-        raise ValueError(msg)
-    end = next((index for index in range(starts[0] + 1, len(lines)) if lines[index].startswith("## ")), len(lines))
-    while end > starts[0] + 1 and (not lines[end - 1].strip() or lines[end - 1].startswith('<a name="release-')):
+def _markdown_section(lines: list[str], version: str, package: str | None) -> tuple[int, int]:
+    if package is None:
+        heading = re.compile(rf"## {re.escape(version)}(?: \(.*\))?")
+        starts = [index for index, line in enumerate(lines) if heading.fullmatch(line)]
+        if len(starts) != 1:
+            msg = f"expected one changelog section for {version}, found {len(starts)}"
+            raise ValueError(msg)
+        start = starts[0]
+        end = next((index for index in range(start + 1, len(lines)) if lines[index].startswith("## ")), len(lines))
+    else:
+        start, end = markdown_section(lines, version, package)
+    while end > start + 1 and (not lines[end - 1].strip() or lines[end - 1].startswith('<a name="release-')):
         end -= 1
-    return starts[0], end
+    return start, end
 
 
 def _rst_section(lines: list[str], version: str) -> tuple[int, int]:
@@ -97,11 +107,11 @@ def _rst_category_underline(lines: list[str]) -> str:
     return underline
 
 
-def _markdown_block(contributions: list[FirstContribution], anchor: str, repository: str) -> list[str]:
+def _markdown_block(contributions: list[FirstContribution], anchor: str, repository: str, heading: str) -> list[str]:
     return [
         f'<a name="{anchor}"></a>',
         "",
-        "### New Contributors",
+        f"{heading} New Contributors",
         "",
         *(
             f"- [@{entry.login}](https://github.com/{entry.login}) made their first contribution in "
