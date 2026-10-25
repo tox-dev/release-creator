@@ -82,7 +82,7 @@ def _mock_github_pull(mocker: MockerFixture, commit: str) -> MagicMock:
                             {
                                 "number": 3,
                                 "mergedAt": "2026-10-22T00:00:00Z",
-                                "mergeCommit": {"oid": commit},
+                                "mergeCommit": {"oid": commit, "authors": {"nodes": []}},
                                 "author": {"login": "alice", "__typename": "User"},
                             }
                         ]

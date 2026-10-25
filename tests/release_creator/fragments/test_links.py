@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Final, Literal
 
 import pytest
 
 from release_creator.fragments.links import add_pull_request_links
-from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor
+from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor, PullRequestCredit
 from release_creator.notes.render import ReleaseContext, render_markdown, render_rst
 
 if TYPE_CHECKING:
@@ -29,9 +29,9 @@ def _link(
         number = subject.rpartition("#")[2].removesuffix(")")
         if authors is not None and number not in authors:
             continue
+        author = authors[number] if authors is not None else PullRequestAuthor(handle="alice", is_bot=False)
         pull_requests[name] = PullRequest(
-            number=number,
-            author=authors[number] if authors is not None else PullRequestAuthor(handle="alice", is_bot=False),
+            number=number, author=author, credits=(PullRequestCredit(name=author.handle, linked=True),)
         )
     add_pull_request_links(directory, repository, pull_requests, mode=mode)
 
@@ -88,7 +88,8 @@ def _link(
             "+first.feature.md",
             "Add a feature.\n",
             {"42": PullRequestAuthor(handle="dependabot", is_bot=True)},
-            "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)).\n",
+            "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) "
+            "by [@dependabot](https://github.com/dependabot).\n",
             id="bot-author",
         ),
         pytest.param(
@@ -110,7 +111,8 @@ def _link(
             "42.feature.md",
             "Add a feature.\n",
             {"42": PullRequestAuthor(handle="dependabot", is_bot=True)},
-            "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)).\n",
+            "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) "
+            "by [@dependabot](https://github.com/dependabot).\n",
             id="numbered-bot",
         ),
         pytest.param(
@@ -134,7 +136,8 @@ def _link(
             "42.feature.md",
             "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)).\n",
             {"42": PullRequestAuthor(handle="dependabot", is_bot=True)},
-            "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)).\n",
+            "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) "
+            "by [@dependabot](https://github.com/dependabot).\n",
             id="numbered-existing-link-and-bot",
         ),
     ],
@@ -1089,7 +1092,8 @@ def test_add_pull_request_links_keeps_credit_after_literal_backtick(tmp_path: Pa
         pytest.param(
             "Remove a distrusted root certificate",
             PullRequestAuthor(handle="dependabot", is_bot=True),
-            "Remove a distrusted root certificate ([#42](https://github.com/tox-dev/example/pull/42))",
+            "Remove a distrusted root certificate ([#42](https://github.com/tox-dev/example/pull/42)) "
+            "by [@dependabot](https://github.com/dependabot)",
             id="bot",
         ),
         pytest.param(
@@ -1442,3 +1446,107 @@ def test_add_pull_request_links_knope_keeps_bare_reference(tmp_path: Path) -> No
     _link(tmp_path, "tox-dev/example", {fragment.name: "Patch trust roots (#42)"}, mode="knope")
 
     assert fragment.read_text() == content
+
+
+_ALICE: Final = PullRequestCredit(name="alice", linked=True)
+_BOB: Final = PullRequestCredit(name="bob", linked=True)
+_CAROL: Final = PullRequestCredit(name="Carol Doe", linked=False)
+_DAN: Final = PullRequestCredit(name="dan", linked=True)
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "credited", "expected"),
+    [
+        pytest.param(
+            "+first.feature.md",
+            "Add a feature.\n",
+            (_ALICE, _BOB),
+            "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) "
+            "by [@alice](https://github.com/alice) and [@bob](https://github.com/bob).\n",
+            id="markdown-two",
+        ),
+        pytest.param(
+            "+first.feature.md",
+            "Add a feature.\n",
+            (_ALICE, _BOB, _CAROL, _DAN),
+            "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) "
+            "by [@alice](https://github.com/alice), [@bob](https://github.com/bob), Carol Doe "
+            "and [@dan](https://github.com/dan).\n",
+            id="markdown-many",
+        ),
+        pytest.param(
+            "+first.feature.md",
+            "Add a feature.\n",
+            (_ALICE, _CAROL),
+            "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) "
+            "by [@alice](https://github.com/alice) and Carol Doe.\n",
+            id="markdown-unlinked",
+        ),
+        pytest.param(
+            "+first.feature.rst",
+            "Add a feature.\n",
+            (_ALICE, _BOB),
+            "Add a feature (:pr:`42`) by :user:`alice` and :user:`bob`.\n",
+            id="rst-two",
+        ),
+        pytest.param(
+            "+first.feature.rst",
+            "Add a feature.\n",
+            (_ALICE, _BOB, _CAROL),
+            "Add a feature (:pr:`42`) by :user:`alice`, :user:`bob` and Carol Doe.\n",
+            id="rst-three",
+        ),
+        pytest.param(
+            "+first.feature.rst",
+            "Add a feature.\n",
+            (_CAROL,),
+            "Add a feature (:pr:`42`) by Carol Doe.\n",
+            id="rst-unlinked-only",
+        ),
+        pytest.param(
+            "42.feature.md",
+            "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)).\n",
+            (_ALICE, _BOB, _CAROL),
+            "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) "
+            "by [@alice](https://github.com/alice), [@bob](https://github.com/bob) and Carol Doe.\n",
+            id="markdown-numbered-linked",
+        ),
+        pytest.param(
+            "42.feature.rst",
+            "Add a feature (:pr:`42`).\n",
+            (_ALICE, _BOB),
+            "Add a feature (:pr:`42`) by :user:`alice` and :user:`bob`.\n",
+            id="rst-numbered-linked",
+        ),
+    ],
+)
+def test_add_pull_request_links_formats_credits(
+    tmp_path: Path, filename: str, content: str, credited: tuple[PullRequestCredit, ...], expected: str
+) -> None:
+    fragment = tmp_path / filename
+    fragment.write_text(content)
+    author = PullRequestAuthor(handle="alice", is_bot=False)
+
+    add_pull_request_links(
+        tmp_path, "tox-dev/example", {filename: PullRequest(number="42", author=author, credits=credited)}
+    )
+
+    assert fragment.read_text() == expected
+
+
+def test_add_pull_request_links_knope_formats_credits(tmp_path: Path) -> None:
+    fragment = tmp_path / "trust-roots.md"
+    fragment.write_text("---\ndefault: security\n---\n\n# Remove a root\n")
+    author = PullRequestAuthor(handle="alice", is_bot=False)
+
+    add_pull_request_links(
+        tmp_path,
+        "tox-dev/example",
+        {fragment.name: PullRequest(number="42", author=author, credits=(_ALICE, _BOB, _CAROL))},
+        mode="knope",
+    )
+
+    assert fragment.read_text() == (
+        "---\ndefault: security\n---\n\n# Remove a root ([#42](https://github.com/tox-dev/example/pull/42)) "
+        "by [@alice](https://github.com/alice), [@bob](https://github.com/bob) and Carol Doe\n"
+    )

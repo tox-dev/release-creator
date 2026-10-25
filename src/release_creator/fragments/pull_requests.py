@@ -4,10 +4,22 @@
 from __future__ import annotations
 
 lazy import json
+lazy import re
 lazy from dataclasses import dataclass
 lazy from typing import Final
 
 lazy from release_creator.process import required_executable, run_text
+
+_RE_AI_ASSISTANT_EMAIL: Final = re.compile(
+    r"""
+    @anthropic\.com$                                # Claude
+    | @openai\.com$                                 # Codex
+    | @commandcode\.ai$                             # Command Code
+    | @zo\.computer$                                # Zo
+    | ^\d+\+Copilot@users\.noreply\.github\.com$     # GitHub Copilot
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
 
 
 def fragment_pull_requests(repository: str, commits: dict[str, str]) -> dict[str, PullRequest]:
@@ -35,7 +47,8 @@ def _pulls(gh: str, repository: str, shas: list[str]) -> dict[str, PullRequest]:
             sha,
             (
                 f'c{index}: object(oid: "{sha}") {{ ... on Commit {{ associatedPullRequests(first: 100) '
-                "{ nodes { number mergedAt author { login __typename } mergeCommit { oid } } } } }"
+                "{ nodes { number mergedAt author { login __typename } mergeCommit { oid authors(first: 100) "
+                "{ nodes { name email user { login __typename } } } } } } } }"
             ),
         )
         for index, sha in enumerate(shas)
@@ -96,17 +109,51 @@ def _pull_request(response: dict[str, object], source: str) -> PullRequest:
     if number < 1:
         msg = f"invalid pull request number for {source}: {number}"
         raise ValueError(msg)
+    account = _account(author, number)
+    return PullRequest(
+        number=str(number), author=account, credits=_credits(account, response.get("mergeCommit"), number)
+    )
+
+
+def _account(account: dict[str, object] | None, number: int) -> PullRequestAuthor:
     login, account_type = (
         ("ghost", "User")
-        if author is None or author.get("__typename") == "Mannequin"
-        else (author.get("login"), author.get("__typename"))
+        if account is None or account.get("__typename") == "Mannequin"
+        else (account.get("login"), account.get("__typename"))
     )
     if not isinstance(login, str) or account_type not in {"User", "Bot"}:
         msg = f"invalid GitHub author for pull request #{number}"
         raise ValueError(msg)
-    bot = account_type == "Bot"
-    handle = login.removesuffix("[bot]") if bot else login
-    return PullRequest(number=str(number), author=PullRequestAuthor(handle=handle, is_bot=bot))
+    bot = account_type == "Bot" or login.endswith("[bot]")
+    return PullRequestAuthor(handle=login.removesuffix("[bot]") if bot else login, is_bot=bot)
+
+
+def _credits(author: PullRequestAuthor, commit: object, number: int) -> tuple[PullRequestCredit, ...]:
+    authors = commit.get("authors") if isinstance(commit, dict) else None
+    if not isinstance(authors, dict) or not isinstance(nodes := authors.get("nodes"), list):
+        msg = f"invalid merge commit authors for pull request #{number}"
+        raise TypeError(msg)
+    entries: dict[tuple[bool, str], tuple[PullRequestCredit, bool]] = {
+        (True, author.handle.casefold()): (PullRequestCredit(name=author.handle, linked=True), author.is_bot)
+    }
+    for node in nodes:
+        if not isinstance(node, dict) or not isinstance(user := node.get("user"), dict | None):
+            msg = f"invalid merge commit author for pull request #{number}"
+            raise TypeError(msg)
+        if isinstance(email := node.get("email"), str) and _RE_AI_ASSISTANT_EMAIL.search(email):
+            continue
+        if user is None:
+            if not isinstance(name := node.get("name"), str) or not name.strip():
+                msg = f"unnamed merge commit author for pull request #{number}"
+                raise ValueError(msg)
+            entries.setdefault((False, name.casefold()), (PullRequestCredit(name=name, linked=False), False))
+            continue
+        account = _account(user, number)
+        entries.setdefault(
+            (True, account.handle.casefold()), (PullRequestCredit(name=account.handle, linked=True), account.is_bot)
+        )
+    humans = tuple(credit for credit, bot in entries.values() if not bot)
+    return humans or tuple(credit for credit, _ in entries.values())
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -118,15 +165,25 @@ class PullRequestAuthor:
 
 
 @dataclass(frozen=True, kw_only=True)
+class PullRequestCredit:
+    """Account or commit trailer name the linker credits for a merged pull request."""
+
+    name: str
+    linked: bool
+
+
+@dataclass(frozen=True, kw_only=True)
 class PullRequest:
     """Merged pull request associated with a fragment."""
 
     number: str
     author: PullRequestAuthor
+    credits: tuple[PullRequestCredit, ...]
 
 
 __all__ = [
     "PullRequest",
     "PullRequestAuthor",
+    "PullRequestCredit",
     "fragment_pull_requests",
 ]

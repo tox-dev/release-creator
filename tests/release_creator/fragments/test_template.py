@@ -10,8 +10,16 @@ lazy from pathlib import Path
 import pytest
 
 from release_creator.fragments.links import add_pull_request_links
-from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor
+from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor, PullRequestCredit
 from release_creator.notes.render import ReleaseContext, render_markdown, render_rst
+
+
+def _alice_pull(number: str) -> PullRequest:
+    return PullRequest(
+        number=number,
+        author=PullRequestAuthor(handle="alice", is_bot=False),
+        credits=(PullRequestCredit(name="alice", linked=True),),
+    )
 
 
 @pytest.mark.parametrize(
@@ -28,8 +36,8 @@ def test_markdown_template_keeps_numbered_and_named_pull_requests(
         tmp_path,
         {"123.bugfix.md": "Fix a numbered bug.\n", "+named.bugfix.md": "Fix a named bug.\n"},
         {
-            "+named.bugfix.md": PullRequest(number="124", author=PullRequestAuthor(handle="alice", is_bot=False)),
-            "123.bugfix.md": PullRequest(number=number, author=PullRequestAuthor(handle="alice", is_bot=False)),
+            "+named.bugfix.md": _alice_pull("124"),
+            "123.bugfix.md": _alice_pull(number),
         },
         issue_format="[#{issue}](https://github.com/tox-dev/example/issues/{issue})",
     )
@@ -54,10 +62,7 @@ def test_markdown_template_links_two_fragments_from_one_pull_request(tmp_path: P
             "+first.feature.md": "Add an option by [@alice](https://github.com/alice).\n",
             "+second.bugfix.md": "Fix a fallback by [@alice](https://github.com/alice).\n",
         },
-        {
-            name: PullRequest(number="42", author=PullRequestAuthor(handle="alice", is_bot=False))
-            for name in ("+first.feature.md", "+second.bugfix.md")
-        },
+        {name: _alice_pull("42") for name in ("+first.feature.md", "+second.bugfix.md")},
         categories=("feature", "bugfix"),
     )
 
@@ -95,7 +100,7 @@ def test_markdown_template_preserves_prose_continuations(tmp_path: Path, source:
     changelog = _build_markdown_fragments(
         tmp_path,
         {"+change.bugfix.md": source},
-        {"+change.bugfix.md": PullRequest(number="42", author=PullRequestAuthor(handle="alice", is_bot=False))},
+        {"+change.bugfix.md": _alice_pull("42")},
     )
 
     notes = render_markdown(
@@ -144,7 +149,7 @@ def test_markdown_template_rejects_malformed_literal_before_build(tmp_path: Path
         _build_markdown_fragments(
             tmp_path,
             {"+change.bugfix.md": source},
-            {"+change.bugfix.md": PullRequest(number="42", author=PullRequestAuthor(handle="alice", is_bot=False))},
+            {"+change.bugfix.md": _alice_pull("42")},
         )
 
     assert (tmp_path / "changelog.d" / "+change.bugfix.md").read_text() == source
@@ -154,7 +159,7 @@ def test_markdown_template_preserves_balanced_literal_block(tmp_path: Path) -> N
     changelog = _build_markdown_fragments(
         tmp_path,
         {"+change.bugfix.md": "Add support.\n\n<pre>sample</pre>\n"},
-        {"+change.bugfix.md": PullRequest(number="42", author=PullRequestAuthor(handle="alice", is_bot=False))},
+        {"+change.bugfix.md": _alice_pull("42")},
     )
 
     assert render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example")) == (
@@ -233,7 +238,7 @@ def test_template_does_not_confuse_short_issue_with_longer_pull_request(
     add_pull_request_links(
         tmp_path / "changelog.d",
         "tox-dev/example",
-        {fragment.name: PullRequest(number="123", author=PullRequestAuthor(handle="alice", is_bot=False))},
+        {fragment.name: _alice_pull("123")},
     )
 
     subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Fixed command and temporary checkout.
@@ -274,7 +279,7 @@ def _build_rst_fragment(tmp_path: Path, source: str, underlines: str = "", filen
     add_pull_request_links(
         tmp_path / "changelog.d",
         "tox-dev/example",
-        {filename: PullRequest(number="2", author=PullRequestAuthor(handle="alice", is_bot=False))},
+        {filename: _alice_pull("2")},
     )
 
     subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Fixed command and temporary checkout.

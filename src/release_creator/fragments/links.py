@@ -14,7 +14,7 @@ lazy from markdown_it.token import Token
 
 lazy from release_creator.fragments.knope import changeset_parts
 lazy from release_creator.fragments.names import fragment_number, pending_changesets, pending_fragments
-lazy from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor
+lazy from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor, PullRequestCredit
 lazy from release_creator.fragments.shape import markdown_visible_children, validate_towncrier_fragment
 lazy from release_creator.github import MARKDOWN_AUTHOR
 
@@ -93,6 +93,7 @@ def _link_fragment(
         repository=repository,
         number=pull_request.number,
         author=pull_request.author,
+        credits=pull_request.credits,
         knope=mode == "knope",
     )
     if mode == "knope":
@@ -107,6 +108,7 @@ class _LinkTarget:
     repository: str
     number: str
     author: PullRequestAuthor
+    credits: tuple[PullRequestCredit, ...]
     knope: bool
 
 
@@ -123,14 +125,17 @@ def _link_text(
     match = _RE_AUTHOR_MARKER.search(credit_prose)
     if match is not None or _RE_USER_ROLE.search(credit_prose) is not None:
         return _keep_explicit_credit(content, target, credit_prose, match, linked=linked)
-    handle = target.author.handle if not target.author.is_bot else None
+    credit = _credit_list(target.credits, fragment.suffix)
     if linked:
         before, after = _split_trailing_code(content, fragment.suffix)
-        if handle is None:
-            return content
         suffix = "" if target.knope else "."
-        return f"{before.removesuffix('.')} by {_author_credit(handle, fragment.suffix)}{suffix}{after}"
-    return _append_pull_request_link(content, target, handle)
+        return f"{before.removesuffix('.')} by {credit}{suffix}{after}"
+    return _append_pull_request_link(content, target, credit)
+
+
+def _credit_list(credited: tuple[PullRequestCredit, ...], extension: str) -> str:
+    names = [_author_credit(credit.name, extension) if credit.linked else credit.name for credit in credited]
+    return f"{', '.join(names[:-1])} and {names[-1]}" if len(names) > 1 else names[0]
 
 
 def _keep_explicit_credit(
@@ -349,7 +354,7 @@ def _markdown_credit_children(children: list[Token]) -> str:
 
 
 def _append_pull_request_link(
-    content: str, target: _LinkTarget, author: str | None, *, anchor: int | None = None
+    content: str, target: _LinkTarget, credit: str | None, *, anchor: int | None = None
 ) -> str:
     link = _pull_request_link(target.repository, target.number, target.fragment.suffix)
     if anchor is None:
@@ -359,11 +364,11 @@ def _append_pull_request_link(
         after = content[len(before) :]
     if not before:
         opening, _, body = after.partition("\n")
-        suffix = f"{link} by {_author_credit(author, target.fragment.suffix)}" if author is not None else link
+        suffix = f"{link} by {credit}" if credit is not None else link
         return f"{opening[:-2]} {suffix}::\n{body.rstrip()}"
     content = f"{before.removesuffix('.')} {link}"
-    if author is not None:
-        content += f" by {_author_credit(author, target.fragment.suffix)}"
+    if credit is not None:
+        content += f" by {credit}"
     return f"{content}{'' if target.knope else '.'}{after}"
 
 
