@@ -126,6 +126,10 @@ def _managed_requirement(node: ScalarNode) -> Requirement:
     if requirement.url is not None or not _exact_pin(requirement):
         msg = f"managed hook dependency must be an exact index pin: {node.value!r}"
         raise ValueError(msg)
+    # uv ignores extras in --constraint, so an extra's dependencies would install unpinned.
+    if requirement.extras or "extra" in str(requirement.marker or ""):
+        msg = f"managed hook dependency must not select extras: {node.value!r}"
+        raise ValueError(msg)
     return requirement
 
 

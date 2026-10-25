@@ -359,6 +359,28 @@ def test_rejects_unpinned_hook_resolution(tmp_path: Path, mocker: MockerFixture,
     assert config.read_text(encoding="utf-8") == source
 
 
+@pytest.mark.parametrize(
+    "managed",
+    [
+        pytest.param('"requests[socks]==2.34.2"', id="extras"),
+        pytest.param("\"pysocks==1.7.1; extra == 'socks'\"", id="extra-marker"),
+    ],
+)
+def test_check_rejects_managed_pin_with_extras(tmp_path: Path, mocker: MockerFixture, managed: str) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    config.write_text(
+        "repos:\n  - repo: local\n    hooks:\n      - id: a\n        language: python\n"
+        f"        additional_dependencies:\n          - requests>=2\n          - {managed} # release-creator managed\n",
+        encoding="utf-8",
+    )
+    run = mocker.patch("release_creator.process.subprocess.run", autospec=True)
+
+    with pytest.raises(ValueError, match="managed hook dependency must not select extras"):
+        check_pins(config, "7 days", "3.15")
+
+    run.assert_not_called()
+
+
 @pytest.fixture
 def upstream_python_hook(tmp_path: Path) -> tuple[Path, str]:
     upstream = tmp_path / "upstream"
