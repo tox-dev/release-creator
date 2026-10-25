@@ -1,7 +1,8 @@
 # Contributing to release-creator
 
-Run `tox -e dev` to create `.tox/dev`. Run `tox -e 3.15,type,pkg_meta,docs` and `prek run --all-files` before pushing a
-PR. CI tests Python 3.15 on Linux, macOS, and Windows.
+Run `tox -e dev` to create `.tox/dev`. Run `tox -e 3.15,type,pkg_meta,docs` and
+`prek run --all-files --config .pre-commit-config.yaml` before pushing a PR. CI tests Python 3.15 on Linux, macOS, and
+Windows.
 
 ## Release notes
 

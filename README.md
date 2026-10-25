@@ -67,7 +67,8 @@ git tag --list | uvx --from 'release-creator' release-creator tags 1.2.3 --previ
 ## Development and releases
 
 See [contributing](CONTRIBUTING.md) for the fragment format and release process. The package uses the same `notes`
-command for its own GitHub Releases. Run `tox -e 3.15,type,pkg_meta,docs` and `prek run --all-files` before a PR.
+command for its own GitHub Releases. Run `tox -e 3.15,type,pkg_meta,docs` and
+`prek run --all-files --config .pre-commit-config.yaml` before a PR.
 
 [checks]: https://github.com/tox-dev/release-creator/actions/workflows/check.yaml
 [pypi]: https://pypi.org/project/release-creator/
