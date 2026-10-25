@@ -1773,3 +1773,57 @@ def test_render_markdown_rejects_invalid_input(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         render_markdown(changelog, replace(ReleaseContext(tag="1.2.3", repository="tox-dev/example"), **overrides))
+
+
+def test_render_markdown_keeps_new_contributors_section() -> None:
+    changelog = dedent("""\
+        ## 1.2.3 (today)
+
+        ### Added
+
+        - Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).
+
+        ### New Contributors
+
+        - [@alice](https://github.com/alice) made their first contribution in [#42](https://github.com/tox-dev/example/pull/42)
+        """)
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert result == (
+        "### Features\n\n"
+        "- Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n\n"
+        "### New Contributors\n\n"
+        "- [@alice](https://github.com/alice) made their first contribution in "
+        "[#42](https://github.com/tox-dev/example/pull/42)\n\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+    )
+
+
+def test_render_rst_keeps_new_contributors_section() -> None:
+    changelog = dedent("""\
+        1.2.3 (today)
+        =============
+
+        Added
+        -----
+
+        - Add a feature (:pr:`42`) by :user:`alice`.
+
+        New Contributors
+        ----------------
+
+        - :user:`alice` made their first contribution in :pr:`42`
+        """)
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert result == (
+        '<a name="release-1-2-3-added"></a>\n\n'
+        "### Features\n\n"
+        "- Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) by @alice.\n\n"
+        '<a name="release-1-2-3-new-contributors"></a>\n\n'
+        "### New Contributors\n\n"
+        "- @alice made their first contribution in [#42](https://github.com/tox-dev/example/pull/42)\n\n"
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+    )

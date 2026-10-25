@@ -14,7 +14,10 @@ CHANGELOG_CATEGORIES: Final = {
     "removal": ("Removed", "Removals"),
     "packaging": ("Packaging", "Packaging"),
 }
-RELEASE_CATEGORIES: Final = dict(CHANGELOG_CATEGORIES.values()) | {"Other changes": "Other changes"}
+RELEASE_CATEGORIES: Final = dict(CHANGELOG_CATEGORIES.values()) | {
+    "Other changes": "Other changes",
+    "New Contributors": "New Contributors",
+}
 
 __all__ = [
     "CHANGELOG_CATEGORIES",
