@@ -16,7 +16,7 @@ lazy import tomli_w
 lazy from packaging.markers import Marker
 lazy from packaging.requirements import InvalidRequirement, Requirement
 lazy from packaging.specifiers import SpecifierSet
-lazy from packaging.utils import canonicalize_name
+lazy from packaging.utils import NormalizedName, canonicalize_name
 lazy from packaging.version import Version
 
 lazy from release_creator.process import isolated_uv_env, run_text
@@ -171,7 +171,11 @@ def _render_lock(project: Path, uv: str, committed: _LockMetadata | None, *, kee
 def _resolver_version(uv: str, directory: Path, committed: _LockMetadata | None) -> str:
     version = _run_uv(uv, directory, "--version").split()[1]
     if committed is not None and committed.uv_version != version:
-        recorded = f"was resolved with uv {committed.uv_version}" if committed.uv_version else "records no uv version"
+        recorded = (
+            f"was resolved with uv {committed.uv_version}"
+            if committed.uv_version is not None
+            else "records no uv version"
+        )
         msg = f"project lock {recorded}, but uv {version} is running; refresh the lock with the same uv"
         raise ValueError(msg)
     return version
@@ -203,7 +207,7 @@ def _resolve_packages(compiler: _Compiler, selections: _Selections) -> list[_Tom
             compiler,
             groups=sources,
             requirements=selections.build if group == "build" else None,
-            constraints=release_pins if group.startswith("release-") else None,
+            constraints=tuple(release_pins) if group.startswith("release-") else (),
         )
         if group.startswith("release-"):
             release_pins.extend(_pins(selected))
@@ -238,7 +242,9 @@ def _resolve_packages(compiler: _Compiler, selections: _Selections) -> list[_Tom
 
 
 def _inline_members(
-    requirements: list[str], members: dict[str, _TomlTable], expanded: frozenset[tuple[str, str | None]] = frozenset()
+    requirements: list[str],
+    members: dict[NormalizedName, _TomlTable],
+    expanded: frozenset[tuple[str, str | None]] = frozenset(),
 ) -> list[str]:
     # With --no-sources uv would resolve a workspace member, or the project's own extra, from PyPI.
     inlined: list[str] = []
@@ -478,7 +484,7 @@ def _compile_selection(
     *,
     requirements: list[str] | None = None,
     groups: list[str] | None = None,
-    constraints: list[str] | None = None,
+    constraints: tuple[str, ...] = (),
 ) -> list[_TomlTable]:
     with TemporaryDirectory() as temporary:
         constraint_options: list[str] = []
