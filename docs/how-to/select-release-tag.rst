@@ -40,10 +40,8 @@ For tox-dev libraries, both adding and dropping a supported Python version use a
 releases will not install on a dropped Python version. Users who need that version can install an older release. State
 the exact Python version in the fragment. Reserve ``*.breaking.md`` for changes that require a major bump.
 
-Choose ``--next major``, ``minor``, or ``patch`` to override that classification. ``--next calver`` uses
-``year.month.patch``: the first October 2026 release is ``2026.10.0``, and the next is ``2026.10.1``. CalVer uses the
-runner's current date. Every choice requires at least one fragment and must produce a version newer than all existing
-numeric tags.
+Choose ``--next major``, ``minor``, or ``patch`` to override that classification. Every choice requires at least one
+fragment.
 
 Check a proposed version
 ========================

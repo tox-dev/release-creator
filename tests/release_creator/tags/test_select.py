@@ -1,7 +1,5 @@
 """Numeric release tag selection tests."""
 
-from datetime import date
-
 import pytest
 from packaging.version import Version
 
@@ -28,31 +26,19 @@ lazy from release_creator.tags.select import next_tag, parse_tag, previous_tag, 
         pytest.param("major", ["1.2.3"], ["+one.bugfix.md"], "2.0.0", id="major"),
         pytest.param("minor", ["1.2.3"], ["+one.bugfix.md"], "1.3.0", id="minor"),
         pytest.param("patch", ["1.2.3"], ["+one.feature.md"], "1.2.4", id="patch"),
-        pytest.param("calver", ["2026.9.4"], ["+one.bugfix.md"], "2026.10.0", id="new-month"),
-        pytest.param("calver", ["2026.10.4"], ["+one.bugfix.md"], "2026.10.5", id="same-month"),
-        pytest.param("calver", ["2026.10.0rc1"], ["+one.bugfix.md"], "2026.10.0", id="calver-finalizes"),
-        pytest.param("calver", ["2026.9.0rc1"], ["+one.bugfix.md"], "2026.10.0", id="calver-new-month"),
     ],
 )
 def test_next_tag(bump: str, tags: list[str], fragments: list[str], expected: str) -> None:
-    assert next_tag(bump, tags, fragments, date(2026, 10, 19)) == expected
+    assert next_tag(bump, tags, fragments) == expected
 
 
 def test_next_tag_with_prefix() -> None:
-    assert next_tag("auto", ["1.0.3", "v1.1.0", "v1"], ["+one.bugfix.md"], date(2026, 10, 19), "v") == "v1.1.1"
+    assert next_tag("auto", ["1.0.3", "v1.1.0", "v1"], ["+one.bugfix.md"], "v") == "v1.1.1"
 
 
-@pytest.mark.parametrize(
-    ("bump", "tags", "fragments", "message"),
-    [
-        pytest.param("auto", [], [], "no changelog fragments", id="empty"),
-        pytest.param("calver", ["2026.11.0"], ["+one.feature.md"], "must be newer", id="older-calver"),
-        pytest.param("unknown", ["1.2.3"], ["+one.feature.md"], "unknown version bump", id="unknown-bump"),
-    ],
-)
-def test_next_tag_rejects_invalid(bump: str, tags: list[str], fragments: list[str], message: str) -> None:
-    with pytest.raises(ValueError, match=message):
-        next_tag(bump, tags, fragments, date(2026, 10, 19))
+def test_next_tag_requires_fragments() -> None:
+    with pytest.raises(ValueError, match="no changelog fragments"):
+        next_tag("auto", [], [])
 
 
 @pytest.mark.parametrize(

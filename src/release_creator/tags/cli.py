@@ -2,7 +2,6 @@
 
 lazy import argparse
 lazy import sys
-lazy from datetime import UTC, datetime
 lazy from pathlib import Path
 
 lazy from release_creator.fragments.names import pending_fragments
@@ -17,7 +16,7 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
     choice = tags.add_mutually_exclusive_group()
     choice.add_argument(
         "--next",
-        choices=("auto", "major", "minor", "patch", "calver"),
+        choices=("auto", "major", "minor", "patch"),
         help="calculate a version from pending fragments",
     )
     choice.add_argument("--previous", action="store_true", help="print the preceding tag from standard input")
@@ -43,7 +42,6 @@ def _select(args: argparse.Namespace) -> None:
             args.next,
             _scoped_tags(sys.stdin.read().splitlines(), args.package),
             [path.name for path in pending_fragments(directory)],
-            datetime.now(UTC).date(),
             args.prefix,
         )
         sys.stdout.write(f"{args.package}/{version}\n" if args.package else f"{version}\n")
