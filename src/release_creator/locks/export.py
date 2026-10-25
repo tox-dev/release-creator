@@ -170,22 +170,20 @@ def _resolve_packages(compiler: _Compiler, selections: _Selections) -> list[_Tom
         ],
         members,
     )
-    _add_selection(
-        packages,
-        markers,
-        _compile_selection(compiler, requirements=runtime),
-        "project-runtime",
-        "dependency_groups",
-    )
+    # Release jobs install release-* groups next to each other and the runtime, so each one must agree with those pins.
+    release_pins = _pins(selected := _compile_selection(compiler, requirements=runtime))
+    _add_selection(packages, markers, selected, "project-runtime", "dependency_groups")
     for group in selections.groups:
         sources = [f"{path}:{group}" for path, item in projects if group in _table(item, "dependency-groups")]
-        _add_selection(
-            packages,
-            markers,
-            _compile_selection(compiler, groups=sources, requirements=selections.build if group == "build" else None),
-            group,
-            "dependency_groups",
+        selected = _compile_selection(
+            compiler,
+            groups=sources,
+            requirements=selections.build if group == "build" else None,
+            constraints=release_pins if group.startswith("release-") else None,
         )
+        if group.startswith("release-"):
+            release_pins.extend(_pins(selected))
+        _add_selection(packages, markers, selected, group, "dependency_groups")
     for extra in selections.extras:
         extra_requirements = _inline_members(
             [
@@ -480,18 +478,35 @@ def _compile_selection(
     *,
     requirements: list[str] | None = None,
     groups: list[str] | None = None,
+    constraints: list[str] | None = None,
 ) -> list[_TomlTable]:
-    compiled = _run_uv(
-        compiler.uv,
-        compiler.directory,
-        "pip",
-        "compile",
-        *(["-"] if requirements is not None else []),
-        *(option for group in groups or [] for option in ("--group", group)),
-        *compiler.options,
-        stdin=f"{'\n'.join(requirements)}\n" if requirements is not None else None,
-    )
+    with TemporaryDirectory() as temporary:
+        constraint_options: list[str] = []
+        if constraints:
+            (constraint_file := Path(temporary) / "constraints.txt").write_text(
+                "".join(f"{line}\n" for line in constraints), encoding="utf-8"
+            )
+            constraint_options = ["--constraint", str(constraint_file)]
+        compiled = _run_uv(
+            compiler.uv,
+            compiler.directory,
+            "pip",
+            "compile",
+            *(["-"] if requirements is not None else []),
+            *(option for group in groups or [] for option in ("--group", group)),
+            *compiler.options,
+            *constraint_options,
+            stdin=f"{'\n'.join(requirements)}\n" if requirements is not None else None,
+        )
     return cast("list[_TomlTable]", tomllib.loads(compiled)["packages"])
+
+
+def _pins(packages: list[_TomlTable]) -> list[str]:
+    return [
+        f"{package['name']}=={package['version']}" + (f" ; {package['marker']}" if "marker" in package else "")
+        for package in packages
+        if "version" in package
+    ]
 
 
 def _compile_extra(

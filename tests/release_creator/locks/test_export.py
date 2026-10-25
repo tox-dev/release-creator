@@ -368,6 +368,52 @@ def test_export_lock_rejects_unknown_workspace_member_extra(tmp_path: Path, mock
         export_lock(tmp_path)
 
 
+def test_export_lock_rejects_release_group_conflicting_with_runtime(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "1"\nrequires-python = ">=3.15"\ndependencies = ["packaging==24.2"]\n'
+        '[dependency-groups]\nrelease-prepare = ["packaging==25.0"]\n'
+    )
+
+    with pytest.raises(ValueError, match="No solution found"):
+        export_lock(tmp_path)
+
+    assert not (tmp_path / "pylock.toml").exists()
+
+
+def test_export_lock_constrains_release_groups_by_earlier_pins(tmp_path: Path, mocker: MockerFixture) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "1"\nrequires-python = ">=3.15"\ndependencies = ["colorama"]\n'
+        '[dependency-groups]\nrelease-news = ["towncrier"]\ntest = ["pytest"]\nrelease-shell = ["prek"]\n'
+    )
+    mocker.patch("shutil.which", return_value="uv")
+    outputs = {
+        None: '[[packages]]\nname = "colorama"\nversion = "0.4.6"\nmarker = "sys_platform == \'win32\'"\n',
+        "release-news": '[[packages]]\nname = "towncrier"\nversion = "25.8.0"\n',
+        "test": '[[packages]]\nname = "pytest"\nversion = "9.0.0"\n',
+        "release-shell": '[[packages]]\nname = "prek"\nversion = "0.5.5"\n',
+    }
+    constraints: dict[str | None, str | None] = {}
+
+    def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if command[1] == "--version":
+            return _UV_VERSION
+        group = command[command.index("--group") + 1].rsplit(":", 1)[1] if "--group" in command else None
+        constraint = command[command.index("--constraint") + 1] if "--constraint" in command else None
+        constraints[group] = Path(constraint).read_text(encoding="utf-8") if constraint is not None else None
+        return subprocess.CompletedProcess(command, 0, _dated(outputs[group]), "")
+
+    mocker.patch("subprocess.run", autospec=True, side_effect=run)
+
+    export_lock(tmp_path)
+
+    assert constraints == {
+        None: None,
+        "release-news": "colorama==0.4.6 ; sys_platform == 'win32'\n",
+        "test": None,
+        "release-shell": "colorama==0.4.6 ; sys_platform == 'win32'\ntowncrier==25.8.0\n",
+    }
+
+
 def test_export_lock_keeps_published_self_dependency_in_group(tmp_path: Path, mocker: MockerFixture) -> None:
     project = tmp_path / "pyproject.toml"
     project.write_text(

@@ -20,9 +20,11 @@ The output contains a ``project-runtime`` group for the package's runtime depend
 ``[dependency-groups]``, every extra from ``[project.optional-dependencies]``, and a ``build`` group when the project
 declares build requirements. No group is selected by default. The command above installs only ``release``. Select
 ``project-runtime`` when you need the package's runtime dependencies. Each selection has its own resolution, so two
-groups can contain different versions of a package. A combined installation can fail even when either group installs
-alone; for example, Release Creator's ``project-runtime`` and ``type`` groups select different ``docutils`` versions.
-Only combine selections after testing that exact set with ``uv pip sync --group`` on the target Python and platform.
+groups can contain different versions of a package; for example, Release Creator's ``project-runtime`` and ``type``
+groups select different ``docutils`` versions. Release jobs install ``release-*`` groups together and next to
+``project-runtime``, so each ``release-*`` group is resolved under the pins of the runtime and of the ``release-*``
+groups before it. A conflict between them fails the refresh instead of the release. Combine other selections only after
+testing that exact set with ``uv pip sync --group`` on the target Python and platform.
 
 Before building a distribution, select exact build pins and artifact hashes for the current runner. The shared
 ``github-workflows`` repository ships this script; run it from a checkout of the released version used by your workflow:
