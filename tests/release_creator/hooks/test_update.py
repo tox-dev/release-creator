@@ -1315,6 +1315,11 @@ def test_rejects_unsupported_hook_python_version(tmp_path: Path) -> None:
             "      - id: second\n        language: python\n        additional_dependencies: [*dep]\n",
             id="shared-scalar",
         ),
+        pytest.param(
+            "vars:\n  - &dep requests<3\nrepos:\n  - repo: local\n    hooks:\n"
+            "      - id: first\n        language: python\n        additional_dependencies:\n          - *dep\n",
+            id="alias-only-list",
+        ),
     ],
 )
 def test_rejects_aliased_hook_configuration(tmp_path: Path, mocker: MockerFixture, source: str) -> None:
@@ -1331,6 +1336,32 @@ def test_rejects_aliased_hook_configuration(tmp_path: Path, mocker: MockerFixtur
         update_pins(config, "7 days", "3.15")
 
     assert config.read_text(encoding="utf-8") == source
+
+
+@pytest.mark.parametrize(
+    "hooks",
+    [
+        pytest.param("    hooks: &h\n      - id: x\n        additional_dependencies: []\n", id="hook-list"),
+        pytest.param("    hooks:\n      - &h\n        id: x\n        additional_dependencies: []\n", id="hook-mapping"),
+    ],
+)
+@pytest.mark.parametrize("check", [pytest.param(True, id="check"), pytest.param(False, id="update")])
+def test_rejects_hooks_shared_between_repositories(
+    tmp_path: Path, mocker: MockerFixture, hooks: str, check: bool
+) -> None:
+    config = tmp_path / ".pre-commit-config.yaml"
+    shared = "*h" if "hooks: &h" in hooks else "[*h]"
+    config.write_text(
+        f"repos:\n  - repo: https://example.invalid/first\n    rev: {'0' * 40}\n{hooks}"
+        f"  - repo: https://example.invalid/second\n    rev: {'0' * 40}\n    hooks: {shared}\n",
+        encoding="utf-8",
+    )
+    run = mocker.patch("release_creator.process.subprocess.run", autospec=True)
+
+    with pytest.raises(ValueError, match="YAML aliases cannot share hook definitions"):
+        (check_pins if check else update_pins)(config, "7 days", "3.15")
+
+    run.assert_not_called()
 
 
 def test_updates_hook_with_unrelated_yaml_alias(tmp_path: Path, mocker: MockerFixture) -> None:

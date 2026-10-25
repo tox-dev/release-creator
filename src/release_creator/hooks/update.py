@@ -67,7 +67,6 @@ def update_pins(config: Path, exclude_newer: str, python_version: str) -> None:
             resolved = _resolve(manifest_dependencies, config, _ResolvePolicy(exclude_newer, hook_version), package)
             if resolved or manifest_dependencies:
                 edits.append(_new_group_edit(source, hook, resolved, manifest_dependencies))
-    _reject_shared_edits(root, edits)
     for start, end, replacement in sorted(edits, key=operator.itemgetter(0), reverse=True):
         source = f"{source[:start]}{replacement}{source[end:]}"
     if edits:
@@ -199,22 +198,21 @@ def _reject_duplicate_keys(root: MappingNode) -> None:
             pending.extend(node.value)
 
 
-def _reject_shared_edits(root: MappingNode, edits: list[_Edit]) -> None:
+def _shared_nodes(root: MappingNode) -> set[int]:
     seen: set[int] = set()
+    shared: set[int] = set()
     pending: list[Node] = [root]
     while pending:
         node = pending.pop()
         if id(node) in seen:
-            shared = cast("MappingNode | ScalarNode | SequenceNode", node)
-            if any(start <= _end(shared) and _start(shared) <= end for start, end, _ in edits):
-                msg = "YAML aliases cannot be updated safely"
-                raise ValueError(msg)
+            shared.add(id(node))
             continue
         seen.add(id(node))
         if isinstance(node, MappingNode):
             pending.extend(child for pair in node.value for child in pair)
         elif isinstance(node, SequenceNode):
             pending.extend(node.value)
+    return shared
 
 
 def _default_python_version(root: MappingNode, fallback: str) -> str:
@@ -237,6 +235,7 @@ def _python_version(value: Node | str | None, fallback: str, system_version: str
 
 
 def _groups(source: str, root: MappingNode, python_groups: set[int]) -> list[_Group]:
+    shared = _shared_nodes(root)
     groups: list[_Group] = []
     pending: list[MappingNode | SequenceNode | ScalarNode] = [root]
     seen: set[int] = set()
@@ -252,6 +251,9 @@ def _groups(source: str, root: MappingNode, python_groups: set[int]) -> list[_Gr
                     and key.value == "additional_dependencies"
                     and (_start(key) in python_groups or _mapping_value(root, "repos") is None)
                 ):
+                    if id(value) in shared or any(id(item) in shared for item in value.value):
+                        msg = "YAML aliases cannot be updated safely"
+                        raise ValueError(msg)
                     groups.append(_parse_group(source, key, value, flow_mapping=node.flow_style is True))
                 else:
                     pending.append(value)
@@ -308,15 +310,9 @@ def _hook_packages(
     repositories = _mapping_value(root, "repos")
     if not isinstance(repositories, SequenceNode):
         return packages, missing, python_groups
+    _reject_shared_hooks(root, repositories)
     for index, repository in enumerate(repositories.value):
-        if not isinstance(repository, MappingNode):
-            msg = "hook repository must be a mapping"
-            raise TypeError(msg)
-        _reject_repository_merge(repository)
-        hooks = _mapping_value(repository, "hooks")
-        if not isinstance(hooks, SequenceNode):
-            msg = "hook repository must include hooks"
-            raise TypeError(msg)
+        hooks = cast("SequenceNode", _mapping_value(cast("MappingNode", repository), "hooks"))
         checkout_and_hooks = _repository_checkout(repository, temporary / str(index), cwd)
         checkout = checkout_and_hooks[0] if checkout_and_hooks is not None else None
         manifest = (
@@ -374,9 +370,30 @@ def _manifest_dependencies(entry: dict[str, object]) -> list[Requirement]:
     return requirements
 
 
-def _reject_repository_merge(repository: MappingNode) -> None:
-    if any(isinstance(key, ScalarNode) and key.value == "<<" for key, _ in repository.value):
-        msg = "YAML merge keys in repository definitions cannot be updated safely"
+def _reject_shared_hooks(root: MappingNode, repositories: SequenceNode) -> None:
+    hook_nodes: set[int] = set()
+    for repository in repositories.value:
+        if not isinstance(repository, MappingNode):
+            msg = "hook repository must be a mapping"
+            raise TypeError(msg)
+        _reject_merge_keys(repository, "repository definitions")
+        hooks = _mapping_value(repository, "hooks")
+        if not isinstance(hooks, SequenceNode):
+            msg = "hook repository must include hooks"
+            raise TypeError(msg)
+        for hook in hooks.value:
+            if isinstance(hook, MappingNode):
+                _reject_merge_keys(hook, "hook definitions")
+        hook_nodes.update((id(repository), id(hooks), *map(id, hooks.value)))
+    # A hook node shared by two repositories would be resolved against only one checkout.
+    if hook_nodes & _shared_nodes(root):
+        msg = "YAML aliases cannot share hook definitions"
+        raise ValueError(msg)
+
+
+def _reject_merge_keys(mapping: MappingNode, kind: str) -> None:
+    if any(isinstance(key, ScalarNode) and key.value == "<<" for key, _ in mapping.value):
+        msg = f"YAML merge keys in {kind} cannot be updated safely"
         raise ValueError(msg)
 
 
@@ -384,9 +401,6 @@ def _hook_language(hook: Node, languages: dict[str, str], *, require_id: bool) -
     if not isinstance(hook, MappingNode):
         msg = "selected hook must be a mapping with an id"
         raise TypeError(msg)
-    if any(isinstance(key, ScalarNode) and key.value == "<<" for key, _ in hook.value):
-        msg = "YAML merge keys in hook definitions cannot be updated safely"
-        raise ValueError(msg)
     identifier = _mapping_value(hook, "id")
     if require_id and not isinstance(identifier, ScalarNode):
         msg = "selected hook must be a mapping with an id"
