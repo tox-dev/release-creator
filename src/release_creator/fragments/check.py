@@ -71,13 +71,17 @@ def _validate_changed_fragment(
         msg = f"empty changelog fragment: {path}"
         raise ValueError(msg)
     validate_towncrier_fragment(content, path)
+    _reject_hand_written_attribution(content, suffix, path)
+    return 1
+
+
+def _reject_hand_written_attribution(content: str, suffix: str, path: Path) -> None:
     if has_hand_written_credit(content, suffix):
         msg = f"hand-written author credit in changelog fragment; the fragments linker adds it: {path}"
         raise ValueError(msg)
     if has_hand_written_pull_request_link(content, suffix):
         msg = f"hand-written pull request link in changelog fragment; the fragments linker adds it: {path}"
         raise ValueError(msg)
-    return 1
 
 
 def validate_fragment_deletions(config: Path) -> None:
@@ -115,7 +119,8 @@ def changed_changesets(config: Path, base: str) -> int:
     for path in _git_paths(directory, ["--diff-filter=AM", "--no-renames", f"origin/{base}...HEAD"]):
         if path.parent != directory or path.suffix != ".md" or path.name == "README.md":
             continue
-        frontmatter, _, _ = changeset_parts(path, path.read_text(encoding="utf-8"))
+        content = path.read_text(encoding="utf-8")
+        frontmatter, _, _ = changeset_parts(path, content)
         try:
             entries = yaml.safe_load(frontmatter[4:].partition("\n---\n")[0])
         except yaml.YAMLError as error:
@@ -133,6 +138,7 @@ def changed_changesets(config: Path, base: str) -> int:
             ):
                 msg = f"unsupported changeset type in {path}: {package}: {kind}"
                 raise ValueError(msg)
+        _reject_hand_written_attribution(content.removeprefix(frontmatter), ".md", path)
         count += 1
     return count
 

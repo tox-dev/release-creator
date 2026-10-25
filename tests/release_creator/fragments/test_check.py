@@ -483,6 +483,34 @@ def test_changed_changesets(news_repository: Path, content: str, count: int, err
         assert changed_changesets(news_repository / "knope.toml", "main") == count
 
 
+@pytest.mark.parametrize(
+    ("body", "error"),
+    [
+        pytest.param("# Fix a bug by [@alice](https://github.com/alice)\n", "author credit", id="markdown-credit"),
+        pytest.param("# Fix a bug by @alice\n", "author credit", id="bare-handle"),
+        pytest.param("# Fix a bug for :user:`alice`\n", "author credit", id="user-role"),
+        pytest.param(
+            "# Fix a bug ([#5](https://github.com/tox-dev/example/pull/5))\n", "pull request link", id="pull-link"
+        ),
+        pytest.param("# Fix a bug\n\nRegressed in #5.\n", "pull request link", id="bare-reference-in-body"),
+        pytest.param("# Fix a bug\n\nThanks to @alice and `#5`.\n", "", id="handle-without-marker"),
+        pytest.param("# Fix a bug\n\n```\nby @alice #5\n```\n", "", id="fence"),
+    ],
+)
+def test_changed_changesets_rejects_hand_written_attribution(news_repository: Path, body: str, error: str) -> None:
+    (news_repository / ".changeset").mkdir()
+    (news_repository / "knope.toml").write_text("[package]\n", encoding="utf-8")
+    (news_repository / ".changeset" / "fix.md").write_text(f"---\ndefault: patch\n---\n\n{body}", encoding="utf-8")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+
+    if error:
+        with pytest.raises(ValueError, match=f"hand-written {error} in changelog fragment"):
+            changed_changesets(news_repository / "knope.toml", "main")
+    else:
+        assert changed_changesets(news_repository / "knope.toml", "main") == 1
+
+
 def test_validate_news_cli_reports_knope_count(
     news_repository: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
