@@ -9,26 +9,11 @@ lazy from packaging.version import InvalidVersion, Version
 
 lazy from release_creator.anchors.names import release_anchor
 
-_RE_VERSION: Final = re.compile(
-    r"""
-    ^\#\#\s+                             # Markdown version heading
-    (?P<version>\S+)                      # Candidate release version
-    (?:\s+\([^)]+\))?                     # Optional release date
-    $                                      # End of heading
-    """,
-    re.VERBOSE,
-)
 _RE_CATEGORY: Final = re.compile(
     r"""
     ^\#\#\#\s+                        # Markdown category heading
     (?P<category>[A-Za-z][A-Za-z ]*)  # Category name
     $                                 # End of heading
-    """,
-    re.VERBOSE,
-)
-_RE_ANCHOR: Final = re.compile(
-    r"""
-    ^<a\s+name="(?P<anchor>release-[A-Za-z0-9-]+)"></a>$  # Release anchor
     """,
     re.VERBOSE,
 )
@@ -72,7 +57,16 @@ def _strip_anchors(lines: list[str], anchors: set[str]) -> list[str]:
         line = lines[line_index]
         if (
             line_index not in code_lines
-            and (match := _RE_ANCHOR.fullmatch(line)) is not None
+            and (
+                match := re.fullmatch(
+                    r"""
+                    ^<a\s+name="(?P<anchor>release-[A-Za-z0-9-]+)"></a>$  # Release anchor
+                    """,
+                    line,
+                    flags=re.VERBOSE,
+                )
+            )
+            is not None
             and match["anchor"] in anchors
         ):
             line_index += 1
@@ -116,7 +110,18 @@ def _code_lines(lines: list[str]) -> set[int]:
 
 
 def _version_heading(line: str) -> str | None:
-    if (match := _RE_VERSION.fullmatch(line)) is None:
+    if (
+        match := re.fullmatch(
+            r"""
+            ^\#\#\s+                             # Markdown version heading
+            (?P<version>\S+)                      # Candidate release version
+            (?:\s+\([^)]+\))?                     # Optional release date
+            $                                      # End of heading
+            """,
+            line,
+            flags=re.VERBOSE,
+        )
+    ) is None:
         return None
     version = cast("str", match["version"])
     try:

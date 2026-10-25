@@ -17,14 +17,6 @@ lazy from release_creator.fragments.pull_requests import PullRequest, PullReques
 lazy from release_creator.fragments.shape import markdown_visible_children, validate_towncrier_fragment
 lazy from release_creator.github import MARKDOWN_AUTHOR
 
-_RE_PULL_REQUEST_LINK: Final = re.compile(
-    r"""
-    https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/(?P<number>\d+)  # Markdown PR link
-    |                                                                                       # Or
-    :(?:pr|pull):`(?P<rst_number>\d+)`                                                     # RST PR role
-    """,
-    re.VERBOSE,
-)
 _RE_AUTHOR_MARKER: Final = re.compile(
     r"""
     (?:,?\s+)                     # Optional comma and whitespace before the credit
@@ -39,19 +31,6 @@ _RE_RST_USER: Final = re.compile(
     |                                 # Or
     `@(?P<link_handle>[A-Za-z0-9-]+)  # Explicit profile link text
     \ <https://(?:www\.)?github\.com/(?P=link_handle)/?>`_  # Matching profile URL
-    """,
-    re.VERBOSE | re.IGNORECASE,
-)
-_RE_AUTHOR_SEPARATOR: Final = re.compile(
-    r"""
-    ^[ \t]*(?P<separator>,(?:[ \t]*and)?|and)[ \t]*  # Continue a shared author list
-    """,
-    re.VERBOSE,
-)
-_RE_HTML_BREAK: Final = re.compile(
-    r"""
-    <(?P<name>br|hr)  # HTML line or horizontal break
-    (?P<attributes>(?:[^>"']|"[^"]*"|'[^']*')*)>  # Attributes may contain quoted >
     """,
     re.VERBOSE | re.IGNORECASE,
 )
@@ -164,7 +143,15 @@ def _has_pull_request_link(content: str, repository: str, number: str, extension
     return any(
         (match["repository"] == repository and match["number"] == number) or match["rst_number"] == number
         for text in (_markdown_prose(content) if extension == ".md" else _rst_prose(content))
-        for match in _RE_PULL_REQUEST_LINK.finditer(text)
+        for match in re.finditer(
+            r"""
+            https://github\.com/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/(?P<number>\d+)  # Markdown PR link
+            |                                                                                       # Or
+            :(?:pr|pull):`(?P<rst_number>\d+)`                                                     # RST PR role
+            """,
+            text,
+            flags=re.VERBOSE,
+        )
     )
 
 
@@ -283,7 +270,16 @@ def _markdown_credit_children(children: list[Token]) -> str:
         elif link_destination is not None and child.type not in {"em_open", "em_close", "strong_open", "strong_close"}:
             link_plain = False
         elif child.type in {"softbreak", "hardbreak"} or (
-            child.type == "html_inline" and _RE_HTML_BREAK.fullmatch(child.content) is not None
+            child.type == "html_inline"
+            and re.fullmatch(
+                r"""
+                <(?P<name>br|hr)  # HTML line or horizontal break
+                (?P<attributes>(?:[^>"']|"[^"]*"|'[^']*')*)>  # Attributes may contain quoted >
+                """,
+                child.content,
+                flags=re.VERBOSE | re.IGNORECASE,
+            )
+            is not None
         ):
             prose.append(" ")
     return "".join(prose)
@@ -388,7 +384,15 @@ def _credited_handles(credit_text: str, extension: str) -> set[str]:
         remaining = remaining[author.end() :]
         if extension == ".rst":
             remaining = remaining.lstrip("*")
-        if (separator := _RE_AUTHOR_SEPARATOR.match(remaining)) is None:
+        if (
+            separator := re.match(
+                r"""
+                ^[ \t]*(?P<separator>,(?:[ \t]*and)?|and)[ \t]*  # Continue a shared author list
+                """,
+                remaining,
+                flags=re.VERBOSE,
+            )
+        ) is None:
             break
         remaining = remaining[separator.end() :]
     return handles

@@ -36,112 +36,6 @@ _RE_RELEASE_PULL: Final = re.compile(
     """,
     re.VERBOSE | re.IGNORECASE,
 )
-_RE_GITHUB_CREDIT: Final = re.compile(
-    r"""
-    \s(?:-\s)?by\s+  # Candidate author credit
-    """,
-    re.VERBOSE,
-)
-_RE_GITHUB_HANDLE: Final = re.compile(
-    r"""
-    @(?P<handle>[A-Za-z0-9-]+)   # GitHub mention
-    """,
-    re.VERBOSE,
-)
-_RE_PROFILE_LABEL: Final = re.compile(
-    r"""
-    @(?P<handle>[A-Za-z0-9-]+)  # Displayed GitHub handle
-    """,
-    re.VERBOSE,
-)
-_RE_GITHUB_PATH: Final = re.compile(
-    r"""
-    ^/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)  # Owner and repository
-    /(?P<kind>pull|issues)/(?P<number>\d+)             # Pull request or issue route
-    (?:/|$)                                             # Optional subpath
-    """,
-    re.VERBOSE,
-)
-_RE_PULL_LABEL: Final = re.compile(
-    r"""
-    (?:PR\ \#?|\#)(?P<number>\d+)  # Displayed pull request number
-    """,
-    re.VERBOSE | re.IGNORECASE,
-)
-_RE_CREDIT_HANDLES: Final = re.compile(
-    r"""
-    ^\s*(?P<handles>
-        @[A-Za-z0-9-]+  # First credited author
-        (?:(?:\s*,\s*(?:and\s+)?|\s+and\s+)@[A-Za-z0-9-]+)*  # Additional authors
-    )
-    (?:[.,;:)\s]|$)  # Credit ends before other prose or an RST literal marker
-    """,
-    re.VERBOSE,
-)
-_RE_GENERATED_PR_AUTHOR: Final = re.compile(
-    r"""
-    \bby\s+@(?P<handle>[A-Za-z0-9-]+)  # GitHub generated PR author
-    (?P<bot>\[bot\])?                 # Bot accounts are not credited
-    \s+in\s+https://github\.com/
-    (?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)  # Repository in the generated link
-    /pull/(?P<number>\d+)              # Pull request number
-    \s*$                                # Actual credit follows the entire title
-    """,
-    re.VERBOSE,
-)
-_RE_GENERATED_PR_LINK: Final = re.compile(
-    r"""
-    \bin\s+https://github\.com/
-    (?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)  # GitHub repository
-    /pull/(?P<number>\d+)                            # Final PR on the generated line
-    \s*$                                               # End of generated line
-    """,
-    re.VERBOSE,
-)
-_RE_RST_VERSION: Final = re.compile(
-    r"""
-    ^(?:
-        (?P<tag>v?[A-Za-z0-9.+-]+)\ \((?P<date>[^)]+)\)  # Version and date
-        |
-        `(?P<link_tag>v?[A-Za-z0-9.+-]+)\ <https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/tree/
-        (?P=link_tag)>`_(?:\ -\ (?P<link_date>\d{4}-\d{2}-\d{2}))?  # Linked version, with optional date
-    )$
-    """,
-    re.VERBOSE,
-)
-_RE_MARKDOWN_VERSION: Final = re.compile(
-    r"""
-    ^(?P<level>\#{2,3})\          # Markdown version heading level
-    (?P<open>\[)?                   # Optional Keep a Changelog link bracket
-    (?P<tag>v?[A-Za-z0-9.+-]+)  # Release version; Version validates its syntax
-    (?(open)\])                     # Close the optional bracket
-    (?:\ \([^)]+\)|\ -\ [^\n]+)? # Parenthesized or dash-separated date
-    $                               # End of heading
-    """,
-    re.VERBOSE,
-)
-_RE_MARKDOWN_VERSION_ANCHOR: Final = re.compile(
-    r"""
-    ^<a\ name="release-             # Version anchor prefix
-    (?P<version>v?[A-Za-z0-9_.-]+)  # Version encoded for an anchor
-    "></a>$                         # Anchor terminator
-    """,
-    re.VERBOSE,
-)
-_RE_MARKDOWN_ANCHOR: Final = re.compile(
-    r"""
-    ^<a\ name="(?P<anchor>release-[A-Za-z0-9_-]+)"></a>$  # Complete release or category anchor
-    """,
-    re.VERBOSE,
-)
-_RE_MARKDOWN_LINK_DEFINITION: Final = re.compile(
-    r"""
-    ^\[(?P<version>v?[A-Za-z0-9.+-]+|unreleased)\]:  # Version reference
-    \s+https://github\.com/[^\s]+                    # GitHub destination
-    $                                                   # End of definition
-    """,
-    re.VERBOSE | re.IGNORECASE,
-)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -237,11 +131,31 @@ def _generated_pr_authors(generated_notes: str, repository: str) -> tuple[dict[s
             in_new_contributors = line.removeprefix("### ").removeprefix("## ") == "New Contributors"
         if in_new_contributors:
             continue
-        if (link := _RE_GENERATED_PR_LINK.search(line)) is None or link[
-            "repository"
-        ].casefold() != repository.casefold():
+        if (
+            link := re.search(
+                r"""
+                \bin\s+https://github\.com/
+                (?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)  # GitHub repository
+                /pull/(?P<number>\d+)                            # Final PR on the generated line
+                \s*$                                               # End of generated line
+                """,
+                line,
+                flags=re.VERBOSE,
+            )
+        ) is None or link["repository"].casefold() != repository.casefold():
             continue
-        match = _RE_GENERATED_PR_AUTHOR.search(line)
+        match = re.search(
+            r"""
+            \bby\s+@(?P<handle>[A-Za-z0-9-]+)  # GitHub generated PR author
+            (?P<bot>\[bot\])?                 # Bot accounts are not credited
+            \s+in\s+https://github\.com/
+            (?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)  # Repository in the generated link
+            /pull/(?P<number>\d+)              # Pull request number
+            \s*$                                # Actual credit follows the entire title
+            """,
+            line,
+            flags=re.VERBOSE,
+        )
         number = link["number"]
         author = None if match is None or match["bot"] is not None else match["handle"]
         if match is not None and match["bot"] is not None:
@@ -342,8 +256,14 @@ def _visible_link(label: str, url: str, repository: str) -> str:
     if on_github and ({".", ".."} & set(parsed.path.split("/")) or "%" in parsed.path):
         msg = f"GitHub link has a relative or encoded path: {url}"
         raise ValueError(msg)
-    if _RE_PROFILE_LABEL.search(label) is not None:
-        profile = _RE_PROFILE_LABEL.fullmatch(label.strip())
+    profile_label = re.compile(
+        r"""
+        @(?P<handle>[A-Za-z0-9-]+)  # Displayed GitHub handle
+        """,
+        re.VERBOSE,
+    )
+    if profile_label.search(label) is not None:
+        profile = profile_label.fullmatch(label.strip())
         handle = profile["handle"].casefold() if profile is not None else ""
         if (
             profile is None
@@ -355,13 +275,33 @@ def _visible_link(label: str, url: str, repository: str) -> str:
             msg = f"GitHub credit link for {label.strip()} points to another profile"
             raise ValueError(msg)
         return label
-    path = _RE_GITHUB_PATH.match(parsed.path) if on_github else None
+    path = (
+        re.match(
+            r"""
+            ^/(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)  # Owner and repository
+            /(?P<kind>pull|issues)/(?P<number>\d+)             # Pull request or issue route
+            (?:/|$)                                             # Optional subpath
+            """,
+            parsed.path,
+            flags=re.VERBOSE,
+        )
+        if on_github
+        else None
+    )
     target = (path["repository"].casefold(), path["number"]) if path is not None else None
     shown = {
         ((match["repository"] or match["short_repository"] or repository).casefold(), match["number"])
         for match in _RE_RELEASE_PULL.finditer(label)
     }
-    if (number := _RE_PULL_LABEL.fullmatch(label)) is not None:
+    if (
+        number := re.fullmatch(
+            r"""
+            (?:PR\ \#?|\#)(?P<number>\d+)  # Displayed pull request number
+            """,
+            label,
+            flags=re.VERBOSE | re.IGNORECASE,
+        )
+    ) is not None:
         shown.add((repository.casefold(), number["number"]))
     if mismatch := sorted(shown - {target}):
         destination = (
@@ -430,7 +370,13 @@ def _reference_in_url(line: str, match: re.Match[str]) -> bool:
 
 
 def _entry_credit(text: str, *, named: bool) -> tuple[set[str], bool] | None:
-    for marker in _RE_GITHUB_CREDIT.finditer(text):
+    for marker in re.finditer(
+        r"""
+        \s(?:-\s)?by\s+  # Candidate author credit
+        """,
+        text,
+        flags=re.VERBOSE,
+    ):
         prefix = text[: marker.start()].strip()
         if named and prefix.strip("(),;.-"):
             continue
@@ -438,8 +384,30 @@ def _entry_credit(text: str, *, named: bool) -> tuple[set[str], bool] | None:
             continue
         credit_text = text[marker.end() :]
         handles = (
-            {str(item.group("handle")).casefold() for item in _RE_GITHUB_HANDLE.finditer(match["handles"])}
-            if (match := _RE_CREDIT_HANDLES.match(credit_text)) is not None
+            {
+                str(item.group("handle")).casefold()
+                for item in re.finditer(
+                    r"""
+                    @(?P<handle>[A-Za-z0-9-]+)   # GitHub mention
+                    """,
+                    match["handles"],
+                    flags=re.VERBOSE,
+                )
+            }
+            if (
+                match := re.match(
+                    r"""
+                    ^\s*(?P<handles>
+                        @[A-Za-z0-9-]+  # First credited author
+                        (?:(?:\s*,\s*(?:and\s+)?|\s+and\s+)@[A-Za-z0-9-]+)*  # Additional authors
+                    )
+                    (?:[.,;:)\s]|$)  # Credit ends before other prose or an RST literal marker
+                    """,
+                    credit_text,
+                    flags=re.VERBOSE,
+                )
+            )
+            is not None
             else set[str]()
         )
         plain_name = credit_text.strip(" .()")
@@ -519,7 +487,18 @@ def _rst_version_at(lines: list[str], index: int) -> re.Match[str] | None:
         line.startswith(" ") and not line.startswith("  ") and index > 0 and _is_rst_adornment(lines[index - 1])
     ):
         return None
-    match = _RE_RST_VERSION.fullmatch(line.strip())
+    match = re.fullmatch(
+        r"""
+        ^(?:
+            (?P<tag>v?[A-Za-z0-9.+-]+)\ \((?P<date>[^)]+)\)  # Version and date
+            |
+            `(?P<link_tag>v?[A-Za-z0-9.+-]+)\ <https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/tree/
+            (?P=link_tag)>`_(?:\ -\ (?P<link_date>\d{4}-\d{2}-\d{2}))?  # Linked version, with optional date
+        )$
+        """,
+        line.strip(),
+        flags=re.VERBOSE,
+    )
     return match if match is not None and _is_version(match["tag"] or match["link_tag"]) else None
 
 
@@ -564,7 +543,17 @@ def _extract_body(changelog: str, context: ReleaseContext) -> str:
         for line in changelog.splitlines()
         if not _is_comparison_line(line)
         and not (
-            (match := _RE_MARKDOWN_LINK_DEFINITION.fullmatch(line))
+            (
+                match := re.fullmatch(
+                    r"""
+                    ^\[(?P<version>v?[A-Za-z0-9.+-]+|unreleased)\]:  # Version reference
+                    \s+https://github\.com/[^\s]+                    # GitHub destination
+                    $                                                   # End of definition
+                    """,
+                    line,
+                    flags=re.VERBOSE | re.IGNORECASE,
+                )
+            )
             and (match["version"].lower() == "unreleased" or _is_version(match["version"]))
         )
     ]
@@ -579,10 +568,21 @@ def _extract_body(changelog: str, context: ReleaseContext) -> str:
         )
         lines = lines[packages[0] + 1 : end]
     version = context.tag.rsplit("/", 1)[-1].removeprefix("v")
+    markdown_version = re.compile(
+        r"""
+        ^(?P<level>\#{2,3})\          # Markdown version heading level
+        (?P<open>\[)?                   # Optional Keep a Changelog link bracket
+        (?P<tag>v?[A-Za-z0-9.+-]+)  # Release version; Version validates its syntax
+        (?(open)\])                     # Close the optional bracket
+        (?:\ \([^)]+\)|\ -\ [^\n]+)? # Parenthesized or dash-separated date
+        $                               # End of heading
+        """,
+        re.VERBOSE,
+    )
     headings = [
         index
         for index, line in enumerate(lines)
-        if (match := _RE_MARKDOWN_VERSION.fullmatch(line))
+        if (match := markdown_version.fullmatch(line))
         and _is_version(match["tag"])
         and match["level"] == heading_level
         and match["tag"].removeprefix("v") == version
@@ -594,7 +594,7 @@ def _extract_body(changelog: str, context: ReleaseContext) -> str:
     body: list[str] = []
     for source_line in lines[headings[0] + 1 :]:
         if (
-            (match := _RE_MARKDOWN_VERSION.fullmatch(source_line)) is not None
+            (match := markdown_version.fullmatch(source_line)) is not None
             and _is_version(match["tag"])
             and match["level"] == heading_level
         ) or _is_version_anchor(source_line, context.package):
@@ -604,7 +604,17 @@ def _extract_body(changelog: str, context: ReleaseContext) -> str:
 
 
 def _is_version_anchor(line: str, package: str | None) -> bool:
-    if (match := _RE_MARKDOWN_VERSION_ANCHOR.fullmatch(line)) is None:
+    if (
+        match := re.fullmatch(
+            r"""
+            ^<a\ name="release-             # Version anchor prefix
+            (?P<version>v?[A-Za-z0-9_.-]+)  # Version encoded for an anchor
+            "></a>$                         # Anchor terminator
+            """,
+            line,
+            flags=re.VERBOSE,
+        )
+    ) is None:
         return False
     version = match["version"]
     if package is not None:
@@ -642,7 +652,14 @@ def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
             category_has_item = True
         elif (
             source_line.strip()
-            and _RE_MARKDOWN_ANCHOR.fullmatch(source_line) is None
+            and re.fullmatch(
+                r"""
+                ^<a\ name="(?P<anchor>release-[A-Za-z0-9_-]+)"></a>$  # Complete release or category anchor
+                """,
+                source_line,
+                flags=re.VERBOSE,
+            )
+            is None
             and (not in_item or not source_line[0].isspace())
         ):
             msg = f"release text outside an item: {source_line}"
