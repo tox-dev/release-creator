@@ -46,6 +46,7 @@ dev = [ { include-group = "test" }, { include-group = "type" }, { include-group 
 test = [
   "covdefaults>=2.3",
   "diff-cover>=10.2",
+  "graphql-core>=3",
   "pytest>=9",
   "pytest-cov>=7",
   "pytest-mock>=3.16",
