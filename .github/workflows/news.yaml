@@ -20,21 +20,16 @@ jobs:
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
-      - name: Validate release news
-        id: news
+      - name: Install release-creator from source
+        run: |
+          uv sync --no-default-groups --group release-prepare
+          echo "$PWD/.venv/bin" >>"$GITHUB_PATH"
+      - uses: tox-dev/github-workflows/validate-news@13c5d50919f11fe2988b41a0acee48ca2488c1d6 # v3.0.1
+      - name: Require releasable version
         env:
           BASE_REF: ${{ github.base_ref }}
-          SKIP_NEWS: ${{ contains(github.event.pull_request.labels.*.name, 'skip news') }}
-          BOT_AUTHOR: ${{ github.event.pull_request.user.type == 'Bot' }}
         run: |
-          set -euo pipefail
-          fragments=$(uv run --no-default-groups --group release-prepare release-creator validate-news --base "$BASE_REF")
+          fragments=$(release-creator validate-news --base "$BASE_REF")
           if ((fragments)); then
-            echo 'fragment=true' >> "$GITHUB_OUTPUT"
-          elif [[ "$SKIP_NEWS" != true && "$BOT_AUTHOR" != true ]]; then
-            echo '::error::add a changelog fragment or apply the skip news label'
-            exit 1
+            git tag --list | release-creator tags --next auto
           fi
-      - name: Require releasable version
-        if: steps.news.outputs.fragment == 'true'
-        run: git tag --list | uv run --no-default-groups --group release-prepare release-creator tags --next auto
