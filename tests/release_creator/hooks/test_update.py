@@ -219,8 +219,6 @@ def test_ignores_ambient_uv_resolution_settings(
         "--no-annotate",
         "--no-config",
         "--no-sources",
-        "--default-index",
-        "https://pypi.org/simple/",
         "--exclude-newer",
         "7 days",
         "--python-version",

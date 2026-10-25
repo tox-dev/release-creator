@@ -2,7 +2,6 @@
 
 # ruff: file-ignore[lazy-import-immediately-resolved]  # Dataclass decorators resolve when the lock models are defined.
 lazy import json
-lazy import os
 lazy import shutil
 lazy import tomllib
 lazy from collections import defaultdict
@@ -20,7 +19,7 @@ lazy from packaging.specifiers import SpecifierSet
 lazy from packaging.utils import canonicalize_name
 lazy from packaging.version import Version
 
-lazy from release_creator.process import run_text
+lazy from release_creator.process import isolated_uv_env, run_text
 
 type _TomlValue = (
     str | int | float | bool | datetime | date | time | list[str] | list[_TomlTable] | list[_TomlValue] | _TomlTable
@@ -107,8 +106,6 @@ def _render_lock(project: Path, uv: str, committed: _LockMetadata | None, *, kee
         "--no-config",
         "--no-python-downloads",
         "--no-sources",
-        "--default-index",
-        "https://pypi.org/simple/",
         *(option for name, date in cutoffs.items() for option in ("--exclude-newer-package", f"{name}={date}")),
     ]
     if keep_uv_lock:
@@ -631,22 +628,7 @@ def _run_uv(uv: str, directory: Path, *arguments: str, stdin: str | None = None)
             [uv, *arguments],
             cwd=directory,
             stdin=stdin,
-            env={
-                **{
-                    name: value
-                    for name, value in os.environ.items()
-                    if not name.startswith(("UV_", "PIP_"))
-                    and name
-                    not in {
-                        "SSL_CERT_FILE",
-                        "SSL_CERT_DIR",
-                        "SSL_CLIENT_CERT",
-                        "REQUESTS_CA_BUNDLE",
-                        "CURL_CA_BUNDLE",
-                    }
-                },
-                "UV_PROJECT_ENVIRONMENT": uv_environment,
-            },
+            env={**isolated_uv_env(), "UV_PROJECT_ENVIRONMENT": uv_environment},
         )
     if result.returncode:
         msg = result.stderr.strip() or f"uv {arguments[0]} failed"

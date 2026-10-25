@@ -3,7 +3,6 @@
 # ruff: file-ignore[lazy-import-immediately-resolved]  # NamedTuple resolves when the policy class is defined.
 lazy import json
 lazy import operator
-lazy import os
 lazy from pathlib import Path
 lazy from tempfile import TemporaryDirectory
 lazy from typing import Final, NamedTuple, cast
@@ -14,7 +13,7 @@ lazy from yaml import MappingNode, ScalarNode, SequenceNode, compose, safe_load
 lazy from yaml.error import Mark, YAMLError
 lazy from yaml.nodes import Node
 
-lazy from release_creator.process import required_executable, run_text
+lazy from release_creator.process import isolated_uv_env, required_executable, run_text
 
 type _Group = tuple[ScalarNode, SequenceNode, list[tuple[ScalarNode, Requirement]], list[ScalarNode], bool]
 type _Edit = tuple[int, int, str]
@@ -466,8 +465,6 @@ def _resolve(
             "--no-annotate",
             "--no-config",
             "--no-sources",
-            "--default-index",
-            "https://pypi.org/simple/",
             "--exclude-newer",
             policy.exclude_newer,
             "--python-version",
@@ -483,19 +480,7 @@ def _resolve(
             command,
             stdin=f"{editable}{root_lines}",
             cwd=config.parent,
-            env={
-                name: value
-                for name, value in os.environ.items()
-                if not name.startswith(("UV_", "PIP_"))
-                and name
-                not in {
-                    "SSL_CERT_FILE",
-                    "SSL_CERT_DIR",
-                    "SSL_CLIENT_CERT",
-                    "REQUESTS_CA_BUNDLE",
-                    "CURL_CA_BUNDLE",
-                }
-            },
+            env=isolated_uv_env(),
         )
     if result.returncode:
         msg = f"cannot resolve hook dependencies: {result.stderr.strip()}"

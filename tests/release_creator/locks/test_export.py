@@ -80,8 +80,7 @@ def test_export_lock_isolates_uv_resolution_settings(
     export_lock(tmp_path)
 
     assert all(
-        {"--no-config", "--no-python-downloads", "--no-sources", "--default-index"} <= set(call.args[0])
-        and call.args[0][call.args[0].index("--default-index") + 1] == "https://pypi.org/simple/"
+        {"--no-config", "--no-python-downloads", "--no-sources"} <= set(call.args[0])
         and all("unapproved.invalid" not in value for value in call.kwargs["env"].values())
         for call in run.call_args_list[1:]
     )
