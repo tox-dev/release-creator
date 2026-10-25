@@ -5,6 +5,7 @@ lazy from zipfile import BadZipFile
 
 lazy from release_creator.anchors.cli import register as register_anchors
 lazy from release_creator.changelog.cli import register as register_changelog
+lazy from release_creator.contributors.cli import register as register_contributors
 lazy from release_creator.fragments.cli import register as register_fragments
 lazy from release_creator.marketplace.cli import register as register_marketplace
 lazy from release_creator.notes.cli import register as register_notes
@@ -31,6 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     register_notes(commands)
     register_changelog(commands)
     register_fragments(commands)
+    register_contributors(commands)
     register_anchors(commands)
     register_tags(commands)
     register_marketplace(commands)

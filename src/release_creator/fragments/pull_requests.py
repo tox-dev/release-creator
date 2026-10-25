@@ -20,6 +20,15 @@ _RE_AI_ASSISTANT_EMAIL: Final = re.compile(
     """,
     re.VERBOSE | re.IGNORECASE,
 )
+AI_ASSISTANT_LOGINS: Final = frozenset(
+    login.casefold()
+    for login in (
+        "claude",
+        "codex",
+        "CommandCodeBot",
+        "Copilot",
+    )
+)
 
 
 def fragment_pull_requests(repository: str, commits: dict[str, str]) -> dict[str, PullRequest]:
@@ -109,13 +118,20 @@ def _pull_request(response: dict[str, object], source: str) -> PullRequest:
     if number < 1:
         msg = f"invalid pull request number for {source}: {number}"
         raise ValueError(msg)
-    account = _account(author, number)
+    account = github_account(author, number)
     return PullRequest(
         number=str(number), author=account, credits=_credits(account, response.get("mergeCommit"), number)
     )
 
 
-def _account(account: dict[str, object] | None, number: int) -> PullRequestAuthor:
+def github_account(account: dict[str, object] | None, number: int) -> PullRequestAuthor:
+    """Classify a GitHub actor the way pull request credits do.
+
+    :param account: GraphQL actor with ``login`` and ``__typename``; ``None`` for a deleted account.
+    :param number: Pull request number used in errors.
+    :returns: The handle, with any ``[bot]`` suffix removed, and whether it is a bot.
+    :raises ValueError: The actor has no login or an unsupported account type.
+    """
     login, account_type = (
         ("ghost", "User")
         if account is None or account.get("__typename") == "Mannequin"
@@ -148,7 +164,7 @@ def _credits(author: PullRequestAuthor, commit: object, number: int) -> tuple[Pu
                 raise ValueError(msg)
             entries.setdefault((False, name.casefold()), (PullRequestCredit(name=name, linked=False), False))
             continue
-        account = _account(user, number)
+        account = github_account(user, number)
         entries.setdefault(
             (True, account.handle.casefold()), (PullRequestCredit(name=account.handle, linked=True), account.is_bot)
         )
@@ -182,8 +198,10 @@ class PullRequest:
 
 
 __all__ = [
+    "AI_ASSISTANT_LOGINS",
     "PullRequest",
     "PullRequestAuthor",
     "PullRequestCredit",
     "fragment_pull_requests",
+    "github_account",
 ]
