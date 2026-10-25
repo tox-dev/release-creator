@@ -10,7 +10,7 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
     """Register the read-only Markdown changelog preview command."""
     changelog = commands.add_parser("changelog", help="render released history with current draft entries")
     changelog.add_argument("--changelog", type=Path, required=True, help="tracked Markdown changelog")
-    changelog.add_argument("--config", type=Path, help="knope.toml for Knope changesets")
+    changelog.add_argument("--config", type=Path, required=True, help="knope.toml for Knope changesets")
     changelog.add_argument("--fragments", type=Path, required=True, help="Knope changeset directory")
     changelog.add_argument("--output", type=Path, required=True, help="documentation page")
     changelog.set_defaults(handler=_render)
@@ -22,9 +22,6 @@ def _render(args: argparse.Namespace) -> None:
         raise ValueError(msg)
     if not args.fragments.is_dir():
         msg = f"fragment directory does not exist: {args.fragments}"
-        raise ValueError(msg)
-    if args.config is None:
-        msg = "knope changelog requires --config"
         raise ValueError(msg)
     args.output.write_text(render_knope_preview(args.changelog, args.config, args.fragments), encoding="utf-8")
 

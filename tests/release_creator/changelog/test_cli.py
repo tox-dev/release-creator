@@ -77,7 +77,7 @@ def test_changelog_cli_requires_config(
     with pytest.raises(SystemExit, match="2"):
         main()
 
-    assert "knope changelog requires --config" in capsys.readouterr().err
+    assert "the following arguments are required: --config" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("alias", [False, True], ids=["same-path", "symlink"])
