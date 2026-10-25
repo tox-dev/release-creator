@@ -7,7 +7,7 @@ pinned while keeping the project's other dependency groups, extras, and supporte
 command resolves runtime dependencies, each group, and each extra separately against PyPI. This matters when a release
 tool depends on a published version of the project being locked: uv's workspace export would otherwise omit that
 dependency. It resolves ``[build-system].requires`` as a universal ``build`` selection. Python and platform markers
-remain in the file.
+remain in the file. uv runs with an installed Python and never downloads one.
 
 Run it from the project root:
 

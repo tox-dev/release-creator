@@ -104,6 +104,7 @@ def _render_lock(project: Path, uv: str, committed: _LockMetadata | None, *, kee
         (created_at - timedelta(days=7)).isoformat(),
         "--no-cache",
         "--no-config",
+        "--no-python-downloads",
         "--no-sources",
         "--default-index",
         "https://pypi.org/simple/",
@@ -111,7 +112,7 @@ def _render_lock(project: Path, uv: str, committed: _LockMetadata | None, *, kee
     ]
     if keep_uv_lock:
         if committed is not None:
-            _run_uv(uv, project.parent, "lock", "--check", "--no-config")
+            _run_uv(uv, project.parent, "lock", "--check", "--no-config", "--no-python-downloads")
         else:
             _run_uv(
                 uv,
@@ -120,7 +121,7 @@ def _render_lock(project: Path, uv: str, committed: _LockMetadata | None, *, kee
                 "--upgrade",
                 *(option for option in cutoff_options if option != "--no-sources"),
             )
-            _run_uv(uv, project.parent, "lock", "--no-config")
+            _run_uv(uv, project.parent, "lock", "--no-config", "--no-python-downloads")
     compiler = _Compiler(
         uv=uv,
         directory=project.parent,

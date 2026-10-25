@@ -80,7 +80,7 @@ def test_export_lock_isolates_uv_resolution_settings(
     export_lock(tmp_path)
 
     assert all(
-        {"--no-config", "--no-sources", "--default-index"} <= set(call.args[0])
+        {"--no-config", "--no-python-downloads", "--no-sources", "--default-index"} <= set(call.args[0])
         and call.args[0][call.args[0].index("--default-index") + 1] == "https://pypi.org/simple/"
         and all("unapproved.invalid" not in value for value in call.kwargs["env"].values())
         for call in run.call_args_list[1:]
@@ -719,7 +719,7 @@ def test_export_lock_check_rejects_stale_native_uv_lock(tmp_path: Path, mocker: 
     def check_native(command: list[str], **_options: object) -> subprocess.CompletedProcess[str]:
         if command[1] == "--version":
             return _UV_VERSION
-        assert command[1:] == ["lock", "--check", "--no-config"]
+        assert command[1:] == ["lock", "--check", "--no-config", "--no-python-downloads"]
         return subprocess.CompletedProcess(command, 1, "", "native lock is stale")
 
     mocker.patch("subprocess.run", autospec=True, side_effect=check_native)
@@ -1089,7 +1089,7 @@ def test_export_lock_can_keep_updated_uv_lock(tmp_path: Path, mocker: MockerFixt
     upgrade, normalize = native_commands
     assert upgrade[2] == "--upgrade"
     assert "--exclude-newer" in upgrade
-    assert normalize == ["/usr/bin/uv", "lock", "--no-config"]
+    assert normalize == ["/usr/bin/uv", "lock", "--no-config", "--no-python-downloads"]
 
 
 def test_export_lock_rejects_recent_native_artifact(tmp_path: Path, mocker: MockerFixture) -> None:
