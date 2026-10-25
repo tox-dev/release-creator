@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@3f37d2e43f40445bc4c07b6197067e6b7a762e95 # v4.0.0
+    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
     permissions:
       actions: read
       contents: read
@@ -30,18 +30,15 @@ jobs:
           version: latest-known
           python-version: "3.15"
           enable-cache: false
-      - uses: tox-dev/github-workflows/install-locked-tools@3f37d2e43f40445bc4c07b6197067e6b7a762e95 # v4.0.0
+      - uses: tox-dev/github-workflows/install-locked-tools@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
         with:
-          groups: project-runtime
+          groups: release-notes
+          lock-source: shared
           venv: ${{ runner.temp }}/release-tools
       - id: tag
-        name: Find previous release tag
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          previous=$(git tag --list | PYTHONPATH=src "$RUNNER_TEMP/release-tools/bin/python" \
-            -m release_creator tags "$TAG" --previous)
-          echo "previous=$previous" >>"$GITHUB_OUTPUT"
+        uses: tox-dev/github-workflows/select-previous-tag@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
+        with:
+          tag: ${{ github.ref_name }}
   contributors:
     needs: previous
     runs-on: ubuntu-26.04
@@ -68,7 +65,7 @@ jobs:
           path: ${{ runner.temp }}/generated-notes.md
           if-no-files-found: error
   notes:
-    needs: [build, contributors, previous]
+    needs: [contributors, previous]
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -83,25 +80,18 @@ jobs:
         with:
           artifact-ids: ${{ needs.contributors.outputs.artifact-id }}
           path: ${{ runner.temp }}
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          artifact-ids: ${{ needs.build.outputs.distributions-artifact-id }}
-          path: dist
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           version: latest-known
           python-version: "3.15"
           enable-cache: false
-      - uses: tox-dev/github-workflows/install-locked-tools@3f37d2e43f40445bc4c07b6197067e6b7a762e95 # v4.0.0
+      # The notes come from the previous release-creator in the shared lock, never from the tagged checkout.
+      - uses: tox-dev/github-workflows/install-locked-tools@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
         with:
-          groups: release-notes project-runtime
+          groups: release-notes
+          lock-source: shared
           venv: ${{ runner.temp }}/release-tools
-          local-tool-source: "true"
-      - name: Install tagged release-creator
-        run: |
-          uv pip install --python "$RUNNER_TEMP/release-tools/bin/python" --no-deps dist/release_creator-*.whl
-          echo "$RUNNER_TEMP/release-tools/bin" >>"$GITHUB_PATH"
-      - uses: tox-dev/github-workflows/render-release-notes@3f37d2e43f40445bc4c07b6197067e6b7a762e95 # v4.0.0
+      - uses: tox-dev/github-workflows/render-release-notes@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
         with:
           tag: ${{ github.ref_name }}
           previous: ${{ needs.previous.outputs.tag }}
@@ -147,7 +137,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.build.outputs.distributions-artifact-id }}
           path: dist
-      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@3f37d2e43f40445bc4c07b6197067e6b7a762e95 # v4.0.0
+      - uses: tox-dev/github-workflows/reconcile-pypi-artifacts@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
         with:
           project: release-creator
           version: ${{ github.ref_name }}
@@ -163,7 +153,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.notes.outputs.artifact-id }}
           path: ${{ runner.temp }}
-      - uses: tox-dev/github-workflows/publish-github-release@3f37d2e43f40445bc4c07b6197067e6b7a762e95 # v4.0.0
+      - uses: tox-dev/github-workflows/publish-github-release@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
         env:
           GH_TOKEN: ${{ github.token }}
         with:

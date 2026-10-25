@@ -20,11 +20,13 @@ jobs:
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
-      - name: Install release-creator from source
-        run: |
-          uv sync --no-default-groups --group release-prepare
-          echo "$PWD/.venv/bin" >>"$GITHUB_PATH"
-      - uses: tox-dev/github-workflows/validate-news@3f37d2e43f40445bc4c07b6197067e6b7a762e95 # v4.0.0
+      # The released release-creator from the shared lock checks this checkout, which it never runs.
+      - uses: tox-dev/github-workflows/install-locked-tools@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
+        with:
+          groups: release-news
+          lock-source: shared
+          venv: ${{ runner.temp }}/release-tools
+      - uses: tox-dev/github-workflows/validate-news@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
       - name: Require releasable version
         env:
           BASE_REF: ${{ github.base_ref }}

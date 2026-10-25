@@ -42,7 +42,7 @@ test = [
   "pytest-cov>=7",
   "pytest-mock>=3.16",
   "pytest-xdist>=3",
-  { include-group = "release-prepare" },
+  "towncrier>=26.9",
 ]
 type = [ "ty>=0.0.84", { include-group = "test" }, { include-group = "docs" } ]
 docs = [
@@ -55,9 +55,6 @@ docs = [
 fix = [ "prek>=0.2" ]
 pkg-meta = [ "check-wheel-contents>=0.6.3", "twine>=7", "uv>=0.12.22" ]
 release-check = [ "prek>=0.2" ]
-release-notes = []
-release-prepare = [ "prek>=0.2", "towncrier>=26.9" ]
-release-validate = [ "prek>=0.2" ]
 
 [tool.hatch]
 version.source = "vcs"

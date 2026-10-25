@@ -13,14 +13,133 @@ on:
           - patch
         default: auto
 permissions: {}
+concurrency:
+  group: prepare-release-${{ github.repository }}
+  cancel-in-progress: false
+# The shared prepare-towncrier-release workflow reads release-creator from the caller's lock or checkout, so this
+# workflow composes its steps with the released release-creator from the github-workflows lock instead.
 jobs:
-  prepare:
-    uses: tox-dev/github-workflows/.github/workflows/prepare-towncrier-release.yaml@3f37d2e43f40445bc4c07b6197067e6b7a762e95 # v4.0.0
+  assemble:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       pull-requests: read
-    with:
-      bump: ${{ inputs.bump }}
-      local-tool-source: true
-    secrets:
-      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+    outputs:
+      version: ${{ steps.prepare.outputs.version }}
+      artifact-id: ${{ steps.patch.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: latest-known
+          python-version: "3.15"
+          enable-cache: false
+      - uses: tox-dev/github-workflows/refresh-release-lock@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
+        with:
+          mode: check
+      - uses: tox-dev/github-workflows/install-locked-tools@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
+        with:
+          groups: release-prepare
+          lock-source: shared
+          venv: ${{ runner.temp }}/release-tools
+      - uses: tox-dev/github-workflows/verify-frozen-hooks@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
+      - name: Install prek hooks
+        env:
+          UV_EXCLUDE_NEWER: 7 days
+          UV_NO_CONFIG: "1"
+          UV_NO_SOURCES: "1"
+        run: |
+          unset UV_CONFIG_FILE UV_INDEX UV_INDEX_URL UV_DEFAULT_INDEX UV_EXTRA_INDEX_URL
+          unset UV_FIND_LINKS UV_EXCLUDE_NEWER_PACKAGE
+          unset UV_INSECURE_HOST UV_SYSTEM_CERTS SSL_CERT_FILE SSL_CERT_DIR
+          prek install-hooks --config .pre-commit-config.yaml
+      - id: prepare
+        uses: tox-dev/github-workflows/prepare-towncrier@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
+        with:
+          bump: ${{ inputs.bump }}
+      - id: patch
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-patch
+          path: ${{ runner.temp }}/release.patch
+          if-no-files-found: error
+  validate:
+    needs: assemble
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          version: latest-known
+          python-version: "3.15"
+          enable-cache: false
+      - uses: tox-dev/github-workflows/install-locked-tools@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
+        with:
+          groups: release-validate
+          lock-source: shared
+          venv: ${{ runner.temp }}/release-tools
+      - id: config
+        uses: tox-dev/github-workflows/read-towncrier-config@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
+      - name: Verify selected release version
+        env:
+          BUMP: ${{ inputs.bump }}
+          FRAGMENTS: ${{ steps.config.outputs.fragments }}
+          VERSION: ${{ needs.assemble.outputs.version }}
+        run: |
+          set -euo pipefail
+          expected=$(git tag --list | release-creator tags --next "$BUMP" --directory "$FRAGMENTS")
+          if [[ "$VERSION" != "$expected" ]]; then
+            echo "::error::assembled release version differs from $expected" >&2
+            exit 1
+          fi
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.assemble.outputs.artifact-id }}
+          path: ${{ runner.temp }}/release-patch
+      - uses: tox-dev/github-workflows/validate-release-patch@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
+        with:
+          version: ${{ needs.assemble.outputs.version }}
+  push:
+    needs: [assemble, validate]
+    runs-on: ubuntu-26.04
+    environment: release-auth
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.assemble.outputs.artifact-id }}
+          path: ${{ runner.temp }}/release-patch
+      - uses: tox-dev/github-workflows/validate-release-patch@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
+        with:
+          version: ${{ needs.assemble.outputs.version }}
+          checks: "false"
+      - id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: release-creator
+          permission-contents: write
+      - uses: tox-dev/github-workflows/commit-and-tag@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
+        with:
+          version: ${{ needs.assemble.outputs.version }}
+          token: ${{ steps.token.outputs.token }}
+          app-slug: ${{ steps.token.outputs.app-slug }}
+          message: release ${{ needs.assemble.outputs.version }}

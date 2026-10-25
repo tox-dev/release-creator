@@ -78,7 +78,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: tox-dev/github-workflows/check-hook-update-cooldown@3f37d2e43f40445bc4c07b6197067e6b7a762e95 # v4.0.0
+      - uses: tox-dev/github-workflows/check-hook-update-cooldown@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
         with:
           release-app-client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
   gate:
