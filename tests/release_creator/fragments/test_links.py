@@ -5,10 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Final, Literal
 
 import pytest
+from docutils.core import publish_doctree
+from markdown_it import MarkdownIt
 
 from release_creator.fragments.links import add_pull_request_links
 from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor, PullRequestCredit
 from release_creator.notes.render import ReleaseContext, render_markdown, render_rst
+from release_creator.notes.rst import register_roles
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -1553,3 +1556,36 @@ def test_add_pull_request_links_knope_formats_credits(tmp_path: Path) -> None:
         "---\ndefault: security\n---\n\n# Remove a root ([#42](https://github.com/tox-dev/example/pull/42)) "
         "by [@alice](https://github.com/alice), [@bob](https://github.com/bob) and Carol Doe\n"
     )
+
+
+_MARKUP_NAME: Final = "Ann *B* _C_ `D` [E](F) <G> |H| \\I &amp; :user:`j` #42 O'Neil"
+
+
+def _linked_unlinked_name(tmp_path: Path, extension: str) -> str:
+    fragment = tmp_path / f"+first.feature.{extension}"
+    fragment.write_text("Add a feature.\n")
+    author = PullRequestAuthor(handle="alice", is_bot=False)
+    credit = PullRequestCredit(name=_MARKUP_NAME, linked=False)
+
+    add_pull_request_links(
+        tmp_path, "tox-dev/example", {fragment.name: PullRequest(number="42", author=author, credits=(credit,))}
+    )
+
+    return fragment.read_text()
+
+
+def test_add_pull_request_links_escapes_unlinked_name_in_markdown(tmp_path: Path) -> None:
+    tokens = MarkdownIt().parse(_linked_unlinked_name(tmp_path, "md"))
+    text = "".join(child.content for token in tokens for child in token.children or () if child.type == "text")
+
+    assert text == f"Add a feature (#42) by {_MARKUP_NAME}."
+
+
+def test_add_pull_request_links_escapes_unlinked_name_in_rst(tmp_path: Path) -> None:
+    register_roles()
+    document = publish_doctree(
+        _linked_unlinked_name(tmp_path, "rst"),
+        settings_overrides={"release_repository": "tox-dev/example", "report_level": 5, "halt_level": 2},
+    )
+
+    assert document.astext() == f"Add a feature (#42) by {_MARKUP_NAME}."

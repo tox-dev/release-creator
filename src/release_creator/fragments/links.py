@@ -8,6 +8,7 @@ lazy from collections.abc import Iterator
 lazy from dataclasses import dataclass
 lazy from itertools import accumulate
 lazy from pathlib import Path
+lazy from string import punctuation
 lazy from typing import Final, Literal
 
 lazy from markdown_it import MarkdownIt
@@ -117,8 +118,15 @@ def _link_text(
 
 
 def _credit_list(credited: tuple[PullRequestCredit, ...], extension: str) -> str:
-    names = [_author_credit(credit.name, extension) if credit.linked else credit.name for credit in credited]
+    names = [
+        _author_credit(credit.name, extension) if credit.linked else _escape_name(credit.name) for credit in credited
+    ]
     return f"{', '.join(names[:-1])} and {names[-1]}" if len(names) > 1 else names[0]
+
+
+def _escape_name(name: str) -> str:
+    # Markdown and reStructuredText both render a backslash-escaped ASCII punctuation character literally.
+    return "".join(f"\\{character}" if character in punctuation else character for character in name)
 
 
 def _keep_explicit_credit(content: str, target: _LinkTarget, match: re.Match[str] | None, *, linked: bool) -> str:
