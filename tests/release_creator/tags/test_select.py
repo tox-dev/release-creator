@@ -3,7 +3,7 @@
 import pytest
 from packaging.version import Version
 
-lazy from release_creator.tags.select import next_tag, parse_tag, previous_tag, require_newer_tag
+lazy from release_creator.tags.select import next_tag, parse_tag, require_newer_tag
 
 
 @pytest.mark.parametrize(
@@ -72,22 +72,6 @@ def test_parse_tag(tag: str, expected: Version) -> None:
 def test_parse_tag_rejects_invalid(tag: str) -> None:
     with pytest.raises(ValueError, match=r"(?x)expected\ a\ major\.minor\.patch\ version # Invalid tag format"):
         parse_tag(tag)
-
-
-def test_previous_tag_uses_numeric_order() -> None:
-    assert previous_tag("1.10.0", ["1.9.0", "1.2.0", "junk", "1.10.0", "2.0.0"]) == "1.9.0"
-
-
-def test_previous_tag_preserves_prefix() -> None:
-    assert previous_tag("v1.1.0", ["1.0.3", "v1.0.5", "v1.1.0", "v1"]) == "v1.0.5"
-
-
-def test_previous_tag_orders_prereleases() -> None:
-    assert previous_tag("1.2.3", ["1.2.2", "1.2.3rc1", "1.2.3b1"]) == "1.2.3rc1"
-
-
-def test_previous_tag_missing() -> None:
-    assert previous_tag("1.0.0", ["junk", "1.0.0", "2.0.0"]) is None
 
 
 def test_require_newer_tag_accepts_first_release() -> None:

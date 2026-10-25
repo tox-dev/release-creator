@@ -2,8 +2,8 @@
  Select a numeric release tag
 ##############################
 
-``tags`` calculates a version from pending changelog fragments and existing tags. It also checks a proposed version and
-finds the tag for the GitHub comparison link. It reads tag names from standard input and never creates or moves a tag.
+``tags`` calculates a version from pending changelog fragments and existing tags, and checks a proposed version. It
+reads tag names from standard input and never creates or moves a tag.
 
 Calculate the next version
 ==========================
@@ -56,31 +56,26 @@ Suppose ``git tag --list`` prints ``1.2.1``, ``1.2.2``, and ``docs-preview``. Be
 A successful check prints nothing and exits with status zero. If ``1.2.3``, ``v1.2.3``, or a newer numeric tag already
 exists, the command fails. This prevents release preparation from reusing a version or publishing an older one.
 Prerelease, postrelease, and development suffixes are accepted on tags with three numeric components. For example,
-``1.2.3`` is newer than ``1.2.3rc1``.
+``1.2.3`` is newer than ``1.2.3rc1``. With ``--package pyproject-fmt``, pass either ``2.30.4`` or
+``pyproject-fmt/2.30.4``; only that package's tags count.
 
 Find the comparison base
 ========================
 
-For the same tag list, run:
+``tags`` no longer prints the previous tag. Ask Git for the nearest earlier tag on the first-parent history:
 
 .. code-block:: bash
 
-    git tag --list | uvx --from release-creator release-creator tags 1.2.3 --previous
+    git describe --tags --abbrev=0 --match '[0-9]*' --first-parent "1.2.3^"
 
-The output is ``1.2.2``. Pass it to ``notes --previous 1.2.2`` to link the changes since that release. For a first
-numeric release, ``--previous`` prints nothing; ``notes`` then links to the commits at the new tag.
-
-For package tags, add ``--package pyproject-fmt`` and pass either ``2.30.4`` or ``pyproject-fmt/2.30.4`` as the target.
-The output keeps the package prefix, for example ``pyproject-fmt/2.30.3``, ready for ``notes --previous``. The same
-scope applies to ``--require-newer``.
+Use ``--match 'v[0-9]*'`` for ``v``-prefixed tags and ``--match 'pyproject-fmt/*'`` for package tags. On a first release
+the command fails because no earlier tag exists.
 
 Rules and failure cases
 =======================
 
 The proposed tag must have three numeric components, ``major.minor.patch`` or ``year.month.patch``, with an optional
 ``v`` prefix. Existing tags with other forms, such as ``docs-preview`` or a floating ``v1`` tag, do not take part in the
-comparison. Numeric components are compared as numbers, so ``v1.2.10`` follows ``1.2.9``. ``--previous`` selects the
-greatest numeric tag below the proposed one, retains its prefix, and ignores input order.
+comparison. Numeric components are compared as numbers, so ``v1.2.10`` follows ``1.2.9``.
 
-Without ``--previous`` or ``--require-newer``, the command only validates the proposed tag's format and does not read
-standard input. Choose one option at a time; they answer different questions.
+Without ``--require-newer``, the command only validates the proposed tag's format and does not read standard input.
