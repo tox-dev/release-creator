@@ -1081,13 +1081,83 @@ def test_render_markdown_does_not_count_reviewer_as_author(entry: str) -> None:
 
 def test_render_markdown_ignores_other_repository_link_label() -> None:
     changelog = (
-        "## 1.2.3 (today)\n\n### Added\n\n- Follow [PR #42](https://github.com/other/project/pull/42) by @alice.\n"
+        "## 1.2.3 (today)\n\n### Added\n\n"
+        "- Follow [other/project#42](https://github.com/other/project/pull/42) by @alice.\n"
     )
     generated = "* Local change by @bob in https://github.com/tox-dev/example/pull/42\n"
 
     result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
 
-    assert "[PR #42](https://github.com/other/project/pull/42)" in result
+    assert "[other/project#42](https://github.com/other/project/pull/42)" in result
+
+
+@pytest.mark.parametrize(
+    "link",
+    [
+        pytest.param("[#5 ](https://evil.example/)", id="label-space"),
+        pytest.param("[(#5)](https://evil.example/)", id="parenthesized"),
+        pytest.param("[pull request #5](https://evil.example/)", id="prose-label"),
+        pytest.param("[GH-5](https://evil.example/)", id="gh-prefix"),
+        pytest.param("[tox-dev/example#5](https://evil.example/)", id="repository-shorthand"),
+        pytest.param(
+            "[https://github.com/tox-dev/example/pull/5](https://github.com/tox-dev/example/pull/6)", id="url"
+        ),
+        pytest.param("[#5](https://github.com/mallory/example/pull/5)", id="other-repository"),
+        pytest.param("[PR #5](https://github.com/mallory/example/pull/5)", id="other-repository-pr-label"),
+    ],
+)
+def test_render_markdown_rejects_pull_label_for_another_target(link: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Added\n\n- Add support {link} by @mallory.\n"
+
+    with pytest.raises(ValueError, match="pull request label #5 points to"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+
+@pytest.mark.parametrize(
+    "link",
+    [
+        pytest.param("[#5 by @mallory](https://github.com/tox-dev/example/pull/5)", id="pull-label"),
+        pytest.param("[support by @mallory](https://example.com/x)", id="other-label"),
+        pytest.param("[ @alice](https://github.com/mallory)", id="padded-profile"),
+    ],
+)
+def test_render_markdown_rejects_credit_inside_link_label(link: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Added\n\n- Add {link} (#5) by @alice.\n"
+
+    with pytest.raises(ValueError, match="points to another profile"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+
+def test_render_markdown_checks_text_of_other_links() -> None:
+    changelog = "## 1.2.3 (today)\n\n### Added\n\n- Add [support for #5](https://example.com/x) by @mallory.\n"
+    generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/5\n"
+
+    with pytest.raises(ValueError, match="pull request label #5 points to"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        pytest.param("https://github.com/tox-dev/example/pull/6/../5", id="dot-dot"),
+        pytest.param("https://github.com/tox-dev/example/pull/6/./", id="dot"),
+        pytest.param("https://github.com/tox-dev/example/pull/6/%2E%2E/5", id="encoded"),
+    ],
+)
+def test_render_markdown_rejects_relative_github_path(url: str) -> None:
+    changelog = f"## 1.2.3 (today)\n\n### Added\n\n- Add support [#6]({url}) by @bob.\n"
+
+    with pytest.raises(ValueError, match="GitHub link has a relative or encoded path"):
+        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+
+def test_render_markdown_keeps_plain_link_label() -> None:
+    changelog = "## 1.2.3 (today)\n\n### Added\n\n- Add [the parser](https://example.com/x) (#5) by @alice.\n"
+    generated = "* Add support by @alice in https://github.com/tox-dev/example/pull/5\n"
+
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"), generated)
+
+    assert "- Add [the parser](https://example.com/x) (#5) by @alice." in result
 
 
 @pytest.mark.parametrize(

@@ -334,36 +334,40 @@ def _html_text(content: str) -> str:
 
 
 def _visible_link(label: str, url: str, repository: str) -> str:
-    if (profile := _RE_PROFILE_LABEL.fullmatch(label)) is not None:
-        parsed = urlsplit(url)
-        handle = profile["handle"].casefold()
+    parsed = urlsplit(url)
+    on_github = parsed.scheme == "https" and parsed.netloc.casefold() in {"github.com", "www.github.com"}
+    if on_github and ({".", ".."} & set(parsed.path.split("/")) or "%" in parsed.path):
+        msg = f"GitHub link has a relative or encoded path: {url}"
+        raise ValueError(msg)
+    if _RE_PROFILE_LABEL.search(label) is not None:
+        profile = _RE_PROFILE_LABEL.fullmatch(label.strip())
+        handle = profile["handle"].casefold() if profile is not None else ""
         if (
-            parsed.scheme != "https"
-            or parsed.netloc.casefold() not in {"github.com", "www.github.com"}
+            profile is None
+            or not on_github
             or parsed.path.casefold() not in {f"/{handle}", f"/{handle}/"}
             or parsed.query
             or parsed.fragment
         ):
-            msg = f"GitHub credit link for @{profile['handle']} points to another profile"
+            msg = f"GitHub credit link for {label.strip()} points to another profile"
             raise ValueError(msg)
         return label
-    parsed = urlsplit(url)
-    path = _RE_GITHUB_PATH.match(parsed.path)
-    github_pull = (
-        parsed.scheme == "https" and parsed.netloc.casefold() in {"github.com", "www.github.com"} and path is not None
-    )
-    current_pull = github_pull and path is not None and path["repository"].casefold() == repository.casefold()
-    number = _RE_PULL_LABEL.fullmatch(label)
-    if (
-        number is not None
-        and not (github_pull and not current_pull)
-        and (not current_pull or number["number"] != path["number"])
-    ):
-        destination = path["number"] if current_pull else "another URL"
-        msg = f"pull request label #{number['number']} points to #{destination}"
+    path = _RE_GITHUB_PATH.match(parsed.path) if on_github else None
+    target = (path["repository"].casefold(), path["number"]) if path is not None else None
+    shown = {
+        ((match["repository"] or match["short_repository"] or repository).casefold(), match["number"])
+        for match in _RE_RELEASE_PULL.finditer(label)
+    }
+    if (number := _RE_PULL_LABEL.fullmatch(label)) is not None:
+        shown.add((repository.casefold(), number["number"]))
+    if mismatch := sorted(shown - {target}):
+        destination = (
+            f"#{path['number']}" if path is not None and target == (repository.casefold(), path["number"]) else url
+        )
+        msg = f"pull request label #{mismatch[0][1]} points to {destination}"
         raise ValueError(msg)
-    if not current_pull:
-        return " "
+    if path is None or target != (repository.casefold(), path["number"]):
+        return f" {label} "
     return f" https://github.com/{repository}/{path['kind']}/{path['number']} "
 
 
