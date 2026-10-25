@@ -5,6 +5,7 @@ import sys
 import tomllib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Final
 
 import pytest
 import tomli_w
@@ -28,6 +29,7 @@ def test_export_lock_keeps_group_and_extra_membership(
     mocker.patch(
         "subprocess.run",
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess([], 0, _dated('[[packages]]\nname = "runtime"\nversion = "1.0"\n'), ""),
             subprocess.CompletedProcess([], 0, _dated('[[packages]]\nname = "shared"\nversion = "2.0"\n'), ""),
             subprocess.CompletedProcess(
@@ -70,6 +72,7 @@ def test_export_lock_isolates_uv_resolution_settings(
         "subprocess.run",
         autospec=True,
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess([], 0, "packages = []\n", ""),
         ],
     )
@@ -80,7 +83,7 @@ def test_export_lock_isolates_uv_resolution_settings(
         {"--no-config", "--no-sources", "--default-index"} <= set(call.args[0])
         and call.args[0][call.args[0].index("--default-index") + 1] == "https://pypi.org/simple/"
         and all("unapproved.invalid" not in value for value in call.kwargs["env"].values())
-        for call in run.call_args_list
+        for call in run.call_args_list[1:]
     )
 
 
@@ -174,6 +177,7 @@ def test_export_lock_rejects_non_pypi_source(tmp_path: Path, mocker: MockerFixtu
         "subprocess.run",
         autospec=True,
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess(
                 [],
                 0,
@@ -198,6 +202,7 @@ def test_export_lock_rejects_package_without_artifacts(tmp_path: Path, mocker: M
         "subprocess.run",
         autospec=True,
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess([], 0, '[[packages]]\nname = "source-package"\nversion = "1"\n', ""),
         ],
     )
@@ -235,6 +240,7 @@ def test_export_lock_rejects_untrusted_package_record(
         "subprocess.run",
         autospec=True,
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess([], 0, tomli_w.dumps(data), ""),
         ],
     )
@@ -260,6 +266,7 @@ def test_export_lock_selects_all_workspace_runtime_dependencies(tmp_path: Path, 
         "subprocess.run",
         autospec=True,
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess(
                 [],
                 0,
@@ -280,8 +287,8 @@ def test_export_lock_selects_all_workspace_runtime_dependencies(tmp_path: Path, 
         ("bare", '"project-runtime" in dependency_groups'),
         ("packaging", '"project-runtime" in dependency_groups'),
     ]
-    assert {"pip", "compile", "--no-sources"} <= set(run.call_args_list[0].args[0])
-    assert run.call_args_list[0].kwargs["input"] == "bare==1\npackaging==24.2\n"
+    assert {"pip", "compile", "--no-sources"} <= set(run.call_args_list[1].args[0])
+    assert run.call_args_list[1].kwargs["input"] == "bare==1\npackaging==24.2\n"
 
 
 def test_export_lock_keeps_published_self_dependency_in_group(tmp_path: Path, mocker: MockerFixture) -> None:
@@ -295,6 +302,7 @@ def test_export_lock_keeps_published_self_dependency_in_group(tmp_path: Path, mo
         "subprocess.run",
         autospec=True,
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess([], 0, "packages = []\n", ""),
             subprocess.CompletedProcess(
                 [],
@@ -317,8 +325,8 @@ def test_export_lock_keeps_published_self_dependency_in_group(tmp_path: Path, mo
         ("tox", '"release-build" in dependency_groups'),
         ("virtualenv", '"release-build" in dependency_groups'),
     ]
-    assert run.call_args_list[1].args[0][:3] == ["/usr/bin/uv", "pip", "compile"]
-    assert run.call_args_list[1].args[0][3:5] == ["--group", f"{project}:release-build"]
+    assert run.call_args_list[2].args[0][:3] == ["/usr/bin/uv", "pip", "compile"]
+    assert run.call_args_list[2].args[0][3:5] == ["--group", f"{project}:release-build"]
 
 
 def test_export_lock_adds_marker_scoped_build_requirements(
@@ -336,6 +344,7 @@ def test_export_lock_adds_marker_scoped_build_requirements(
     run = mocker.patch(
         "subprocess.run",
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess([], 0, "packages = []\n", ""),
             subprocess.CompletedProcess(
                 [],
@@ -359,7 +368,7 @@ def test_export_lock_adds_marker_scoped_build_requirements(
         ("meson-python", '"build" in dependency_groups'),
         ("patchelf", "(\"build\" in dependency_groups and (sys_platform == 'linux'))"),
     ]
-    assert run.call_args_list[1].args[0][:9] == [
+    assert run.call_args_list[2].args[0][:9] == [
         "/usr/bin/uv",
         "pip",
         "compile",
@@ -370,17 +379,17 @@ def test_export_lock_adds_marker_scoped_build_requirements(
         "--format",
         "pylock.toml",
     ]
-    assert run.call_args_list[1].args[0][-4:] == [
+    assert run.call_args_list[2].args[0][-4:] == [
         "--exclude-newer-package",
         "release-creator=2026-10-21T00:00:00Z",
         "--exclude-newer-package",
         "pytest-mock=2026-10-21T00:00:00Z",
     ]
-    assert run.call_args_list[1].kwargs["input"] == ('meson-python>=0.22\npatchelf>=0.11; sys_platform == "linux"\n')
-    assert run.call_args_list[0].args[0][:3] == ["/usr/bin/uv", "pip", "compile"]
-    assert "--exclude-newer" in run.call_args_list[0].args[0]
-    assert "--no-sources" in run.call_args_list[0].args[0]
-    assert run.call_args_list[0].args[0][-4:] == [
+    assert run.call_args_list[2].kwargs["input"] == ('meson-python>=0.22\npatchelf>=0.11; sys_platform == "linux"\n')
+    assert run.call_args_list[1].args[0][:3] == ["/usr/bin/uv", "pip", "compile"]
+    assert "--exclude-newer" in run.call_args_list[1].args[0]
+    assert "--no-sources" in run.call_args_list[1].args[0]
+    assert run.call_args_list[1].args[0][-4:] == [
         "--exclude-newer-package",
         "release-creator=2026-10-21T00:00:00Z",
         "--exclude-newer-package",
@@ -399,6 +408,7 @@ def test_export_lock_preserves_opposite_build_python_markers(tmp_path: Path, moc
         "subprocess.run",
         autospec=True,
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess([], 0, "packages = []\n", ""),
             subprocess.CompletedProcess(
                 [],
@@ -438,6 +448,7 @@ def test_export_lock_merges_default_index_build_overlap(
     mocker.patch(
         "subprocess.run",
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess(
                 [],
                 0,
@@ -477,6 +488,7 @@ def test_export_lock_merges_declared_build_group(tmp_path: Path, mocker: MockerF
         "subprocess.run",
         autospec=True,
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess([], 0, "packages = []\n", ""),
             subprocess.CompletedProcess([], 0, package, ""),
         ],
@@ -489,8 +501,8 @@ def test_export_lock_merges_declared_build_group(tmp_path: Path, mocker: MockerF
     assert [(package["name"], package["marker"]) for package in lock["packages"]] == [
         ("packaging", '"build" in dependency_groups')
     ]
-    assert run.call_args_list[1].kwargs["input"] == "packaging\n"
-    assert run.call_args_list[1].args[0][4:6] == ["--group", f"{project}:build"]
+    assert run.call_args_list[2].kwargs["input"] == "packaging\n"
+    assert run.call_args_list[2].args[0][4:6] == ["--group", f"{project}:build"]
 
 
 def test_export_lock_rejects_incompatible_build_requirements(tmp_path: Path) -> None:
@@ -514,6 +526,7 @@ def test_export_lock_records_cooling_metadata(tmp_path: Path, mocker: MockerFixt
     mocker.patch(
         "subprocess.run",
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess(
                 [],
                 0,
@@ -539,7 +552,32 @@ def test_export_lock_records_cooling_metadata(tmp_path: Path, mocker: MockerFixt
             "hashes": {"sha256": "abc"},
         },
     }
-    assert lock["tool"]["nab"]["created-at"] == lock["tool"]["release-creator"]["created-at"]
+    assert lock["tool"] == {
+        "release-creator": {"created-at": lock["tool"]["release-creator"]["created-at"], "uv-version": "0.13.5"}
+    }
+
+
+@pytest.mark.parametrize(
+    ("recorded", "message"),
+    [
+        pytest.param('uv-version = "0.13.0"\n', "was resolved with uv 0.13.0, but uv 0.13.5 is running", id="other"),
+        pytest.param("", "records no uv version, but uv 0.13.5 is running", id="absent"),
+    ],
+)
+def test_export_lock_check_reports_uv_version_mismatch(
+    tmp_path: Path, mocker: MockerFixture, recorded: str, message: str
+) -> None:
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "demo"\nversion = "1"\nrequires-python = ">=3.15"\n')
+    (tmp_path / "pylock.toml").write_text(
+        f'lock-version = "1.0"\n[tool.release-creator]\ncreated-at = 2026-10-01T00:00:00Z\n{recorded}'
+    )
+    mocker.patch("shutil.which", return_value="uv")
+    run = mocker.patch("subprocess.run", autospec=True, side_effect=[_UV_VERSION])
+
+    with pytest.raises(ValueError, match=message):
+        export_lock(tmp_path, check=True)
+
+    assert [call.args[0] for call in run.call_args_list] == [["uv", "--version"]]
 
 
 @pytest.mark.parametrize("artifact", [pytest.param("sdist", id="sdist"), pytest.param("wheels", id="wheel")])
@@ -551,6 +589,7 @@ def test_export_lock_rejects_uncool_artifact(tmp_path: Path, mocker: MockerFixtu
     mocker.patch(
         "subprocess.run",
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess(
                 [],
                 0,
@@ -583,6 +622,7 @@ def test_export_lock_honors_reviewed_package_cutoff(tmp_path: Path, mocker: Mock
     run = mocker.patch(
         "subprocess.run",
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess(
                 [],
                 0,
@@ -596,7 +636,7 @@ def test_export_lock_honors_reviewed_package_cutoff(tmp_path: Path, mocker: Mock
 
     export_lock(tmp_path)
 
-    assert run.call_args_list[0].args[0][-2:] == ["--exclude-newer-package", f"six={reviewed.isoformat()}"]
+    assert run.call_args_list[1].args[0][-2:] == ["--exclude-newer-package", f"six={reviewed.isoformat()}"]
 
 
 def test_export_lock_rejects_invalid_package_cutoff(tmp_path: Path, mocker: MockerFixture) -> None:
@@ -623,6 +663,7 @@ def test_export_lock_rejects_future_reviewed_cutoff(tmp_path: Path, mocker: Mock
         "subprocess.run",
         autospec=True,
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess([], 0, _dated('[[packages]]\nname = "six"\nversion = "1.17.0"\n'), ""),
         ],
     )
@@ -676,6 +717,8 @@ def test_export_lock_check_rejects_stale_native_uv_lock(tmp_path: Path, mocker: 
     mocker.patch("shutil.which", return_value="uv")
 
     def check_native(command: list[str], **_options: object) -> subprocess.CompletedProcess[str]:
+        if command[1] == "--version":
+            return _UV_VERSION
         assert command[1:] == ["lock", "--check", "--no-config"]
         return subprocess.CompletedProcess(command, 1, "", "native lock is stale")
 
@@ -805,6 +848,7 @@ def test_export_lock_expands_workspace_globs_and_excludes(tmp_path: Path, mocker
         "subprocess.run",
         autospec=True,
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess([], 0, _dated('[[packages]]\nname = "six"\nversion = "1.17.0"\n'), ""),
             subprocess.CompletedProcess([], 0, _dated('[[packages]]\nname = "sphinx"\nversion = "9.1.0"\n'), ""),
             subprocess.CompletedProcess([], 0, _dated('[[packages]]\nname = "pytest"\nversion = "9.1.1"\n'), ""),
@@ -826,7 +870,7 @@ def test_export_lock_expands_workspace_globs_and_excludes(tmp_path: Path, mocker
     assert {package["name"] for package in lock["packages"]} == {"six", "sphinx", "pytest", "click"}
     assert [call.kwargs["input"] for call in run.call_args_list if call.kwargs["input"] is not None] == ["six\n"]
     assert any("--extra" in call.args[0] and "cli" in call.args[0] for call in run.call_args_list)
-    assert [call.args[0][4] for call in run.call_args_list[1:3]] == [
+    assert [call.args[0][4] for call in run.call_args_list[2:4]] == [
         f"{tmp_path / 'packages/one/pyproject.toml'}:docs",
         f"{tmp_path / 'packages/two/pyproject.toml'}:test",
     ]
@@ -848,6 +892,7 @@ def test_export_lock_combines_workspace_build_requirements(tmp_path: Path, mocke
         "subprocess.run",
         autospec=True,
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess([], 0, "packages = []\n", ""),
             subprocess.CompletedProcess(
                 [],
@@ -867,8 +912,8 @@ def test_export_lock_combines_workspace_build_requirements(tmp_path: Path, mocke
     lock = tomllib.loads((tmp_path / "pylock.toml").read_text())
     assert lock["dependency-groups"] == ["project-runtime", "build"]
     assert {package["name"] for package in lock["packages"]} == {"hatchling", "uv-build", "maturin"}
-    assert run.call_args_list[1].kwargs["input"] == "hatchling\nuv-build\n"
-    assert run.call_args_list[1].args[0][4:6] == ["--group", f"{tmp_path / 'packages/one/pyproject.toml'}:build"]
+    assert run.call_args_list[2].kwargs["input"] == "hatchling\nuv-build\n"
+    assert run.call_args_list[2].args[0][4:6] == ["--group", f"{tmp_path / 'packages/one/pyproject.toml'}:build"]
 
 
 def test_export_lock_rejects_workspace_python_mismatch(tmp_path: Path) -> None:
@@ -1029,6 +1074,8 @@ def test_export_lock_can_keep_updated_uv_lock(tmp_path: Path, mocker: MockerFixt
     })
 
     def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if command[1] == "--version":
+            return _UV_VERSION
         if command[1] == "lock":
             (tmp_path / "uv.lock").write_text(native)
         return subprocess.CompletedProcess(command, 0, resolved, "")
@@ -1054,6 +1101,8 @@ def test_export_lock_rejects_recent_native_artifact(tmp_path: Path, mocker: Mock
     mocker.patch("shutil.which", return_value="uv")
 
     def run(command: list[str], **_options: object) -> subprocess.CompletedProcess[str]:
+        if command[1] == "--version":
+            return _UV_VERSION
         if command[1] == "lock":
             lock_path.write_text(
                 '[[package]]\nname = "demo"\nsource = { editable = "." }\n'
@@ -1104,6 +1153,8 @@ def test_export_lock_rejects_forged_native_upload_time(tmp_path: Path, mocker: M
     })
 
     def run(command: list[str], **_options: object) -> subprocess.CompletedProcess[str]:
+        if command[1] == "--version":
+            return _UV_VERSION
         if command[1] == "lock":
             (tmp_path / "uv.lock").write_text(native)
         return subprocess.CompletedProcess(command, 0, resolved, "")
@@ -1166,6 +1217,8 @@ def test_export_lock_rejects_invalid_native_artifact(
     native = tomli_w.dumps({"package": [{"name": "demo", "source": {"editable": "."}}, package]})
 
     def run(command: list[str], **_options: object) -> subprocess.CompletedProcess[str]:
+        if command[1] == "--version":
+            return _UV_VERSION
         if command[1] == "lock":
             (tmp_path / "uv.lock").write_text(native)
         return subprocess.CompletedProcess(command, 0, "packages = []\n", "")
@@ -1192,6 +1245,8 @@ def test_export_lock_restores_existing_uv_lock_after_later_failure(tmp_path: Pat
     mocker.patch("shutil.which", return_value="/usr/bin/uv")
 
     def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if command[1] == "--version":
+            return _UV_VERSION
         if command[1] == "lock":
             lock_path.write_text('[[package]]\nname = "demo"\nsource = { editable = "." }\n')
             return subprocess.CompletedProcess(command, 0, "", "")
@@ -1228,6 +1283,7 @@ def test_export_lock_rejects_unbounded_build_python(tmp_path: Path, mocker: Mock
     mocker.patch(
         "subprocess.run",
         side_effect=[
+            _UV_VERSION,
             subprocess.CompletedProcess([], 0, "packages = []\n", ""),
         ],
     )
@@ -1253,6 +1309,9 @@ def test_ci_resolves_test_type_and_docs_groups_without_the_lock() -> None:
     )
     assert "tox run -vv --notest" in commands
     assert "pylock.toml" not in commands
+
+
+_UV_VERSION: Final = subprocess.CompletedProcess(["uv", "--version"], 0, "uv 0.13.5 (abc123 2026-10-21)\n", "")
 
 
 def _dated(text: str) -> str:

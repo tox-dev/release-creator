@@ -81,8 +81,11 @@ file upload for the reviewed version: a cutoff within the upload window can keep
 each exception and run the lock's supported Python and platform selections in the lock refresh pull request.
 
 Run ``release-creator locks --check`` in pull request checks to verify that the committed lock still represents the
-project's groups, extras, and dependencies. It resolves against the committed lock's creation date, so an unrelated pull
-request does not fail merely because a newer dependency became available after the weekly refresh.
+project's groups, extras, and dependencies. The lock records the uv version that resolved it under
+``[tool.release-creator]``, and the check fails first when another uv version runs, because a different resolver can
+pick other versions. Install the same uv for the check and the refresh. It resolves against the committed lock's
+creation date, so an unrelated pull request does not fail merely because a newer dependency became available after the
+weekly refresh.
 
 The command reads ``pyproject.toml`` and writes ``pylock.toml`` in the current directory, and takes the Python range
 from ``[project].requires-python``. It reserves the ``project-runtime`` group name for the lock's runtime selection. An
@@ -91,7 +94,3 @@ existing ``build`` group is combined with the backend requirements.
 At a uv workspace root, the command includes every listed member and combines their groups and extras. Members must
 declare the same ``requires-python`` range; a mismatch fails before writing a lock. The root can omit ``[project]`` when
 its members provide that range.
-
-Release Creator retains its ``[tool.nab]`` policy while its tagged release workflow uses an older shared workflow
-version. The exporter writes compatible ``[tool.nab]`` creation metadata alongside its own metadata so that release can
-validate the full lock before the shared workflow is upgraded. The lock still covers every declared selection.
