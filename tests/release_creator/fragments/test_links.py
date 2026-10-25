@@ -1402,7 +1402,7 @@ def test_add_pull_request_links_detects_wider_attribution(
         pytest.param("+first.feature.rst", "Fix #42.\n", "already linked", id="rst-bare-reference"),
     ],
 )
-def test_add_pull_request_links_rejects_wider_attribution(
+def test_add_pull_request_links_rejects_named_fragment_with_bare_reference(
     tmp_path: Path, filename: str, content: str, message: str
 ) -> None:
     fragment = tmp_path / filename
