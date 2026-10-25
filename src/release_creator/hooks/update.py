@@ -223,15 +223,15 @@ def _shared_nodes(root: MappingNode) -> set[int]:
 def _default_python_version(root: MappingNode, fallback: str) -> str:
     defaults = _mapping_value(root, "default_language_version")
     override = _mapping_value(defaults, "python") if isinstance(defaults, MappingNode) else None
-    return _python_version(override, fallback)
+    return _python_version(override, fallback, fallback)
 
 
-def _python_version(value: Node | str | None, fallback: str, system_version: str | None = None) -> str:
+def _python_version(value: Node | str | None, fallback: str, system_version: str) -> str:
     value = cast("str", value.value) if isinstance(value, ScalarNode) else value
     if not isinstance(value, str) or value == "default":
         return fallback
     if value == "python3":
-        return system_version or fallback
+        return system_version
     version = value.removeprefix("python")
     if version == value or not version.startswith("3."):
         msg = f"unsupported Python hook language_version: {value}"
