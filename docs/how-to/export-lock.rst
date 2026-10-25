@@ -56,14 +56,15 @@ Windows files with the same version list and their respective ``--target-platfor
 target runner if the lock uses unsupported markers.
 
 Some backends request additional dependencies during a build. If the backend's hook has a known conditional requirement,
-add it during lock generation. For example, meson-python can request ``patchelf`` on Linux:
+declare it in a ``build`` dependency group, which the command combines with ``[build-system].requires``. For example,
+meson-python can request ``patchelf`` on Linux:
 
-.. code-block:: bash
+.. code-block:: toml
 
-    release-creator locks --build-requirement 'patchelf>=0.11.0; sys_platform == "linux"'
+    [dependency-groups]
+    build = ['patchelf>=0.11.0; sys_platform == "linux"']
 
-``--build-requirement`` can be repeated. An undeclared dynamic dependency fails the hashed build until the lock includes
-it. Keep this supplement close to the repository's release workflow so its reason stays visible.
+An undeclared dynamic dependency fails the hashed build until the lock includes it.
 
 The command leaves an existing ``uv.lock`` untouched. Commit ``pylock.toml``. Use ``--keep-uv-lock`` only when the
 project also uses uv's native lock for its own build. It refreshes both files under the same seven-day cutoff, then
@@ -74,18 +75,18 @@ changes. A failed resolution leaves the previous ``pylock.toml`` intact and prin
 supports Python 3.11 but uses Sphinx 9 in its ``docs`` group, declare that group's Python minimum under
 ``[tool.uv.dependency-groups]``. uv cannot infer that the group is optional from the library's runtime
 ``requires-python`` alone. The global seven-day cutoff applies to every selection, including build requirements. If a
-project raises one package's minimum above that cutoff, pass ``--exclude-newer-package NAME=UTC_DATE`` for that package
-during the refresh. Set the package cutoff after the latest file upload for the reviewed version: a cutoff within the
-upload window can keep one wheel and omit the others. Review each exception and run the lock's supported Python and
-platform selections in the lock refresh pull request.
+project raises one package's minimum above that cutoff, set a reviewed cutoff for that package in
+``[tool.release-creator.locks.exclude-newer-package]`` as ``NAME = "UTC_DATE"``. Set the package cutoff after the latest
+file upload for the reviewed version: a cutoff within the upload window can keep one wheel and omit the others. Review
+each exception and run the lock's supported Python and platform selections in the lock refresh pull request.
 
 Run ``release-creator locks --check`` in pull request checks to verify that the committed lock still represents the
 project's groups, extras, and dependencies. It resolves against the committed lock's creation date, so an unrelated pull
 request does not fail merely because a newer dependency became available after the weekly refresh.
 
-The command reads ``[project].requires-python``. For a tool-only ``pyproject.toml`` without ``[project]``, pass
-``--tool-python '>=3.15'`` to describe its release-tool environment. It reserves the ``project-runtime`` group name for
-the lock's runtime selection. An existing ``build`` group is combined with the backend requirements.
+The command reads ``pyproject.toml`` and writes ``pylock.toml`` in the current directory, and takes the Python range
+from ``[project].requires-python``. It reserves the ``project-runtime`` group name for the lock's runtime selection. An
+existing ``build`` group is combined with the backend requirements.
 
 At a uv workspace root, the command includes every listed member and combines their groups and extras. Members must
 declare the same ``requires-python`` range; a mismatch fails before writing a lock. The root can omit ``[project]`` when

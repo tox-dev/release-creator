@@ -27,26 +27,18 @@ type _TomlValue = (
 type _TomlTable = dict[str, _TomlValue]
 
 
-def export_lock(
-    project: Path,
-    output: Path,
-    *,
-    options: LockOptions | None = None,
-) -> None:
-    """Export each resolved group and extra with its selection marker.
+def export_lock(root: Path, *, check: bool = False, keep_uv_lock: bool = False) -> None:
+    """Export each resolved group and extra of ``root/pyproject.toml`` to ``root/pylock.toml``.
 
-    :param project: Project pyproject.toml.
-    :param output: PEP 751 lock file to write.
-    :param options: Tool Python range, build supplements, package cutoffs, and check mode.
+    :param root: Project directory.
+    :param check: Compare the committed lock instead of writing it.
+    :param keep_uv_lock: Refresh and keep the project's native ``uv.lock`` too.
     :raises ValueError: The project cannot describe a selectable lock.
     :raises FileNotFoundError: uv is not installed.
     """
-    options = options or LockOptions()
-    lock_path = project.parent / "uv.lock"
-    if output.resolve() in {project.resolve(), lock_path.resolve()}:
-        msg = f"lock output would overwrite an input file: {output}"
-        raise ValueError(msg)
-    data = cast("_TomlTable", tomllib.loads(project.read_text(encoding="utf-8")))
+    project = root / "pyproject.toml"
+    output = root / "pylock.toml"
+    lock_path = root / "uv.lock"
     previous = (
         lock_path.read_bytes() if lock_path.exists() else None,
         output.read_bytes() if output.exists() else None,
@@ -54,11 +46,11 @@ def export_lock(
     if (uv := shutil.which("uv")) is None:
         msg = "uv is required to export a project lock"
         raise FileNotFoundError(msg)
-    created_at = _creation_time(output) if options.check else datetime.now(tz=UTC)
+    created_at = _creation_time(output) if check else datetime.now(tz=UTC)
     completed = False
     try:
-        rendered = _render_lock(project, data, options, uv, created_at)
-        if options.check:
+        rendered = _render_lock(project, uv, created_at, check=check, keep_uv_lock=keep_uv_lock)
+        if check:
             if output.read_text(encoding="utf-8") != rendered:
                 msg = f"project lock is stale: {output}"
                 raise ValueError(msg)
@@ -70,20 +62,9 @@ def export_lock(
             lock_path,
             output,
             previous,
-            completed=completed and not options.check,
-            keep_uv_lock=options.keep_uv_lock and not options.check,
+            completed=completed and not check,
+            keep_uv_lock=keep_uv_lock and not check,
         )
-
-
-@dataclass(frozen=True, kw_only=True)
-class LockOptions:
-    """Arguments that select the export and its review mode."""
-
-    tool_python: str | None = None
-    build_requirements: tuple[str, ...] = ()
-    exclude_newer_packages: tuple[str, ...] = ()
-    check: bool = False
-    keep_uv_lock: bool = False
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -93,22 +74,19 @@ class _Compiler:
     options: list[str]
 
 
-def _render_lock(project: Path, data: _TomlTable, options: LockOptions, uv: str, created_at: datetime) -> str:
-    requires_python, groups, extras, projects = _project_selections(project, data, options.tool_python)
+def _render_lock(project: Path, uv: str, created_at: datetime, *, check: bool, keep_uv_lock: bool) -> str:
+    requires_python, groups, extras, projects = _project_selections(project)
     if "project-runtime" in groups:
         msg = "project-runtime is reserved for the project's runtime dependencies"
         raise ValueError(msg)
     build = [
-        *(
-            requirement
-            for _, item in projects
-            for requirement in cast("list[str]", _table(item, "build-system").get("requires", []))
-        ),
-        *options.build_requirements,
+        requirement
+        for _, item in projects
+        for requirement in cast("list[str]", _table(item, "build-system").get("requires", []))
     ]
     for requirement in build:
         _require_pypi(requirement)
-    cutoffs = _package_cutoffs(data, options.exclude_newer_packages)
+    cutoffs = _package_cutoffs(projects[0][1])
     cutoff_options = [
         "--exclude-newer",
         (created_at - timedelta(days=7)).isoformat(),
@@ -133,8 +111,8 @@ def _render_lock(project: Path, data: _TomlTable, options: LockOptions, uv: str,
             *cutoff_options,
         ],
     )
-    if options.keep_uv_lock:
-        if options.check:
+    if keep_uv_lock:
+        if check:
             _run_uv(uv, project.parent, "lock", "--check", "--no-config")
         else:
             _run_uv(
@@ -194,7 +172,7 @@ def _render_lock(project: Path, data: _TomlTable, options: LockOptions, uv: str,
     records = _package_records(packages, markers)
     for package in records:
         _check_package_artifacts(package, created_at, cutoffs)
-    if options.keep_uv_lock:
+    if keep_uv_lock:
         _check_native_lock(project.parent / "uv.lock", created_at, cutoffs, projects, records)
     return tomli_w.dumps({
         "lock-version": "1.0",
@@ -238,19 +216,12 @@ def _creation_time(output: Path) -> datetime:
     return created
 
 
-def _package_cutoffs(data: _TomlTable, overrides: tuple[str, ...]) -> dict[str, str]:
+def _package_cutoffs(data: _TomlTable) -> dict[str, str]:
     configured = _table(_table(_table(data, "tool"), "release-creator"), "locks").get("exclude-newer-package", {})
     if not isinstance(configured, dict) or any(not isinstance(date, str) for date in configured.values()):
         msg = "tool.release-creator.locks.exclude-newer-package must map package names to UTC dates"
         raise TypeError(msg)
-    cutoffs = {name: cast("str", date) for name, date in configured.items()}
-    for override in overrides:
-        name, separator, date = override.partition("=")
-        if not separator or not name or not date:
-            msg = f"invalid package cutoff: {override}"
-            raise ValueError(msg)
-        cutoffs[name] = date
-    return cutoffs
+    return {name: cast("str", date) for name, date in configured.items()}
 
 
 def _package_records(packages: dict[str, _TomlTable], markers: dict[str, set[str]]) -> list[_TomlTable]:
@@ -471,9 +442,8 @@ def _minimum_python(requires_python: str) -> str:
     return str(minimum)
 
 
-def _project_selections(
-    project: Path, data: _TomlTable, tool_python: str | None
-) -> tuple[str, list[str], list[str], list[tuple[Path, _TomlTable]]]:
+def _project_selections(project: Path) -> tuple[str, list[str], list[str], list[tuple[Path, _TomlTable]]]:
+    data = cast("_TomlTable", tomllib.loads(project.read_text(encoding="utf-8")))
     workspace = _table(_table(_table(data, "tool"), "uv"), "workspace")
     excluded = {path.resolve() for path in _workspace_paths(project.parent, workspace.get("exclude", []))}
     projects = [(project, data)]
@@ -498,8 +468,8 @@ def _project_selections(
     if len(ranges) > 1:
         msg = "workspace members must share a requires-python range"
         raise ValueError(msg)
-    if (requires_python := next(iter(ranges), tool_python)) is None:
-        msg = "declare [project].requires-python or pass --tool-python for a tool-only project"
+    if (requires_python := next(iter(ranges), None)) is None:
+        msg = "declare [project].requires-python in the project or its workspace members"
         raise ValueError(msg)
     groups = list(dict.fromkeys(group for _, item in projects for group in _table(item, "dependency-groups")))
     extras = list(dict.fromkeys(extra for item in project_tables for extra in _table(item, "optional-dependencies")))
@@ -595,6 +565,5 @@ def _run_uv(uv: str, directory: Path, *arguments: str, stdin: str | None = None)
 
 
 __all__ = [
-    "LockOptions",
     "export_lock",
 ]

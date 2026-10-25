@@ -12,7 +12,7 @@ lazy from pytest_mock import MockerFixture
 lazy from yaml import safe_load
 
 lazy from release_creator.cli import main
-lazy from release_creator.locks.export import LockOptions, export_lock
+lazy from release_creator.locks.export import export_lock
 
 
 def test_export_lock_keeps_group_and_extra_membership(
@@ -40,9 +40,8 @@ def test_export_lock_keeps_group_and_extra_membership(
         ],
     )
 
-    monkeypatch.setattr(
-        sys, "argv", ["release-creator", "locks", "--project", str(project), "--output", str(tmp_path / "pylock.toml")]
-    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["release-creator", "locks"])
     main()
 
     lock = tomllib.loads((tmp_path / "pylock.toml").read_text())
@@ -75,7 +74,7 @@ def test_export_lock_isolates_uv_resolution_settings(
         ],
     )
 
-    export_lock(project, tmp_path / "pylock.toml")
+    export_lock(tmp_path)
 
     assert all(
         {"--no-config", "--no-sources", "--default-index"} <= set(call.args[0])
@@ -83,21 +82,6 @@ def test_export_lock_isolates_uv_resolution_settings(
         and all("unapproved.invalid" not in value for value in call.kwargs["env"].values())
         for call in run.call_args_list
     )
-
-
-@pytest.mark.parametrize("target", ["pyproject.toml", "uv.lock"])
-def test_export_lock_rejects_input_alias_without_writing(tmp_path: Path, target: str) -> None:
-    project = tmp_path / "pyproject.toml"
-    project.write_text('[project]\nname = "demo"\nversion = "1"\nrequires-python = ">=3.15"\n')
-    output = tmp_path / target
-    if output != project:
-        output.write_text("existing uv lock")
-    original = output.read_bytes()
-
-    with pytest.raises(ValueError, match="overwrite an input file"):
-        export_lock(project, output)
-
-    assert output.read_bytes() == original
 
 
 @pytest.mark.parametrize("field", ["dependencies", "optional-dependencies"])
@@ -112,7 +96,7 @@ def test_export_lock_rejects_dynamic_dependency_metadata(tmp_path: Path, field: 
     (tmp_path / "requirements.txt").write_text("packaging>=24\n")
 
     with pytest.raises(ValueError, match="dynamic project dependencies"):
-        export_lock(project, tmp_path / "pylock.toml")
+        export_lock(tmp_path)
 
     assert not (tmp_path / "pylock.toml").exists()
 
@@ -125,7 +109,7 @@ def test_export_lock_rejects_legacy_uv_dev_dependencies(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ValueError, match=r"legacy tool\.uv\.dev-dependencies"):
-        export_lock(project, tmp_path / "pylock.toml")
+        export_lock(tmp_path)
 
     assert not (tmp_path / "pylock.toml").exists()
 
@@ -139,7 +123,7 @@ def test_export_lock_rejects_workspace_source_without_member(tmp_path: Path) -> 
     )
 
     with pytest.raises(ValueError, match="declared workspace members"):
-        export_lock(project, tmp_path / "pylock.toml")
+        export_lock(tmp_path)
 
     assert not (tmp_path / "pylock.toml").exists()
 
@@ -154,7 +138,7 @@ def test_export_lock_selects_extra_marker_without_losing_platform_marker(tmp_pat
     )
 
     output = tmp_path / "pylock.toml"
-    export_lock(project, output)
+    export_lock(tmp_path)
     packages = {package["name"]: package for package in tomllib.loads(output.read_text())["packages"]}
 
     assert '"cli" in extras' in packages["packaging"]["marker"]
@@ -177,7 +161,7 @@ def test_export_lock_rejects_workspace_member_outside_project(tmp_path: Path, pa
     project.write_text(f'[tool.uv.workspace]\nmembers = ["{pattern}"]\n')
 
     with pytest.raises(ValueError, match="workspace path is outside the project"):
-        export_lock(project, root / "pylock.toml", options=LockOptions(tool_python=">=3.15"))
+        export_lock(root)
 
     assert not (root / "pylock.toml").exists()
 
@@ -201,7 +185,7 @@ def test_export_lock_rejects_non_pypi_source(tmp_path: Path, mocker: MockerFixtu
     )
 
     with pytest.raises(ValueError, match="non-PyPI package source"):
-        export_lock(project, tmp_path / "pylock.toml")
+        export_lock(tmp_path)
 
     assert not (tmp_path / "pylock.toml").exists()
 
@@ -219,7 +203,7 @@ def test_export_lock_rejects_package_without_artifacts(tmp_path: Path, mocker: M
     )
 
     with pytest.raises(ValueError, match="no dated artifacts"):
-        export_lock(project, tmp_path / "pylock.toml")
+        export_lock(tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -256,7 +240,7 @@ def test_export_lock_rejects_untrusted_package_record(
     )
 
     with pytest.raises(ValueError, match=message):
-        export_lock(project, tmp_path / "pylock.toml")
+        export_lock(tmp_path)
 
 
 def test_export_lock_selects_all_workspace_runtime_dependencies(tmp_path: Path, mocker: MockerFixture) -> None:
@@ -287,7 +271,7 @@ def test_export_lock_selects_all_workspace_runtime_dependencies(tmp_path: Path, 
         ],
     )
 
-    export_lock(project, tmp_path / "pylock.toml")
+    export_lock(tmp_path)
 
     assert [
         (package["name"], package["marker"])
@@ -324,7 +308,7 @@ def test_export_lock_keeps_published_self_dependency_in_group(tmp_path: Path, mo
         ],
     )
 
-    export_lock(project, tmp_path / "pylock.toml")
+    export_lock(tmp_path)
 
     assert [
         (package["name"], package["marker"])
@@ -342,8 +326,11 @@ def test_export_lock_adds_marker_scoped_build_requirements(
 ) -> None:
     project = tmp_path / "pyproject.toml"
     project.write_text(
-        '[build-system]\nrequires = ["meson-python>=0.22"]\nbuild-backend = "mesonpy"\n'
+        '[build-system]\nrequires = ["meson-python>=0.22", \'patchelf>=0.11; sys_platform == "linux"\']\n'
+        'build-backend = "mesonpy"\n'
         '[project]\nname = "demo"\nversion = "1.0"\nrequires-python = ">=3.11"\n'
+        "[tool.release-creator.locks.exclude-newer-package]\n"
+        'release-creator = "2026-10-21T00:00:00Z"\npytest-mock = "2026-10-21T00:00:00Z"\n'
     )
     mocker.patch("shutil.which", return_value="/usr/bin/uv")
     run = mocker.patch(
@@ -362,24 +349,8 @@ def test_export_lock_adds_marker_scoped_build_requirements(
         ],
     )
 
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "release-creator",
-            "locks",
-            "--project",
-            str(project),
-            "--output",
-            str(tmp_path / "pylock.toml"),
-            "--build-requirement",
-            'patchelf>=0.11; sys_platform == "linux"',
-            "--exclude-newer-package",
-            "release-creator=2026-10-21T00:00:00Z",
-            "--exclude-newer-package",
-            "pytest-mock=2026-10-21T00:00:00Z",
-        ],
-    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["release-creator", "locks"])
     main()
 
     lock = tomllib.loads((tmp_path / "pylock.toml").read_text())
@@ -418,8 +389,11 @@ def test_export_lock_adds_marker_scoped_build_requirements(
 
 
 def test_export_lock_preserves_opposite_build_python_markers(tmp_path: Path, mocker: MockerFixture) -> None:
-    project = tmp_path / "pyproject.toml"
-    project.write_text('[project]\nname = "demo"\nversion = "1"\nrequires-python = ">=3.11"\n')
+    (tmp_path / "pyproject.toml").write_text(
+        "[build-system]\n"
+        "requires = ['six==1.17.0; python_version < \"3.12\"', 'packaging==24.2; python_version >= \"3.12\"']\n"
+        '[project]\nname = "demo"\nversion = "1"\nrequires-python = ">=3.11"\n'
+    )
     mocker.patch("shutil.which", return_value="uv")
     mocker.patch(
         "subprocess.run",
@@ -439,13 +413,7 @@ def test_export_lock_preserves_opposite_build_python_markers(tmp_path: Path, moc
         ],
     )
 
-    export_lock(
-        project,
-        tmp_path / "pylock.toml",
-        options=LockOptions(
-            build_requirements=('six==1.17.0; python_version < "3.12"', 'packaging==24.2; python_version >= "3.12"')
-        ),
-    )
+    export_lock(tmp_path)
 
     assert [
         (package["name"], package["marker"])
@@ -480,9 +448,8 @@ def test_export_lock_merges_default_index_build_overlap(
         ],
     )
 
-    monkeypatch.setattr(
-        sys, "argv", ["release-creator", "locks", "--project", str(project), "--output", str(tmp_path / "pylock.toml")]
-    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["release-creator", "locks"])
     main()
 
     assert [
@@ -515,7 +482,7 @@ def test_export_lock_merges_declared_build_group(tmp_path: Path, mocker: MockerF
         ],
     )
 
-    export_lock(project, tmp_path / "pylock.toml")
+    export_lock(tmp_path)
 
     lock = tomllib.loads((tmp_path / "pylock.toml").read_text())
     assert lock["dependency-groups"] == ["project-runtime", "build"]
@@ -535,7 +502,7 @@ def test_export_lock_rejects_incompatible_build_requirements(tmp_path: Path) -> 
     )
 
     with pytest.raises(ValueError, match="No solution found"):
-        export_lock(project, tmp_path / "pylock.toml")
+        export_lock(tmp_path)
 
     assert not (tmp_path / "pylock.toml").exists()
 
@@ -558,7 +525,7 @@ def test_export_lock_records_cooling_metadata(tmp_path: Path, mocker: MockerFixt
         ],
     )
 
-    export_lock(project, tmp_path / "pylock.toml")
+    export_lock(tmp_path)
 
     lock = tomllib.loads((tmp_path / "pylock.toml").read_text())
     assert lock["packages"][0] == {
@@ -600,7 +567,7 @@ def test_export_lock_rejects_uncool_artifact(tmp_path: Path, mocker: MockerFixtu
     )
 
     with pytest.raises(ValueError, match="uncooled artifact"):
-        export_lock(project, tmp_path / "pylock.toml")
+        export_lock(tmp_path)
 
     assert not (tmp_path / "pylock.toml").exists()
 
@@ -627,41 +594,20 @@ def test_export_lock_honors_reviewed_package_cutoff(tmp_path: Path, mocker: Mock
         ],
     )
 
-    export_lock(project, tmp_path / "pylock.toml")
+    export_lock(tmp_path)
 
     assert run.call_args_list[0].args[0][-2:] == ["--exclude-newer-package", f"six={reviewed.isoformat()}"]
 
 
-@pytest.mark.parametrize(
-    ("configuration", "override", "message"),
-    [
-        pytest.param(
-            '[tool.release-creator.locks]\nexclude-newer-package = "invalid"\n',
-            None,
-            "must map package names",
-            id="invalid-config",
-        ),
-        pytest.param(
-            "",
-            "invalid",
-            "invalid package cutoff",
-            id="invalid-override",
-        ),
-    ],
-)
-def test_export_lock_rejects_invalid_package_cutoff(
-    tmp_path: Path, mocker: MockerFixture, configuration: str, override: str | None, message: str
-) -> None:
-    project = tmp_path / "pyproject.toml"
-    project.write_text(f'[project]\nname = "demo"\nversion = "1"\nrequires-python = ">=3.15"\n{configuration}')
+def test_export_lock_rejects_invalid_package_cutoff(tmp_path: Path, mocker: MockerFixture) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\nversion = "1"\nrequires-python = ">=3.15"\n'
+        '[tool.release-creator.locks]\nexclude-newer-package = "invalid"\n'
+    )
     run = mocker.patch("subprocess.run", autospec=True)
 
-    with pytest.raises((TypeError, ValueError), match=message):
-        export_lock(
-            project,
-            tmp_path / "pylock.toml",
-            options=LockOptions(exclude_newer_packages=(override,) if override is not None else ()),
-        )
+    with pytest.raises(TypeError, match="must map package names"):
+        export_lock(tmp_path)
 
     run.assert_not_called()
 
@@ -682,19 +628,19 @@ def test_export_lock_rejects_future_reviewed_cutoff(tmp_path: Path, mocker: Mock
     )
 
     with pytest.raises(ValueError, match="invalid reviewed cutoff"):
-        export_lock(project, tmp_path / "pylock.toml")
+        export_lock(tmp_path)
 
 
 def test_export_lock_check_detects_stale_selection(tmp_path: Path) -> None:
     project = tmp_path / "pyproject.toml"
     project.write_text('[project]\nname = "demo"\nversion = "1"\nrequires-python = ">=3.15"\n')
     output = tmp_path / "pylock.toml"
-    export_lock(project, output)
+    export_lock(tmp_path)
     original = output.read_bytes()
     project.write_text(project.read_text() + "[dependency-groups]\nrelease = []\n")
 
     with pytest.raises(ValueError, match="project lock is stale"):
-        export_lock(project, output, options=LockOptions(check=True))
+        export_lock(tmp_path, check=True)
 
     assert output.read_bytes() == original
     assert not (tmp_path / "uv.lock").exists()
@@ -704,14 +650,14 @@ def test_export_lock_check_accepts_current_selection(tmp_path: Path) -> None:
     project = tmp_path / "pyproject.toml"
     project.write_text('[project]\nname = "demo"\nversion = "1"\nrequires-python = ">=3.15"\n')
     output = tmp_path / "pylock.toml"
-    export_lock(project, output)
+    export_lock(tmp_path)
     original = output.read_bytes()
     uv_lock = tmp_path / "uv.lock"
     uv_lock.write_text("existing native lock")
     uv_mtime = uv_lock.stat().st_mtime_ns
     output_mtime = output.stat().st_mtime_ns
 
-    export_lock(project, output, options=LockOptions(check=True))
+    export_lock(tmp_path, check=True)
 
     assert output.read_bytes() == original
     assert output.stat().st_mtime_ns == output_mtime
@@ -723,7 +669,7 @@ def test_export_lock_check_rejects_stale_native_uv_lock(tmp_path: Path, mocker: 
     project = tmp_path / "pyproject.toml"
     project.write_text('[project]\nname = "demo"\nversion = "1"\nrequires-python = ">=3.15"\n')
     output = tmp_path / "pylock.toml"
-    export_lock(project, output)
+    export_lock(tmp_path)
     original = output.read_bytes()
     uv_lock = tmp_path / "uv.lock"
     uv_lock.write_bytes(b"stale native lock")
@@ -736,7 +682,7 @@ def test_export_lock_check_rejects_stale_native_uv_lock(tmp_path: Path, mocker: 
     mocker.patch("subprocess.run", autospec=True, side_effect=check_native)
 
     with pytest.raises(ValueError, match="native lock is stale"):
-        export_lock(project, output, options=LockOptions(check=True, keep_uv_lock=True))
+        export_lock(tmp_path, check=True, keep_uv_lock=True)
 
     assert output.read_bytes() == original
     assert uv_lock.read_bytes() == b"stale native lock"
@@ -756,7 +702,7 @@ def test_export_lock_restores_output_after_partial_write(tmp_path: Path, mocker:
     mocker.patch.object(Path, "write_text", autospec=True, side_effect=partial_write)
 
     with pytest.raises(OSError, match="disk write failed"):
-        export_lock(project, output)
+        export_lock(tmp_path)
 
     assert output.read_bytes() == b"previous lock"
 
@@ -773,7 +719,7 @@ def test_export_lock_check_rejects_invalid_creation_time(tmp_path: Path, created
     project = tmp_path / "pyproject.toml"
     project.write_text('[project]\nname = "demo"\nversion = "1"\nrequires-python = ">=3.15"\n')
     output = tmp_path / "pylock.toml"
-    export_lock(project, output)
+    export_lock(tmp_path)
     data = tomllib.loads(output.read_text())
     if created_at == "absent":
         del data["tool"]["release-creator"]["created-at"]
@@ -784,27 +730,17 @@ def test_export_lock_check_rejects_invalid_creation_time(tmp_path: Path, created
     output.write_text(tomli_w.dumps(data))
 
     with pytest.raises(ValueError, match="no valid creation time"):
-        export_lock(project, output, options=LockOptions(check=True))
+        export_lock(tmp_path, check=True)
 
 
 def test_export_lock_removes_generated_uv_lock(tmp_path: Path) -> None:
     project = tmp_path / "pyproject.toml"
     project.write_text("[project]\nname = 'demo'\nversion = '1.0'\nrequires-python = '>=3.15'\n")
 
-    export_lock(project, tmp_path / "pylock.toml")
+    export_lock(tmp_path)
 
     assert (tmp_path / "pylock.toml").exists()
     assert not (tmp_path / "uv.lock").exists()
-
-
-def test_export_lock_accepts_tool_only_project(tmp_path: Path) -> None:
-    project = tmp_path / "pyproject.toml"
-    project.write_text("[dependency-groups]\nrelease = []\n")
-
-    export_lock(project, tmp_path / "pylock.toml", options=LockOptions(tool_python=">=3.15"))
-
-    lock = tomllib.loads((tmp_path / "pylock.toml").read_text())
-    assert (lock["requires-python"], lock["dependency-groups"]) == (">=3.15", ["project-runtime", "release"])
 
 
 def test_export_lock_preserves_group_includes(tmp_path: Path) -> None:
@@ -814,7 +750,7 @@ def test_export_lock_preserves_group_includes(tmp_path: Path) -> None:
         '[dependency-groups]\ntest = []\ndev = [{ include-group = "test" }]\n'
     )
 
-    export_lock(project, tmp_path / "pylock.toml")
+    export_lock(tmp_path)
 
     assert tomllib.loads((tmp_path / "pylock.toml").read_text())["dependency-groups"] == [
         "project-runtime",
@@ -834,7 +770,7 @@ def test_export_lock_includes_workspace_groups(tmp_path: Path) -> None:
             f"[dependency-groups]\n{group} = []\n"
         )
 
-    export_lock(project, tmp_path / "pylock.toml")
+    export_lock(tmp_path)
 
     lock = tomllib.loads((tmp_path / "pylock.toml").read_text())
     assert (lock["requires-python"], lock["dependency-groups"]) == (">=3.11", ["project-runtime", "test", "release"])
@@ -883,7 +819,7 @@ def test_export_lock_expands_workspace_globs_and_excludes(tmp_path: Path, mocker
         ],
     )
 
-    export_lock(project, tmp_path / "pylock.toml")
+    export_lock(tmp_path)
 
     lock = tomllib.loads((tmp_path / "pylock.toml").read_text())
     assert (lock["dependency-groups"], lock["extras"]) == (["project-runtime", "docs", "test"], ["cli"])
@@ -926,7 +862,7 @@ def test_export_lock_combines_workspace_build_requirements(tmp_path: Path, mocke
         ],
     )
 
-    export_lock(project, tmp_path / "pylock.toml")
+    export_lock(tmp_path)
 
     lock = tomllib.loads((tmp_path / "pylock.toml").read_text())
     assert lock["dependency-groups"] == ["project-runtime", "build"]
@@ -946,7 +882,7 @@ def test_export_lock_rejects_workspace_python_mismatch(tmp_path: Path) -> None:
         )
 
     with pytest.raises(ValueError, match="workspace members must share"):
-        export_lock(project, tmp_path / "pylock.toml")
+        export_lock(tmp_path)
 
 
 def test_export_lock_rejects_workspace_member_url_before_uv(tmp_path: Path, mocker: MockerFixture) -> None:
@@ -961,7 +897,7 @@ def test_export_lock_rejects_workspace_member_url_before_uv(tmp_path: Path, mock
     run = mocker.patch("subprocess.run", autospec=True)
 
     with pytest.raises(ValueError, match="direct dependency source"):
-        export_lock(project, tmp_path / "pylock.toml")
+        export_lock(tmp_path)
 
     run.assert_not_called()
 
@@ -1027,7 +963,7 @@ def test_export_lock_rejects_invalid_project(
     process = mocker.patch("subprocess.run", autospec=True)
 
     with pytest.raises(ValueError, match=message):
-        export_lock(project, tmp_path / "pylock.toml")
+        export_lock(tmp_path)
 
     process.assert_not_called()
 
@@ -1038,7 +974,7 @@ def test_export_lock_requires_uv(tmp_path: Path, mocker: MockerFixture) -> None:
     mocker.patch("shutil.which", return_value=None)
 
     with pytest.raises(FileNotFoundError, match="uv is required"):
-        export_lock(project, tmp_path / "pylock.toml")
+        export_lock(tmp_path)
 
 
 def test_export_lock_keeps_existing_uv_lock(tmp_path: Path, mocker: MockerFixture) -> None:
@@ -1051,7 +987,7 @@ def test_export_lock_keeps_existing_uv_lock(tmp_path: Path, mocker: MockerFixtur
         "subprocess.run", autospec=True, return_value=subprocess.CompletedProcess([], 0, "packages = []\n", "")
     )
 
-    export_lock(project, tmp_path / "pylock.toml")
+    export_lock(tmp_path)
 
     assert (tmp_path / "uv.lock").read_text() == "existing"
 
@@ -1099,7 +1035,7 @@ def test_export_lock_can_keep_updated_uv_lock(tmp_path: Path, mocker: MockerFixt
 
     process = mocker.patch("subprocess.run", autospec=True, side_effect=run)
 
-    export_lock(project, tmp_path / "pylock.toml", options=LockOptions(keep_uv_lock=True))
+    export_lock(tmp_path, keep_uv_lock=True)
 
     assert (tmp_path / "uv.lock").read_text() == native
     native_commands = [call.args[0] for call in process.call_args_list if call.args[0][1] == "lock"]
@@ -1131,7 +1067,7 @@ def test_export_lock_rejects_recent_native_artifact(tmp_path: Path, mocker: Mock
     mocker.patch("subprocess.run", autospec=True, side_effect=run)
 
     with pytest.raises(ValueError, match=r"uncooled artifact: prek\.whl"):
-        export_lock(project, tmp_path / "pylock.toml", options=LockOptions(keep_uv_lock=True))
+        export_lock(tmp_path, keep_uv_lock=True)
 
     assert lock_path.read_text() == "existing"
     assert not (tmp_path / "pylock.toml").exists()
@@ -1176,7 +1112,7 @@ def test_export_lock_rejects_forged_native_upload_time(tmp_path: Path, mocker: M
     mocker.patch("subprocess.run", autospec=True, side_effect=run)
 
     with pytest.raises(ValueError, match="differs from cooled project lock"):
-        export_lock(project, tmp_path / "pylock.toml", options=LockOptions(keep_uv_lock=True))
+        export_lock(tmp_path, keep_uv_lock=True)
 
     assert (tmp_path / "uv.lock").read_text() == "reviewed native lock"
     assert not (tmp_path / "pylock.toml").exists()
@@ -1238,7 +1174,7 @@ def test_export_lock_rejects_invalid_native_artifact(
     mocker.patch("subprocess.run", autospec=True, side_effect=run)
 
     with pytest.raises(error, match=message):
-        export_lock(project, tmp_path / "pylock.toml", options=LockOptions(keep_uv_lock=True))
+        export_lock(tmp_path, keep_uv_lock=True)
 
     assert not (tmp_path / "pylock.toml").exists()
 
@@ -1264,7 +1200,7 @@ def test_export_lock_restores_existing_uv_lock_after_later_failure(tmp_path: Pat
     mocker.patch("subprocess.run", autospec=True, side_effect=run)
 
     with pytest.raises(ValueError, match="build resolver failed"):
-        export_lock(project, output, options=LockOptions(keep_uv_lock=True))
+        export_lock(tmp_path, keep_uv_lock=True)
 
     assert (lock_path.read_text(), output.read_text()) == ("reviewed lock", "reviewed export")
 
@@ -1278,7 +1214,7 @@ def test_export_lock_reports_uv_failure(tmp_path: Path, mocker: MockerFixture) -
     )
 
     with pytest.raises(ValueError, match="invalid project"):
-        export_lock(project, tmp_path / "pylock.toml")
+        export_lock(tmp_path)
 
     assert not (tmp_path / "uv.lock").exists()
 
@@ -1297,7 +1233,7 @@ def test_export_lock_rejects_unbounded_build_python(tmp_path: Path, mocker: Mock
     )
 
     with pytest.raises(ValueError, match="cannot infer the minimum Python version"):
-        export_lock(project, tmp_path / "pylock.toml")
+        export_lock(tmp_path)
 
     assert not (tmp_path / "pylock.toml").exists()
 
