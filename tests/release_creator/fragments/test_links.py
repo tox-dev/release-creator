@@ -189,7 +189,6 @@ def test_add_pull_request_links_renders_oxford_author_credit(tmp_path: Path) -> 
     notes = render_markdown(
         f"## 1.2.3 (today)\n\n### Added\n\n- {fragment.read_text()}",
         ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
-        "* Add a feature by @alice in https://github.com/tox-dev/example/pull/42\n",
     )
     assert (
         "Add a feature by [@bob](https://github.com/bob), [@carol](https://github.com/carol), "
@@ -206,7 +205,6 @@ def test_add_pull_request_links_renders_rst_oxford_author_credit(tmp_path: Path)
     notes = render_rst(
         "1.2.3 (today)\n==============\n\nAdded\n-----\n\n- " + fragment.read_text(),
         ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
-        "* Add a feature by @alice in https://github.com/tox-dev/example/pull/42\n",
     )
     assert "by @bob, @carol, and @alice." in notes
     assert "([#42](https://github.com/tox-dev/example/pull/42))" in notes

@@ -69,7 +69,6 @@ def test_markdown_template_links_two_fragments_from_one_pull_request(tmp_path: P
     notes = render_markdown(
         changelog,
         ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
-        "* Add an option by @alice in https://github.com/tox-dev/example/pull/42\n",
     )
     assert (
         "Add an option by [@alice](https://github.com/alice) ([#42](https://github.com/tox-dev/example/pull/42))."
@@ -106,7 +105,6 @@ def test_markdown_template_preserves_prose_continuations(tmp_path: Path, source:
     notes = render_markdown(
         changelog,
         ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
-        "* First by @alice in https://github.com/tox-dev/example/pull/42\n",
     )
     assert notes == (
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
@@ -322,7 +320,6 @@ def test_rst_template_renders_literal_marker_credit(tmp_path: Path) -> None:
     notes = render_rst(
         changelog,
         ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
-        "* Fix the loader by @alice in https://github.com/tox-dev/example/pull/2\n",
     )
 
     assert notes == (
@@ -339,7 +336,6 @@ def test_rst_template_preserves_two_paragraphs(tmp_path: Path) -> None:
     notes = render_rst(
         changelog,
         ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
-        "* First by @alice in https://github.com/tox-dev/example/pull/2\n",
     )
 
     assert notes == (

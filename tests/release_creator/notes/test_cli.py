@@ -84,40 +84,6 @@ def test_notes_cli_selects_package(
     assert "### Bug fixes\n\n- Correct a bug." in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("heading", [pytest.param("##", id="h2"), pytest.param("###", id="h3")])
-def test_notes_cli_reads_generated_notes(
-    heading: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    changelog = tmp_path / "CHANGELOG.md"
-    changelog.write_text("## 1.2.3 (today)\n\n### Added\n\n- New option by [@alice](https://github.com/alice).\n")
-    generated = tmp_path / "generated.md"
-    generated.write_text(f"{heading} New Contributors\n* @alice made their first contribution in #42\n")
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "release-creator",
-            "notes",
-            "--changelog",
-            str(changelog),
-            "--tag",
-            "1.2.3",
-            "--repository",
-            "tox-dev/example",
-            "--generated-notes",
-            str(generated),
-        ],
-    )
-
-    main()
-
-    assert (
-        "### New Contributors\n\n"
-        "- @alice made their first contribution in [#42](https://github.com/tox-dev/example/pull/42)"
-        in capsys.readouterr().out
-    )
-
-
 def test_notes_cli_reports_missing_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

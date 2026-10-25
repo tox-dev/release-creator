@@ -99,23 +99,6 @@ When packages have separate histories in one Markdown file, name the package sec
 The package selector prevents a matching version in another package's history from entering the output. It does not
 change the repository used for GitHub links.
 
-First-time contributors
-=======================
-
-GitHub's generated notes may identify first-time contributors. Save its body and pass it as a second input:
-
-.. code-block:: bash
-
-    gh api -X POST repos/owner/project/releases/generate-notes \
-      -f tag_name=1.2.3 --jq .body > generated-notes.md
-    uvx --from release-creator release-creator notes \
-      --changelog docs/changelog.md --tag 1.2.3 --repository owner/project \
-      --generated-notes generated-notes.md > release-notes.md
-
-Human ``New Contributors`` lines remain even when their PR did not need a changelog entry. Generated change lists and
-the ``<!-- Release notes generated ... -->`` banner are discarded. This input never decides which changes or changelog
-authors belong in the release.
-
 reStructuredText changelogs
 ===========================
 

@@ -9,7 +9,6 @@ lazy from dataclasses import dataclass
 lazy import mdformat
 lazy from packaging.version import InvalidVersion, Version
 
-lazy from release_creator.anchors.names import release_anchor
 lazy from release_creator.categories import RELEASE_CATEGORIES
 lazy from release_creator.github import validate_repository
 lazy from release_creator.notes.rst import TILDE_PLACEHOLDER, render_rst_section
@@ -27,26 +26,24 @@ class ReleaseContext:
     package: str | None = None
 
 
-def render_markdown(changelog: str, context: ReleaseContext, generated_notes: str | None = None) -> str:
+def render_markdown(changelog: str, context: ReleaseContext) -> str:
     """Render one Markdown release section for GitHub without wrapped list items.
 
     :param changelog: Tagged Markdown changelog.
     :param context: Repository and release links.
-    :param generated_notes: GitHub-generated text for the New Contributors section.
     :returns: The complete GitHub Release body.
 
     """
     _validate_context(context)
     notes = mdformat.text(_extract_body(changelog, context), options={"wrap": "no"}, extensions={"gfm"}).strip()
-    return _finish(notes, context, generated_notes)
+    return _finish(notes, context)
 
 
-def render_rst(changelog: str, context: ReleaseContext, generated_notes: str | None = None) -> str:
+def render_rst(changelog: str, context: ReleaseContext) -> str:
     """Render one reStructuredText release section for GitHub.
 
     :param changelog: Tagged reStructuredText changelog.
     :param context: Repository and release links.
-    :param generated_notes: GitHub-generated text for the New Contributors section.
     :returns: The complete GitHub Release body.
     :raises ValueError: Package selection requires a Markdown changelog.
     """
@@ -58,12 +55,10 @@ def render_rst(changelog: str, context: ReleaseContext, generated_notes: str | N
         msg = "changelog contains a private-use character reserved for escaping"
         raise ValueError(msg)
     notes = mdformat.text(_extract_rst_body(changelog, context), options={"wrap": "no"}, extensions={"gfm"})
-    return _finish(notes.strip().replace(TILDE_PLACEHOLDER, "\\~"), context, generated_notes)
+    return _finish(notes.strip().replace(TILDE_PLACEHOLDER, "\\~"), context)
 
 
-def _finish(notes: str, context: ReleaseContext, generated_notes: str | None) -> str:
-    if generated_notes is not None and (contributors := _new_contributors(generated_notes, context)):
-        notes = f"{notes}\n\n{contributors}" if notes else contributors
+def _finish(notes: str, context: ReleaseContext) -> str:
     if context.artifact_url is not None:
         link = f"[{context.artifact_label}]({context.artifact_url})"
         notes = f"{notes}\n\n{link}" if notes else link
@@ -73,49 +68,6 @@ def _finish(notes: str, context: ReleaseContext, generated_notes: str | None) ->
     if notes:
         notes += "\n\n"
     return f"{notes}[Full Changelog](https://github.com/{context.repository}/{comparison})\n"
-
-
-def _new_contributors(generated_notes: str, context: ReleaseContext) -> str:
-    if (
-        section := re.search(
-            r"""
-            ^\#{2,3}\ New\ Contributors\s*\n  # GitHub uses H2 or H3 for this section
-            (?P<entries>.*?)               # Contributor bullets
-            (?=^\#{1,6}\ |\Z)              # Next heading or end of body
-            """,
-            generated_notes,
-            re.MULTILINE | re.DOTALL | re.VERBOSE,
-        )
-    ) is None:
-        return ""
-    entries = [
-        f"- @{match['handle']} made their first contribution in {_contributor_reference(match, context.repository)}"
-        for line in section["entries"].splitlines()
-        if (
-            match := re.fullmatch(
-                r"""
-                [-*]\ @(?P<handle>[A-Za-z0-9-]+)  # Generated contributor bullet
-                \ made\ their\ first\ contribution\ in\s+
-                (?P<reference>
-                    \#                            # Short PR reference
-                    |https://github\.com/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+/pull/  # GitHub PR URL
-                )
-                (?P<number>\d+)                   # First PR number
-                """,
-                line.strip(),
-                re.VERBOSE,
-            )
-        )
-    ]
-    if not entries:
-        return ""
-    anchor = release_anchor(context.tag, "New Contributors")
-    return f'<a name="{anchor}"></a>\n\n### New Contributors\n\n{"\n".join(entries)}'
-
-
-def _contributor_reference(match: re.Match[str], repository: str) -> str:
-    prefix = match["reference"] if match["reference"] != "#" else f"https://github.com/{repository}/pull/"
-    return f"[#{match['number']}]({prefix}{match['number']})"
 
 
 def _extract_rst_body(changelog: str, context: ReleaseContext) -> str:
