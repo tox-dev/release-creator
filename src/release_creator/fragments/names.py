@@ -1,4 +1,4 @@
-"""Recognize Towncrier fragment names."""
+"""Keep unlinked fragments out of release output."""
 
 lazy from collections.abc import Collection
 lazy from pathlib import Path
@@ -42,7 +42,28 @@ def fragment_category(fragment: Path, categories: Collection[str] | None = None)
     return None
 
 
+def pending_changesets(directory: Path) -> list[Path]:
+    """List Knope changesets, excluding its directory guide.
+
+    :param directory: Knope changeset directory.
+    :returns: Pending Markdown changeset paths.
+    """
+    return sorted(path for path in directory.glob("*.md") if path.name != "README.md")
+
+
+def fragment_number(fragment: Path) -> str | None:
+    """Recognize legacy issue-number fragments before finding their pull requests.
+
+    :param fragment: Fragment whose stem may be a PR number.
+    :returns: The filename's issue number, or None for a named fragment.
+    """
+    stem = fragment.name.partition(".")[0]
+    return stem if stem.isascii() and stem.isdecimal() else None
+
+
 __all__ = [
     "fragment_category",
+    "fragment_number",
+    "pending_changesets",
     "pending_fragments",
 ]

@@ -128,6 +128,29 @@ def test_tags_next_rejects_conflicting_input(
     assert message in capsys.readouterr().err
 
 
+def test_tags_previous(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setattr(sys, "argv", ["release-creator", "tags", "1.2.3", "--previous"])
+    monkeypatch.setattr(sys, "stdin", StringIO("1.0.0\n1.2.2\n1.2.3\n"))
+    main()
+    assert capsys.readouterr().out == "1.2.2\n"
+
+
+@pytest.mark.parametrize("tag", [pytest.param("2.30.4", id="bare"), pytest.param("pyproject-fmt/2.30.4", id="full")])
+def test_tags_previous_scopes_package(
+    tag: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["release-creator", "tags", tag, "--previous", "--package", "pyproject-fmt"])
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        StringIO("pyproject-fmt/2.30.2\npyproject-fmt/2.30.3\ntox-toml-fmt/99.0.0\n2.30.4rc1\n"),
+    )
+
+    main()
+
+    assert capsys.readouterr().out == "pyproject-fmt/2.30.3\n"
+
+
 def test_tags_require_newer_scopes_package(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         sys,
@@ -176,6 +199,13 @@ def test_tags_rejects_invalid_package(
         main()
 
     assert message in capsys.readouterr().err
+
+
+def test_tags_previous_missing(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setattr(sys, "argv", ["release-creator", "tags", "1.2.3", "--previous"])
+    monkeypatch.setattr(sys, "stdin", StringIO("1.2.3\n"))
+    main()
+    assert not capsys.readouterr().out
 
 
 def test_tags_require_newer(monkeypatch: pytest.MonkeyPatch) -> None:

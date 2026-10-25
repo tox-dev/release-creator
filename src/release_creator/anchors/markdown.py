@@ -1,0 +1,136 @@
+"""Repair anchors after a changelog generator inserts a release section."""
+
+# ruff: file-ignore[lazy-import-immediately-resolved]  # Shared regexes compile when the module loads.
+lazy import re
+lazy from typing import Final, cast
+
+lazy from markdown_it import MarkdownIt
+lazy from packaging.version import InvalidVersion, Version
+
+lazy from release_creator.anchors.names import release_anchor
+
+_RE_CATEGORY: Final = re.compile(
+    r"""
+    ^\#\#\#\s+                        # Markdown category heading
+    (?P<category>[A-Za-z][A-Za-z ]*)  # Category name
+    $                                 # End of heading
+    """,
+    re.VERBOSE,
+)
+
+
+def add_release_anchors(changelog: str) -> str:
+    """Place stable anchors immediately before release headings.
+
+    :param changelog: Markdown changelog to update.
+    :returns: Markdown with version and category anchors in their current positions.
+    :raises ValueError: The changelog has no release heading.
+    """
+    lines = changelog.splitlines()
+    anchors = _collect_anchors(lines)
+    if not anchors:
+        msg = "no Markdown release headings found"
+        raise ValueError(msg)
+    return _insert_anchors(_strip_anchors(lines, anchors))
+
+
+def _collect_anchors(lines: list[str]) -> set[str]:
+    anchors: set[str] = set()
+    version: str | None = None
+    code_lines = _code_lines(lines)
+    for index, line in enumerate(lines):
+        if index in code_lines:
+            continue
+        if (heading := _version_heading(line)) is not None:
+            version = heading
+            anchors.add(release_anchor(version))
+        elif version is not None and (match := _RE_CATEGORY.fullmatch(line)) is not None:
+            anchors.add(release_anchor(version, match["category"]))
+    return anchors
+
+
+def _strip_anchors(lines: list[str], anchors: set[str]) -> list[str]:
+    cleaned: list[str] = []
+    code_lines = _code_lines(lines)
+    line_index = 0
+    while line_index < len(lines):
+        line = lines[line_index]
+        if (
+            line_index not in code_lines
+            and (
+                match := re.fullmatch(
+                    r"""
+                    ^<a\s+name="(?P<anchor>release-[A-Za-z0-9-]+)"></a>$  # Release anchor
+                    """,
+                    line,
+                    flags=re.VERBOSE,
+                )
+            )
+            is not None
+            and match["anchor"] in anchors
+        ):
+            line_index += 1
+            if line_index < len(lines) and not lines[line_index]:
+                line_index += 1
+        else:
+            cleaned.append(line)
+            line_index += 1
+    return cleaned
+
+
+def _insert_anchors(lines: list[str]) -> str:
+    result: list[str] = []
+    version = None
+    code_lines = _code_lines(lines)
+    for index, line in enumerate(lines):
+        if index in code_lines:
+            result.append(line)
+            continue
+        if (heading := _version_heading(line)) is not None:
+            version = heading
+            anchor = release_anchor(version)
+        elif version is not None and (match := _RE_CATEGORY.fullmatch(line)) is not None:
+            anchor = release_anchor(version, match["category"])
+        else:
+            result.append(line)
+            continue
+        if result and result[-1]:
+            result.append("")
+        result.extend((f'<a name="{anchor}"></a>', "", line))
+    return f"{'\n'.join(result).rstrip('\n')}\n"
+
+
+def _code_lines(lines: list[str]) -> set[int]:
+    return {
+        index
+        for token in MarkdownIt().parse("\n".join(lines))
+        if token.type in {"fence", "code_block"} and token.map is not None
+        for index in range(*token.map)
+    }
+
+
+def _version_heading(line: str) -> str | None:
+    if (
+        match := re.fullmatch(
+            r"""
+            ^\#\#\s+                             # Markdown version heading
+            (?P<version>\S+)                      # Candidate release version
+            (?:\s+\([^)]+\))?                     # Optional release date
+            $                                      # End of heading
+            """,
+            line,
+            flags=re.VERBOSE,
+        )
+    ) is None:
+        return None
+    version = cast("str", match["version"])
+    try:
+        Version(version)
+    except InvalidVersion:
+        return None
+    return version
+
+
+__all__ = [
+    "add_release_anchors",
+]

@@ -1,4 +1,4 @@
-"""Calculate and validate numeric release tags."""
+"""Validate numeric tags and find their predecessors."""
 
 from __future__ import annotations
 
@@ -50,6 +50,25 @@ def _finalizes_prerelease(current: Version, bump: str) -> bool:
     return bump == "patch" or (bump == "minor" and patch == 0) or (bump == "major" and minor == patch == 0)
 
 
+def previous_tag(tag: str, tags: list[str]) -> str | None:
+    """Select the greatest numeric release tag before ``tag``.
+
+    :param tag: Release tag whose predecessor is needed.
+    :param tags: Existing repository tags.
+    :returns: The preceding tag, or ``None`` when this is the first release.
+    """
+    target = parse_tag(tag)
+    candidates: list[tuple[Version, str]] = []
+    for candidate in tags:
+        try:
+            version = parse_tag(candidate)
+        except ValueError:
+            continue
+        if version < target:
+            candidates.append((version, candidate))
+    return max(candidates)[1] if candidates else None
+
+
 def require_newer_tag(tag: str, tags: list[str]) -> None:
     """Require ``tag`` to follow every existing numeric release tag.
 
@@ -93,5 +112,6 @@ def parse_tag(tag: str) -> Version:
 __all__ = [
     "next_tag",
     "parse_tag",
+    "previous_tag",
     "require_newer_tag",
 ]
