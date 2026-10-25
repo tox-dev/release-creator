@@ -169,17 +169,29 @@ def _extract_body(changelog: str, context: ReleaseContext) -> str:
             and (match["version"].lower() == "unreleased" or _is_version(match["version"]))
         )
     ]
-    heading_level = "###" if context.package is not None else "##"
-    if context.package is not None:
-        packages = [index for index, line in enumerate(lines) if line == f"## {context.package}"]
+    start, end = markdown_section(lines, context.tag, context.package)
+    return _convert_markdown_body(lines[start + 1 : end], "#### " if context.package is not None else "### ")
+
+
+def markdown_section(lines: list[str], tag: str, package: str | None) -> tuple[int, int]:
+    """Locate one version section of a Markdown changelog, inside its package section when one is given.
+
+    :param lines: Markdown changelog lines.
+    :param tag: Release tag or version; a package prefix and a leading ``v`` are ignored.
+    :param package: Package whose ``## <package>`` section holds ``### <version>`` headings.
+    :returns: Index of the version heading and the index just past the section's last line.
+    :raises ValueError: The package or version section is missing or ambiguous.
+    """
+    heading_level = "###" if package is not None else "##"
+    start, stop = 0, len(lines)
+    if package is not None:
+        packages = [index for index, line in enumerate(lines) if line == f"## {package}"]
         if len(packages) != 1:
-            msg = f"expected one changelog package section for {context.package}, found {len(packages)}"
+            msg = f"expected one changelog package section for {package}, found {len(packages)}"
             raise ValueError(msg)
-        end = next(
-            (index for index in range(packages[0] + 1, len(lines)) if lines[index].startswith("## ")), len(lines)
-        )
-        lines = lines[packages[0] + 1 : end]
-    version = context.tag.rsplit("/", 1)[-1].removeprefix("v")
+        start = packages[0] + 1
+        stop = next((index for index in range(start, len(lines)) if lines[index].startswith("## ")), len(lines))
+    version = tag.rsplit("/", 1)[-1].removeprefix("v")
     markdown_version = re.compile(
         r"""
         ^(?P<level>\#{2,3})\          # Markdown version heading level
@@ -193,26 +205,29 @@ def _extract_body(changelog: str, context: ReleaseContext) -> str:
     )
     headings = [
         index
-        for index, line in enumerate(lines)
-        if (match := markdown_version.fullmatch(line))
+        for index in range(start, stop)
+        if (match := markdown_version.fullmatch(lines[index]))
         and _is_version(match["tag"])
         and match["level"] == heading_level
         and match["tag"].removeprefix("v") == version
     ]
     if len(headings) != 1:
-        msg = f"expected one changelog section for {context.tag}, found {len(headings)}"
+        msg = f"expected one changelog section for {tag}, found {len(headings)}"
         raise ValueError(msg)
-
-    body: list[str] = []
-    for source_line in lines[headings[0] + 1 :]:
-        if (
-            (match := markdown_version.fullmatch(source_line)) is not None
-            and _is_version(match["tag"])
-            and match["level"] == heading_level
-        ) or _is_version_anchor(source_line, context.package):
-            break
-        body.append(source_line)
-    return _convert_markdown_body(body, "#### " if context.package is not None else "### ")
+    end = next(
+        (
+            index
+            for index in range(headings[0] + 1, stop)
+            if (
+                (match := markdown_version.fullmatch(lines[index])) is not None
+                and _is_version(match["tag"])
+                and match["level"] == heading_level
+            )
+            or _is_version_anchor(lines[index], package)
+        ),
+        stop,
+    )
+    return headings[0], end
 
 
 def _is_version_anchor(line: str, package: str | None) -> bool:
@@ -299,6 +314,7 @@ def _is_version(tag: str) -> bool:
 
 __all__ = [
     "ReleaseContext",
+    "markdown_section",
     "render_markdown",
     "render_rst",
 ]
