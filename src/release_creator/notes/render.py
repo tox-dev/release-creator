@@ -505,9 +505,7 @@ def _extract_rst_body(changelog: str, context: ReleaseContext) -> str:
         (index for index in range(headings[0] + 1, len(lines)) if _rst_version_at(lines, index) is not None),
         len(lines),
     )
-    start = headings[0] + 1
-    if start < end and _is_rst_adornment(lines[start]):
-        start += 1
+    start = headings[0] + 2
     if end < len(lines) and _is_rst_adornment(lines[end - 1]):
         end -= 1
     return render_rst_section("\n".join(lines[start:end]), context.tag, context.repository)
@@ -515,13 +513,10 @@ def _extract_rst_body(changelog: str, context: ReleaseContext) -> str:
 
 def _rst_version_at(lines: list[str], index: int) -> re.Match[str] | None:
     line = lines[index]
+    if not any(map(_is_rst_adornment, lines[index + 1 : index + 2])):
+        return None
     if line[:1].isspace() and not (
-        line.startswith(" ")
-        and not line.startswith("  ")
-        and index > 0
-        and index + 1 < len(lines)
-        and _is_rst_adornment(lines[index - 1])
-        and _is_rst_adornment(lines[index + 1])
+        line.startswith(" ") and not line.startswith("  ") and index > 0 and _is_rst_adornment(lines[index - 1])
     ):
         return None
     match = _RE_RST_VERSION.fullmatch(line.strip())

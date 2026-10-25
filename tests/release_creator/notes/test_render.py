@@ -2227,12 +2227,38 @@ def test_render_rst_omits_empty_prerelease_section() -> None:
     assert result == "[Full Changelog](https://github.com/tox-dev/example/commits/v2.0.0a2)\n"
 
 
-def test_render_rst_accepts_version_without_adornment() -> None:
+def test_render_rst_rejects_version_without_adornment() -> None:
     changelog = "1.2.3 (today)\n\nFixed\n-----\n\n- Correct a bug.\n"
+
+    with pytest.raises(ValueError, match=r"expected one changelog section for 1\.2\.3, found 0"):
+        render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+
+def test_render_rst_ignores_indented_version_heading() -> None:
+    changelog = "1.2.3 (today)\n=============\n\n  1.2.2 (old)\n  ===========\n"
+
+    with pytest.raises(ValueError, match=r"expected one changelog section for 1\.2\.2, found 0"):
+        render_rst(changelog, ReleaseContext(tag="1.2.2", repository="tox-dev/example"))
+
+
+def test_render_rst_ignores_unadorned_version_in_body() -> None:
+    changelog = dedent("""\
+        1.2.3 (today)
+        =============
+
+        Fixed
+        -----
+
+        - Correct a bug.
+
+          1.2.2 (old)
+
+        - Correct another bug.
+        """)
 
     result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
 
-    assert "### Bug fixes\n\n- Correct a bug." in result
+    assert "- Correct another bug." in result
 
 
 def test_render_rst_rejects_package_selection() -> None:
