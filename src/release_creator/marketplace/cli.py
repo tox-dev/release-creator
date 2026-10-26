@@ -29,7 +29,7 @@ def _reconcile(args: argparse.Namespace) -> None:
     else:
         with args.github_output.open("a", encoding="utf-8") as stream:
             stream.write(result)
-        explain(f"GitHub step output: appended {result.strip()} to {args.github_output}")
+        explain(f"GitHub step output: appended {result.strip()} to {args.github_output.as_posix()}")
     sys.stdout.write(result)
 
 

@@ -30,7 +30,7 @@ def test_anchors_explains_on_stderr(
     for _ in range(runs):
         _anchor(monkeypatch, changelog)
 
-    assert capsys.readouterr().err.splitlines()[-1] == f"Anchors: 2 release anchors in {changelog}, {state}"
+    assert capsys.readouterr().err.splitlines()[-1] == f"Anchors: 2 release anchors in {changelog.as_posix()}, {state}"
 
 
 def test_anchors_keeps_stdout_empty(

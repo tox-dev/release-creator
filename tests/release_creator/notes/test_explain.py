@@ -45,8 +45,8 @@ def test_notes_explains_on_stderr(
     _render(monkeypatch, changelog, "--previous", "1.2.2", "--artifact-url", "https://pypi.org/project/example/1.2.3/")
 
     assert capsys.readouterr().err == (
-        f"Changelog format: Markdown ({changelog} does not end in .rst)\n"
-        f"Release notes for 1.2.3: 3 entries in 2 categories from {changelog}\n"
+        f"Changelog format: Markdown ({changelog.as_posix()} does not end in .rst)\n"
+        f"Release notes for 1.2.3: 3 entries in 2 categories from {changelog.as_posix()}\n"
         "Comparison link: compare/1.2.2...1.2.3\n"
         "Artifact link: PyPI release -> https://pypi.org/project/example/1.2.3/\n"
     )
@@ -83,8 +83,8 @@ def test_notes_explains_rst_source(
     _render(monkeypatch, changelog)
 
     assert capsys.readouterr().err.splitlines()[:2] == [
-        f"Changelog format: reStructuredText ({changelog} ends in .rst)",
-        f"Release notes for 1.2.3: 1 entry in 1 category from {changelog}",
+        f"Changelog format: reStructuredText ({changelog.as_posix()} ends in .rst)",
+        f"Release notes for 1.2.3: 1 entry in 1 category from {changelog.as_posix()}",
     ]
 
 
@@ -97,6 +97,6 @@ def test_notes_explains_package_source(
     _render(monkeypatch, changelog, "--package", "example")
 
     assert (
-        f"Release notes for 1.2.3: 1 entry in 1 category from the example section of {changelog}\n"
+        f"Release notes for 1.2.3: 1 entry in 1 category from the example section of {changelog.as_posix()}\n"
         in capsys.readouterr().err
     )

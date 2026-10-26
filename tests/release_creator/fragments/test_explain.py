@@ -179,8 +179,8 @@ def test_fragments_explains_uncommitted_fragment(
     _link(monkeypatch, "--directory", str(fragment.parent))
 
     assert capsys.readouterr().err == (
-        f"Fragment directory: {fragment.parent} (from --directory)\n"
-        f"Linking 1 pending fragment in {fragment.parent} to tox-dev/example pull requests\n"
+        f"Fragment directory: {fragment.parent.as_posix()} (from --directory)\n"
+        f"Linking 1 pending fragment in {fragment.parent.as_posix()} to tox-dev/example pull requests\n"
         "Kept +topic.feature.md: no introducing commit found\n"
     )
 

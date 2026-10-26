@@ -53,7 +53,7 @@ def test_contributors_explains_on_stderr(
     _add(monkeypatch, changelog)
 
     assert capsys.readouterr().err == (
-        f"Checking 2 pull requests from the 1.2.3 section of {changelog}: #42, #43\n"
+        f"Checking 2 pull requests from the 1.2.3 section of {changelog.as_posix()}: #42, #43\n"
         "Returning contributors: @carol (merged a pull request before this release)\n"
         "New Contributors: @alice (#42)\n"
     )
@@ -78,7 +78,7 @@ def test_contributors_explains_section_without_pull_requests(
     _add(monkeypatch, changelog)
 
     assert capsys.readouterr().err == (
-        f"New Contributors: none for 1.2.3 (its section in {changelog} links no pull requests)\n"
+        f"New Contributors: none for 1.2.3 (its section in {changelog.as_posix()} links no pull requests)\n"
     )
 
 

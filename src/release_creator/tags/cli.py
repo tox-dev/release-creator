@@ -39,7 +39,7 @@ def _select(args: argparse.Namespace) -> None:
             directory, source = Path("changelog.d") / args.package, f"default for package {args.package}"
         else:
             directory, source = Path("changelog.d"), "default"
-        explain(f"Fragment directory: {directory} ({source})")
+        explain(f"Fragment directory: {directory.as_posix()} ({source})")
         version = next_tag(
             args.next,
             _scoped_tags(sys.stdin.read().splitlines(), args.package),

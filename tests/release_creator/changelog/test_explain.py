@@ -58,8 +58,8 @@ def test_changelog_explains_on_stderr(
     _render(monkeypatch, changelog, config, fragments, output)
 
     assert capsys.readouterr().err == (
-        f"Draft section: 2 changesets from {fragments} under 2 categories (Fixed, Security)\n"
-        f"Wrote {output} from {changelog}\n"
+        f"Draft section: 2 changesets from {fragments.as_posix()} under 2 categories (Fixed, Security)\n"
+        f"Wrote {output.as_posix()} from {changelog.as_posix()}\n"
     )
 
 
@@ -86,4 +86,6 @@ def test_changelog_explains_missing_changesets(
 
     _render(monkeypatch, changelog, config, empty, tmp_path / "page.md")
 
-    assert capsys.readouterr().err.splitlines()[0] == f"Draft section: none (no pending changesets in {empty})"
+    assert (
+        capsys.readouterr().err.splitlines()[0] == f"Draft section: none (no pending changesets in {empty.as_posix()})"
+    )

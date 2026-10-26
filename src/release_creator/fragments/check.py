@@ -65,10 +65,10 @@ def _validate_changed_fragment(
     path: Path, directory: Path, suffix: str, categories: set[str], ignored: set[str]
 ) -> int:
     if path.parent != directory:
-        explain(f"Skipped {path} (not directly in {directory})")
+        explain(f"Skipped {path.as_posix()} (not directly in {directory.as_posix()})")
         return 0
     if any(fnmatch(path.name.lower(), pattern) for pattern in ignored):
-        explain(f"Skipped {path} (ignored name)")
+        explain(f"Skipped {path.as_posix()} (ignored name)")
         return 0
     if path.suffix != suffix:
         kind = " extension" if set(path.name.split(".")[1:]) & categories else ""
@@ -86,7 +86,7 @@ def _validate_changed_fragment(
     validate_towncrier_fragment(content, path)
     _reject_release_breaking_text(content, suffix, path)
     _reject_hand_written_attribution(content, suffix, path)
-    explain(f"Valid fragment: {path}")
+    explain(f"Valid fragment: {path.as_posix()}")
     return 1
 
 
@@ -122,7 +122,7 @@ def changed_changesets(config: Path, base: str) -> int:
     count = 0
     for path in _git_paths(directory, base):
         if path.parent != directory or path.suffix != ".md" or path.name == "README.md":
-            explain(f"Skipped {path} (not a changeset)")
+            explain(f"Skipped {path.as_posix()} (not a changeset)")
             continue
         content = path.read_text(encoding="utf-8")
         frontmatter, _, _ = changeset_parts(path, content)
@@ -146,17 +146,17 @@ def changed_changesets(config: Path, base: str) -> int:
         body = content.removeprefix(frontmatter)
         _reject_release_breaking_text(body, ".md", path)
         _reject_hand_written_attribution(body, ".md", path)
-        explain(f"Valid changeset: {path}")
+        explain(f"Valid changeset: {path.as_posix()}")
         count += 1
     return count
 
 
 def _towncrier_settings(config: Path, base: str) -> tuple[Path, Path, str, set[str], set[str]]:
     if config.name == "pyproject.toml" and (towncrier_config := config.with_name("towncrier.toml")).is_file():
-        explain(f"Towncrier config: {towncrier_config} (found next to {config})")
+        explain(f"Towncrier config: {towncrier_config.as_posix()} (found next to {config.as_posix()})")
         config = towncrier_config
     else:
-        explain(f"Towncrier config: {config}")
+        explain(f"Towncrier config: {config.as_posix()}")
     towncrier = _towncrier_table(config.read_text(encoding="utf-8"))
     if _towncrier_changed(config, towncrier, base):
         explain(f"Towncrier layout checked: the config differs from origin/{base}")
@@ -218,7 +218,7 @@ def _git_paths(directory: Path, base: str) -> list[Path]:
         msg = result.stderr.strip() or "could not inspect changelog fragments"
         raise ValueError(msg)
     paths = [Path(filename) for filename in result.stdout.strip("\0").split("\0") if filename]
-    explain(f"Added or modified in {directory} since origin/{base}: {counted(len(paths), 'file')}")
+    explain(f"Added or modified in {directory.as_posix()} since origin/{base}: {counted(len(paths), 'file')}")
     return paths
 
 

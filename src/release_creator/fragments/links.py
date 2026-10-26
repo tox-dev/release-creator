@@ -72,9 +72,11 @@ def add_pull_request_links(
     """
     fragments = pending_changesets(directory) if mode == "knope" else pending_fragments(directory)
     if not fragments:
-        explain(f"No pending fragments in {directory}, nothing to link")
+        explain(f"No pending fragments in {directory.as_posix()}, nothing to link")
         return
-    explain(f"Linking {counted(len(fragments), 'pending fragment')} in {directory} to {repository} pull requests")
+    explain(
+        f"Linking {counted(len(fragments), 'pending fragment')} in {directory.as_posix()} to {repository} pull requests"
+    )
     updates: list[tuple[Path, str]] = [
         (fragment, _link_fragment(fragment, repository, pull_requests, commits, mode=mode)) for fragment in fragments
     ]

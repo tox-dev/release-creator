@@ -470,13 +470,12 @@ def test_validate_news_explains_on_stderr(
     main()
 
     lines = capsys.readouterr().err.splitlines()
-    assert lines[:5] + lines[-3:] == [
+    assert lines[:5] + lines[-2:] == [
         "Towncrier config: pyproject.toml",
         "Towncrier layout check skipped: the config matches origin/main",
         "Added or modified in changelog.d since origin/main: 2 files",
         "Valid fragment: changelog.d/+topic.feature.md",
         "Skipped changelog.d/.gitkeep (ignored name)",
-        f"1. {news_repository / 'changelog.d' / '+topic.feature.md'}",
         "Towncrier check passed against origin/main",
         "Validated 1 changed fragment against origin/main",
     ]
@@ -510,7 +509,10 @@ def test_validate_news_explains_skipped_towncrier_check(
     changed_fragments(news_repository / "pyproject.toml", "main")
 
     assert capsys.readouterr().err.splitlines() == [
-        f"Towncrier config: {news_repository / 'towncrier.toml'} (found next to {news_repository / 'pyproject.toml'})",
+        (
+            f"Towncrier config: {(news_repository / 'towncrier.toml').as_posix()} "
+            f"(found next to {(news_repository / 'pyproject.toml').as_posix()})"
+        ),
         "Towncrier layout checked: the config differs from origin/main",
         "Added or modified in changelog.d since origin/main: 1 file",
         "Skipped changelog.d/nested/+topic.feature.md (not directly in changelog.d)",

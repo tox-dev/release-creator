@@ -23,10 +23,10 @@ def add_new_contributors(changelog: Path, version: str, repository: str, package
     pattern = r":(?:pr|pull):`(\d+)`" if rst else rf"https://github\.com/{re.escape(repository)}/pull/(\d+)"
     numbers = list(dict.fromkeys(re.findall(pattern, section)))
     if not numbers:
-        explain(f"New Contributors: none for {version} (its section in {changelog} links no pull requests)")
+        explain(f"New Contributors: none for {version} (its section in {changelog.as_posix()} links no pull requests)")
         return
     explain(
-        f"Checking {counted(len(numbers), 'pull request')} from the {version} section of {changelog}: "
+        f"Checking {counted(len(numbers), 'pull request')} from the {version} section of {changelog.as_posix()}: "
         f"{', '.join(f'#{number}' for number in numbers)}"
     )
     if not (contributions := first_contributions(repository, numbers)):

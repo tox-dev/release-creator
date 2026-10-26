@@ -32,17 +32,17 @@ def _render(args: argparse.Namespace) -> None:
     )
     changelog = args.changelog.read_text(encoding="utf-8")
     if rst := args.changelog.suffix == ".rst":
-        explain(f"Changelog format: reStructuredText ({args.changelog} ends in .rst)")
+        explain(f"Changelog format: reStructuredText ({args.changelog.as_posix()} ends in .rst)")
     else:
-        explain(f"Changelog format: Markdown ({args.changelog} does not end in .rst)")
+        explain(f"Changelog format: Markdown ({args.changelog.as_posix()} does not end in .rst)")
     notes = (render_rst if rst else render_markdown)(changelog, context)
     lines = notes.splitlines()
     entries = counted(sum(line.startswith("- ") for line in lines), "entry", "entries")
     categories = counted(sum(line.startswith("### ") for line in lines), "category", "categories")
     source = (
-        f"the {args.package} section of {args.changelog}"
+        f"the {args.package} section of {args.changelog.as_posix()}"
         if args.package is not None and not rst
-        else str(args.changelog)
+        else args.changelog.as_posix()
     )
     explain(f"Release notes for {args.tag}: {entries} in {categories} from {source}")
     if args.previous is None:

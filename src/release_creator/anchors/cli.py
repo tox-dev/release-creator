@@ -20,7 +20,7 @@ def _add(args: argparse.Namespace) -> None:
     args.changelog.write_text(anchored, encoding="utf-8")
     anchors = counted(sum(line.startswith('<a name="release-') for line in anchored.splitlines()), "release anchor")
     state = "already in place" if anchored == changelog else "updated"
-    explain(f"Anchors: {anchors} in {args.changelog}, {state}")
+    explain(f"Anchors: {anchors} in {args.changelog.as_posix()}, {state}")
 
 
 __all__ = [

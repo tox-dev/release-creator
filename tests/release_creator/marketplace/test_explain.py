@@ -79,9 +79,9 @@ def test_marketplace_explains_on_stderr(
     _reconcile(mocker, monkeypatch, archive, absent=absent)
 
     assert capsys.readouterr().err.splitlines() == [
-        f"Signed ZIP: {archive} has 2 members",
+        f"Signed ZIP: {archive.as_posix()} has 2 members",
         decision,
-        f"GitHub step output: appended {result} to {archive.parent / 'github-output'}",
+        f"GitHub step output: appended {result} to {(archive.parent / 'github-output').as_posix()}",
     ]
 
 

@@ -19,7 +19,7 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
 
 def _render(args: argparse.Namespace) -> None:
     args.output.write_text(render_knope_preview(args.changelog, args.config, args.fragments), encoding="utf-8")
-    explain(f"Wrote {args.output} from {args.changelog}")
+    explain(f"Wrote {args.output.as_posix()} from {args.changelog.as_posix()}")
 
 
 __all__ = [

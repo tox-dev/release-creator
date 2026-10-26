@@ -21,7 +21,7 @@ def render_knope_preview(changelog: Path, config: Path, fragments: Path) -> str:
     history = changelog.read_text(encoding="utf-8")
     changesets = pending_changesets(fragments)
     if not changesets:
-        explain(f"Draft section: none (no pending changesets in {fragments})")
+        explain(f"Draft section: none (no pending changesets in {fragments.as_posix()})")
         return history
     package = load_knope_package(config)
     sections = knope_sections(package)
@@ -48,7 +48,7 @@ def render_knope_preview(changelog: Path, config: Path, fragments: Path) -> str:
                 "",
             ))
     explain(
-        f"Draft section: {counted(len(changesets), 'changeset')} from {fragments} under "
+        f"Draft section: {counted(len(changesets), 'changeset')} from {fragments.as_posix()} under "
         f"{counted(len(shown), 'category', 'categories')} ({', '.join(shown)})"
     )
     intro, marker, released = history.partition('<a name="release-')

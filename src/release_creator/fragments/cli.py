@@ -30,7 +30,7 @@ def _link(args: argparse.Namespace) -> None:
         directory, source = args.directory, "from --directory"
     else:
         directory, source = Path(".changeset" if knope else "changelog.d"), f"default for {args.format}"
-    explain(f"Fragment directory: {directory} ({source})")
+    explain(f"Fragment directory: {directory.as_posix()} ({source})")
     if is_shallow_clone(directory):
         explain("Shallow clone: the history that added the fragments is cut off, so they stay unchanged")
         return

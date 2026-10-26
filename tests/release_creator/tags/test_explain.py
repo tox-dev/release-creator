@@ -31,7 +31,7 @@ def test_tags_next_explains_on_stderr(
     _next(monkeypatch, fragments, "1.17.7\n1.17.8\njunk\n")
 
     assert capsys.readouterr().err == (
-        f"Fragment directory: {fragments} (from --directory)\n"
+        f"Fragment directory: {fragments.as_posix()} (from --directory)\n"
         "Ignored 1 non-release tag (not major.minor.patch): junk\n"
         "Current version: 1.17.8 (newest of 2 release tags)\n"
         "Next version: 1.18.0 (minor bump from 3 pending fragments: 1 bugfix, 2 feature)\n"

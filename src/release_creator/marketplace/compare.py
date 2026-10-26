@@ -32,7 +32,7 @@ def reconcile_marketplace(plugin_id: str, version: str, archive: Path, mode: Lit
     except BadZipFile as error:
         msg = f"{error}: {archive}"
         raise BadZipFile(msg) from error
-    explain(f"Signed ZIP: {archive} has {counted(len(local), 'member')}")
+    explain(f"Signed ZIP: {archive.as_posix()} has {counted(len(local), 'member')}")
     request = Request(
         f"https://plugins.jetbrains.com/plugin/download?{urlencode({'pluginId': plugin_id, 'version': version})}",
         headers={"Accept": "application/zip", "Cache-Control": "no-cache"},
