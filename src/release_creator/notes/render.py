@@ -43,11 +43,8 @@ def render_rst(changelog: str, context: ReleaseContext) -> str:
     :param changelog: Tagged reStructuredText changelog.
     :param context: Repository and release links.
     :returns: The complete GitHub Release body.
-    :raises ValueError: Package selection requires a Markdown changelog.
+    :raises ValueError: The changelog contains the private-use character reserved for escaping.
     """
-    if context.package is not None:
-        msg = "package selection requires a Markdown changelog"
-        raise ValueError(msg)
     if TILDE_PLACEHOLDER in changelog:
         msg = "changelog contains a private-use character reserved for escaping"
         raise ValueError(msg)

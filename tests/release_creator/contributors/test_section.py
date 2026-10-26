@@ -297,21 +297,8 @@ def test_add_new_contributors_finds_notes_headings(
 @pytest.mark.parametrize(
     ("filename", "content", "message"),
     [
-        pytest.param("CHANGELOG.txt", "", "unsupported changelog format", id="format"),
         pytest.param("CHANGELOG.md", "## 1.2.2 (today)\n", "expected one changelog section for 1.2.3", id="md-missing"),
         pytest.param("CHANGELOG.rst", "1.2.2 (x)\n=========\n", "expected one changelog section", id="rst-missing"),
-        pytest.param(
-            "CHANGELOG.md",
-            "## 1.2.3 (today)\n\n### New Contributors\n\n- [@a](https://github.com/a) made their first contribution\n",
-            "New Contributors already present",
-            id="md-present",
-        ),
-        pytest.param(
-            "CHANGELOG.rst",
-            "1.2.3 (today)\n=============\n\n- Add a cache (:pr:`42`).\n",
-            "no category heading",
-            id="rst-no-category",
-        ),
     ],
 )
 def test_add_new_contributors_rejects_input(
@@ -327,11 +314,24 @@ def test_add_new_contributors_rejects_input(
     assert changelog.read_text() == content
 
 
-def test_add_new_contributors_rejects_unmerged_pull(tmp_path: Path, github: GitHub) -> None:
+def test_add_new_contributors_skips_unmerged_pull(tmp_path: Path, github: GitHub) -> None:
     github({"42": ("alice", "User", None), "43": ("carol", "User", "2026-10-21T10:00:00Z")}, set())
+    changelog = _write(tmp_path, "md")
 
-    with pytest.raises(ValueError, match="pull request #42 is not merged"):
-        add_new_contributors(_write(tmp_path, "md"), "1.2.3", "tox-dev/example")
+    add_new_contributors(changelog, "1.2.3", "tox-dev/example")
+
+    assert "- [@carol](https://github.com/carol) made their first contribution" in changelog.read_text()
+    assert "[@alice](https://github.com/alice) made their first contribution" not in changelog.read_text()
+
+
+def test_add_new_contributors_rst_without_category_uses_dash_underline(tmp_path: Path, github: GitHub) -> None:
+    github({"42": ("alice", "User", "2026-10-20T10:00:00Z")}, set())
+    changelog = tmp_path / "CHANGELOG.rst"
+    changelog.write_text("1.2.3 (today)\n=============\n\n- Add a cache (:pr:`42`).\n")
+
+    add_new_contributors(changelog, "1.2.3", "tox-dev/example")
+
+    assert "New Contributors\n----------------\n" in changelog.read_text()
 
 
 def test_add_new_contributors_searches_deleted_author_as_ghost(tmp_path: Path, github: GitHub) -> None:

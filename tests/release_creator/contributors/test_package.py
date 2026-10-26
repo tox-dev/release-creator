@@ -120,23 +120,6 @@ def test_add_new_contributors_package_rejects_missing_section(
     assert changelog.read_text(encoding="utf-8") == _CHANGELOG
 
 
-def test_add_new_contributors_package_rejects_present_subsection(changelog: Path, github: GitHub) -> None:
-    github(_PULLS, set())
-    add_new_contributors(changelog, "1.1.0", "tox-dev/toml-fmt", "pyproject-fmt")
-
-    with pytest.raises(ValueError, match="New Contributors already present"):
-        add_new_contributors(changelog, "1.1.0", "tox-dev/toml-fmt", "pyproject-fmt")
-
-
-def test_add_new_contributors_package_rejects_rst(tmp_path: Path, github: GitHub) -> None:
-    github(_PULLS, set())
-    changelog = tmp_path / "CHANGELOG.rst"
-    changelog.write_text("1.1.0 (today)\n=============\n")
-
-    with pytest.raises(ValueError, match="package selection requires a Markdown changelog"):
-        add_new_contributors(changelog, "1.1.0", "tox-dev/toml-fmt", "pyproject-fmt")
-
-
 def _run_cli(monkeypatch: pytest.MonkeyPatch, changelog: Path, package: str) -> None:
     monkeypatch.setattr(
         sys,

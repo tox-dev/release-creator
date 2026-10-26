@@ -7,9 +7,8 @@ before the documentation builder on every pull request. Readers can then review 
 the tracked changelog and changeset files stay untouched. When the changeset directory is empty, the copy has no
 ``Draft`` section.
 
-The output must be a different path from the tracked changelog. Point the documentation site at that output path. The
-command does not link named fragments to a pull request: that link and the verified human ``by`` credits are added after
-the squash merge, before release preparation.
+Point the documentation site at the output path. The command does not link named fragments to a pull request: that link
+and the verified human ``by`` credits are added after the squash merge, before release preparation.
 
 Shared Markdown changelog from Python
 =====================================

@@ -142,9 +142,8 @@ In reStructuredText, the heading uses the categories' underline character:
     - :user:`alice` made their first contribution in :pr:`42`
 
 Entries follow merge order. With no new contributor, the changelog stays unchanged. ``notes`` renders the subsection
-last in the release body, before the artifact and Full Changelog links. The command fails, without editing the file,
-when the section already has a New Contributors subsection, so run it once per release, or when a linked pull request is
-not merged.
+last in the release body, before the artifact and Full Changelog links. Pull requests that are not merged are skipped.
+Run the command once per release: a second run appends another subsection.
 
 reStructuredText changelogs
 ===========================

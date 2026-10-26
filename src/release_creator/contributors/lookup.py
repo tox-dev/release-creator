@@ -65,8 +65,7 @@ def _merged_pulls(repository: str, numbers: list[str]) -> list[FirstContribution
             msg = f"invalid pull request response for #{number}"
             raise TypeError(msg)
         if (merged_at := pull.get("mergedAt")) is None:
-            msg = f"pull request #{number} is not merged"
-            raise ValueError(msg)
+            continue
         if not isinstance(merged_at, str):
             msg = f"invalid merge time for pull request #{number}"
             raise TypeError(msg)

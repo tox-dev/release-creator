@@ -98,20 +98,6 @@ def test_render_preview_keeps_fenced_package_headings(changelog: Path, tmp_path:
 
 
 @pytest.mark.parametrize(
-    ("package", "source", "error"),
-    [
-        pytest.param("missing", "## pyproject-fmt\n", "found 0", id="missing-package"),
-        pytest.param("pyproject-fmt", "## pyproject-fmt\n\n## pyproject-fmt\n", "found 2", id="duplicate-package"),
-    ],
-)
-def test_render_preview_rejects_package(package: str, source: str, error: str, changelog: Path, tmp_path: Path) -> None:
-    changelog.write_text(source, encoding="utf-8")
-
-    with pytest.raises(ValueError, match=error):
-        render_preview(changelog, package, tmp_path)
-
-
-@pytest.mark.parametrize(
     ("filename", "content", "error"),
     [
         pytest.param("missing.feature.md", "Valid.\n", "invalid changelog fragment", id="unprefixed-name"),
@@ -144,3 +130,19 @@ def test_render_preview_rejects_other_fragment_format(changelog: Path, tmp_path:
 
     with pytest.raises(ValueError, match="invalid changelog fragment"):
         render_preview(changelog, "pyproject-fmt", tmp_path)
+
+
+def test_render_preview_without_package_section_has_no_history(changelog: Path, tmp_path: Path) -> None:
+    changelog.write_text("# Changelog\n\n## pyproject-fmt\n\n### 2.30.3 (2026-10-10)\n", encoding="utf-8")
+
+    assert render_preview(changelog, "missing", tmp_path) == "# Changelog\n\n## missing\n"
+
+
+def test_render_preview_uses_first_package_section(changelog: Path, tmp_path: Path) -> None:
+    changelog.write_text(
+        "## pyproject-fmt\n\n### 2.0.0 (today)\n\n## pyproject-fmt\n\n### 1.0.0 (today)\n", encoding="utf-8"
+    )
+
+    assert (
+        render_preview(changelog, "pyproject-fmt", tmp_path) == "# Changelog\n\n## pyproject-fmt\n\n### 2.0.0 (today)\n"
+    )

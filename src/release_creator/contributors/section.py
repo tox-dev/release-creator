@@ -14,21 +14,11 @@ def add_new_contributors(changelog: Path, version: str, repository: str, package
     :param version: Version whose section receives the subsection.
     :param repository: GitHub owner and repository.
     :param package: Package section of a shared Markdown changelog that holds the version.
-    :raises ValueError: The changelog format, section, or existing subsection is unsupported.
     """
-    if changelog.suffix not in {".md", ".rst"}:
-        msg = f"unsupported changelog format: {changelog}"
-        raise ValueError(msg)
-    if package is not None and changelog.suffix == ".rst":
-        msg = "package selection requires a Markdown changelog"
-        raise ValueError(msg)
     lines = changelog.read_text(encoding="utf-8").splitlines()
     rst = changelog.suffix == ".rst"
     start, end = _rst_section(lines, version) if rst else _markdown_section(lines, version, package)
     section = "\n".join(lines[start:end])
-    if re.search(r"^(?:####? )?New Contributors$", section, re.MULTILINE) is not None:
-        msg = f"New Contributors already present for {version}"
-        raise ValueError(msg)
     pattern = r":(?:pr|pull):`(\d+)`" if rst else rf"https://github\.com/{re.escape(repository)}/pull/(\d+)"
     numbers = list(dict.fromkeys(re.findall(pattern, section)))
     if not numbers or not (contributions := first_contributions(repository, numbers)):
@@ -68,19 +58,14 @@ def _adornment(line: str) -> str | None:
 
 def _rst_category_underline(lines: list[str]) -> str:
     version_underline = _adornment(lines[1])
-    if (
-        underline := next(
-            (
-                character
-                for line in lines[2:]
-                if (character := _adornment(line)) is not None and character != version_underline
-            ),
-            None,
-        )
-    ) is None:
-        msg = "release section has no category heading"
-        raise ValueError(msg)
-    return underline
+    return next(
+        (
+            character
+            for line in lines[2:]
+            if (character := _adornment(line)) is not None and character != version_underline
+        ),
+        "-",
+    )
 
 
 def _markdown_block(contributions: list[FirstContribution], anchor: str, repository: str, heading: str) -> list[str]:

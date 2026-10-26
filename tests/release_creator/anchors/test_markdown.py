@@ -71,9 +71,8 @@ def test_add_release_anchors_ignores_fenced_headings_and_anchors() -> None:
         pytest.param("## Contents\n", id="non-version-heading"),
     ],
 )
-def test_add_release_anchors_requires_release_heading(changelog: str) -> None:
-    with pytest.raises(ValueError, match="no Markdown release headings"):
-        add_release_anchors(changelog)
+def test_add_release_anchors_without_release_heading_keeps_text(changelog: str) -> None:
+    assert add_release_anchors(changelog) == changelog
 
 
 @pytest.mark.parametrize(

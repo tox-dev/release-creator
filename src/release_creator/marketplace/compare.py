@@ -21,7 +21,7 @@ def reconcile_marketplace(plugin_id: str, version: str, archive: Path, mode: Lit
     :param archive: Signed plugin ZIP to compare.
     :param mode: Whether to stage or verify the Marketplace version.
     :returns: Whether a version absent from Marketplace needs publishing.
-    :raises ValueError: The archive has duplicate members or no files, differs from Marketplace, or is absent.
+    :raises ValueError: The archive has duplicate members, differs from Marketplace, or is absent.
     :raises BadZipFile: The local or downloaded archive is not a ZIP file.
     :raises HTTPError: Marketplace returned an HTTP error other than 404.
     """
@@ -77,9 +77,6 @@ def _read_members(source: Path | IO[bytes]) -> dict[str, tuple[str, str, int]]:
             kind = "directory" if member.is_dir() else "file"
             file_type = stat.S_IFMT(mode) if member.create_system == zip_unix_system else 0
             members[member.filename] = digest, f"{member.create_system}:{file_type}:{kind}", permissions
-        if not any(kind.endswith(":file") for _, kind, _ in members.values()):
-            msg = "plugin ZIP contains no files"
-            raise ValueError(msg)
     return members
 
 

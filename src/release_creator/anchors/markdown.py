@@ -24,14 +24,9 @@ def add_release_anchors(changelog: str) -> str:
 
     :param changelog: Markdown changelog to update.
     :returns: Markdown with version and category anchors in their current positions.
-    :raises ValueError: The changelog has no release heading.
     """
     lines = changelog.splitlines()
-    anchors = _collect_anchors(lines)
-    if not anchors:
-        msg = "no Markdown release headings found"
-        raise ValueError(msg)
-    return _insert_anchors(_strip_anchors(lines, anchors))
+    return _insert_anchors(_strip_anchors(lines, _collect_anchors(lines)))
 
 
 def _collect_anchors(lines: list[str]) -> set[str]:

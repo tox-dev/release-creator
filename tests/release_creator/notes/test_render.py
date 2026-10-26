@@ -1341,11 +1341,6 @@ def test_render_rst_ignores_unadorned_version_in_body() -> None:
     assert "- Correct another bug." in result
 
 
-def test_render_rst_rejects_package_selection() -> None:
-    with pytest.raises(ValueError, match="requires a Markdown changelog"):
-        render_rst("", ReleaseContext(tag="1.2.3", repository="tox-dev/example", package="example"))
-
-
 def test_render_rst_converts_explicit_author_link() -> None:
     changelog = dedent("""\
         1.2.3 (2026-10-18)

@@ -17,12 +17,6 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
 
 
 def _render(args: argparse.Namespace) -> None:
-    if args.output.resolve() == args.changelog.resolve():
-        msg = "output must differ from the tracked changelog"
-        raise ValueError(msg)
-    if not args.fragments.is_dir():
-        msg = f"fragment directory does not exist: {args.fragments}"
-        raise ValueError(msg)
     args.output.write_text(render_knope_preview(args.changelog, args.config, args.fragments), encoding="utf-8")
 
 
