@@ -109,19 +109,3 @@ def test_render_knope_preview_accepts_single_named_package(knope_files: tuple[Pa
     (fragments / "fix.md").write_text("---\nfixture: patch\n---\n\n# Fix command output\n", encoding="utf-8")
 
     assert "### Fixed\n\n- Fix command output" in render_knope_preview(changelog, config, fragments)
-
-
-@pytest.mark.parametrize(
-    "section",
-    [
-        pytest.param('{ types = ["security"] }', id="missing-name"),
-        pytest.param('{ name = "Security" }', id="missing-types"),
-    ],
-)
-def test_render_knope_preview_rejects_incomplete_section(knope_files: tuple[Path, Path, Path], section: str) -> None:
-    changelog, config, fragments = knope_files
-    config.write_text(f"[package]\nextra_changelog_sections = [{section}]\n", encoding="utf-8")
-    (fragments / "fix.md").write_text("---\ndefault: patch\n---\n\n# Fix command output\n", encoding="utf-8")
-
-    with pytest.raises(ValueError, match="Knope changelog sections need"):
-        render_knope_preview(changelog, config, fragments)

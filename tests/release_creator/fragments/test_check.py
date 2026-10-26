@@ -287,21 +287,6 @@ def test_changed_fragments_reports_missing_repository_root(news_repository: Path
         changed_fragments(news_repository / "pyproject.toml", "main")
 
 
-@pytest.mark.parametrize(
-    ("base", "filename"),
-    [
-        pytest.param("", "CHANGELOG.md", id="missing-base"),
-        pytest.param("main", "CHANGELOG.txt", id="unsupported-format"),
-    ],
-)
-def test_changed_fragments_rejects_invalid_context(news_repository: Path, base: str, filename: str) -> None:
-    config = news_repository / "pyproject.toml"
-    config.write_text(config.read_text(encoding="utf-8").replace("CHANGELOG.md", filename), encoding="utf-8")
-
-    with pytest.raises(ValueError, match="news validation needs a PR base"):
-        changed_fragments(config, base)
-
-
 def test_changed_fragments_reads_towncrier_tables(news_repository: Path) -> None:
     (news_repository / "towncrier.toml").write_text(
         '[tool.towncrier]\ndirectory = "changelog.d"\nfilename = "CHANGELOG.md"\n'
@@ -325,13 +310,6 @@ def test_changed_fragments_uses_towncrier_defaults(news_repository: Path) -> Non
     _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
 
     assert changed_fragments(news_repository / "pyproject.toml", "main") == 1
-
-
-def test_changed_fragments_rejects_missing_towncrier_table(news_repository: Path) -> None:
-    (news_repository / "pyproject.toml").write_text('[project]\nname = "fixture"\n', encoding="utf-8")
-
-    with pytest.raises(ValueError, match=r"missing \[tool.towncrier\]"):
-        changed_fragments(news_repository / "pyproject.toml", "main")
 
 
 @pytest.mark.parametrize(
@@ -564,11 +542,6 @@ def test_validate_news_cli_reports_knope_count(
     assert capsys.readouterr().out == "1\n"
 
 
-def test_changed_changesets_requires_base(news_repository: Path) -> None:
-    with pytest.raises(ValueError, match="news validation needs a PR base"):
-        changed_changesets(news_repository / "knope.toml", "")
-
-
 def test_changed_changesets_skips_directory_guide(news_repository: Path) -> None:
     (news_repository / ".changeset").mkdir()
     (news_repository / "knope.toml").write_text("[package]\n", encoding="utf-8")
@@ -600,49 +573,3 @@ def test_changed_changesets_accepts_footer_only_section(news_repository: Path) -
     _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
 
     assert changed_changesets(news_repository / "knope.toml", "main") == 1
-
-
-@pytest.mark.parametrize(
-    "section",
-    [
-        pytest.param('{ types = ["security"] }', id="missing-name"),
-        pytest.param('{ name = "Security" }', id="missing-types"),
-        pytest.param('{ name = "Security", footers = "Security-Note" }', id="invalid-footers"),
-    ],
-)
-def test_changed_changesets_rejects_incomplete_section(news_repository: Path, section: str) -> None:
-    (news_repository / "knope.toml").write_text(
-        f"[package]\nextra_changelog_sections = [{section}]\n", encoding="utf-8"
-    )
-
-    with pytest.raises(ValueError, match="Knope changelog sections need"):
-        changed_changesets(news_repository / "knope.toml", "main")
-
-
-@pytest.mark.parametrize(
-    ("configuration", "error", "message"),
-    [
-        pytest.param("[other]\n", ValueError, "expected one", id="no-package"),
-        pytest.param("[packages.first]\n[packages.second]\n", ValueError, "expected one", id="multiple-packages"),
-        pytest.param(
-            '[package]\nextra_changelog_sections = "bad"\n',
-            TypeError,
-            "Knope changelog sections need",
-            id="sections-type",
-        ),
-        pytest.param(
-            '[package]\nextra_changelog_sections = ["bad"]\n',
-            TypeError,
-            "Knope changelog sections need",
-            id="section-type",
-        ),
-    ],
-)
-def test_changed_changesets_rejects_invalid_package_layout(
-    news_repository: Path, configuration: str, error: type[Exception], message: str
-) -> None:
-    config = news_repository / "knope.toml"
-    config.write_text(configuration, encoding="utf-8")
-
-    with pytest.raises(error, match=message):
-        changed_changesets(config, "main")

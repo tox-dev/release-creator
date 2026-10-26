@@ -23,9 +23,6 @@ def changed_fragments(config: Path, base: str) -> int:
     :raises ValueError: The configuration or a changed fragment is invalid.
     """
     config, directory, suffix, categories, ignored = _towncrier_settings(config)
-    if not base or suffix not in {".md", ".rst"}:
-        msg = "news validation needs a PR base and a Markdown or reStructuredText changelog"
-        raise ValueError(msg)
     count = 0
     for path in _git_paths(directory, ["--diff-filter=AM", "--no-renames", f"origin/{base}...HEAD"]):
         count += _validate_changed_fragment(path, directory, suffix, categories, ignored)
@@ -103,9 +100,6 @@ def changed_changesets(config: Path, base: str) -> int:
     :returns: Number of added or modified changesets.
     :raises ValueError: The configuration or a changed changeset is invalid.
     """
-    if not base:
-        msg = "news validation needs a PR base"
-        raise ValueError(msg)
     knope = load_knope_package(config)
     categories = knope_kinds(knope)
     directory = Path(".changeset")
@@ -141,9 +135,6 @@ def _towncrier_settings(config: Path) -> tuple[Path, Path, str, set[str], set[st
     if config.name == "pyproject.toml" and (towncrier_config := config.with_name("towncrier.toml")).is_file():
         config = towncrier_config
     towncrier = tomllib.loads(config.read_text(encoding="utf-8")).get("tool", {}).get("towncrier")
-    if towncrier is None:
-        msg = f"missing [tool.towncrier] in {config}"
-        raise ValueError(msg)
     if towncrier.get("section"):
         msg = f"Towncrier sections are not supported for news validation: {config}"
         raise ValueError(msg)
