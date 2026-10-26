@@ -87,16 +87,16 @@ and otherwise reads ``pyproject.toml``. For Knope, it reads ``knope.toml``. It a
 tables and the optional ``.N`` filename counter. It rejects unknown categories, unsupported names, and empty fragments.
 It also rejects a Towncrier fragment whose visible text already credits an author (``by [@alice](...)``, ``by @alice``,
 or a ``:user:`alice``` role anywhere) or references a pull request (a GitHub pull request URL, ``:pr:`42```, or a bare
-``#42``), using the same detection as the linker. It rejects text the release would mangle: the private-use character
-U+E000, which release notes reserve for escaping; an unclosed Markdown code fence, which would swallow the appended link
-and credit; and reStructuredText that the release notes reader reports a problem for, such as an unknown directive or
-role, an empty ``code-block``, or an ``include``. When the pull request changes the ``[tool.towncrier]`` table or
-``towncrier.toml``, it also rejects Towncrier ``section`` entries and a ``package`` without an explicit ``directory``.
-When fragments changed, it also runs Towncrier's check against the selected base branch to catch conflicts that
-individual filenames cannot reveal. Set ``orphan_prefix = "+"`` and ``issue_pattern = "\\d+"`` in the Towncrier
-configuration. This accepts ``+topic.feature.md`` while preventing ``topic.feature.md`` from becoming an issue
-reference. It does not change files or decide whether a pull request needs news; the caller uses the count with the
-``skip news`` label and the PR author to make that decision.
+``#42``). It rejects text the release would mangle: the private-use character U+E000, which release notes reserve for
+escaping; an unclosed Markdown code fence, which would swallow the appended link and credit; and reStructuredText that
+the release notes reader reports a problem for, such as an unknown directive or role, an empty ``code-block``, or an
+``include``. When the pull request changes the ``[tool.towncrier]`` table or ``towncrier.toml``, it also rejects
+Towncrier ``section`` entries and a ``package`` without an explicit ``directory``. When fragments changed, it also runs
+Towncrier's check against the selected base branch to catch conflicts that individual filenames cannot reveal. Set
+``orphan_prefix = "+"`` and ``issue_pattern = "\\d+"`` in the Towncrier configuration. This accepts
+``+topic.feature.md`` while preventing ``topic.feature.md`` from becoming an issue reference. It does not change files
+or decide whether a pull request needs news; the caller uses the count with the ``skip news`` label and the PR author to
+make that decision.
 
 Write one fragment per user-visible change, including multiple changes in one pull request. Maintenance work without a
 user-visible change needs no fragment. A bot pull request needs a fragment only when that pull request supplies one. The
