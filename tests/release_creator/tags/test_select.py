@@ -3,7 +3,7 @@
 import pytest
 from packaging.version import Version
 
-lazy from release_creator.tags.select import next_tag, parse_tag, previous_tag, require_newer_tag
+lazy from release_creator.tags.select import next_tag, parse_tag, previous_tag
 
 
 @pytest.mark.parametrize(
@@ -37,9 +37,8 @@ def test_next_tag_with_prefix() -> None:
     assert next_tag("auto", ["1.0.3", "v1.1.0", "v1"], ["+one.bugfix.md"], "v") == "v1.1.1"
 
 
-def test_next_tag_requires_fragments() -> None:
-    with pytest.raises(ValueError, match="no changelog fragments"):
-        next_tag("auto", [], [])
+def test_next_tag_without_fragments_bumps_patch() -> None:
+    assert next_tag("auto", ["1.2.3"], []) == "1.2.4"
 
 
 @pytest.mark.parametrize(
@@ -90,27 +89,5 @@ def test_previous_tag_missing() -> None:
     assert previous_tag("1.0.0", ["junk", "1.0.0", "2.0.0"]) is None
 
 
-def test_require_newer_tag_accepts_first_release() -> None:
-    require_newer_tag("1.0.0", ["junk"])
-
-
-def test_require_newer_tag_accepts_new_version() -> None:
-    require_newer_tag("1.10.0", ["junk", "1.9.0"])
-
-
-def test_require_newer_tag_accepts_stable_after_prerelease() -> None:
-    require_newer_tag("1.2.3", ["1.2.3rc1"])
-
-
-def test_require_newer_tag_rejects_unprefixed_duplicate() -> None:
-    with pytest.raises(ValueError, match="must be newer"):
-        require_newer_tag("v1.9.0", ["1.9.0"])
-
-
-@pytest.mark.parametrize(
-    "tag",
-    [pytest.param("1.9.0", id="same"), pytest.param("1.8.9", id="older")],
-)
-def test_require_newer_tag_rejects_existing(tag: str) -> None:
-    with pytest.raises(ValueError, match="must be newer"):
-        require_newer_tag(tag, ["junk", "1.9.0"])
+def test_previous_tag_of_non_release_tag() -> None:
+    assert previous_tag("docs-preview", ["1.0.0"]) is None

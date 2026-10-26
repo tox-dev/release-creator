@@ -5,12 +5,12 @@ lazy import sys
 lazy from pathlib import Path
 
 lazy from release_creator.fragments.names import pending_fragments
-lazy from release_creator.tags.select import next_tag, parse_tag, previous_tag, require_newer_tag
+lazy from release_creator.tags.select import next_tag, previous_tag
 
 
 def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-    """Register numeric tag validation and predecessor selection."""
-    tags = commands.add_parser("tags", help="calculate, validate, or compare numeric release tags")
+    """Register version calculation and predecessor selection."""
+    tags = commands.add_parser("tags", help="calculate or compare numeric release tags")
     tags.add_argument("tag", nargs="?", help="major.minor.patch release tag, optionally prefixed with v")
     choice = tags.add_mutually_exclusive_group()
     choice.add_argument(
@@ -19,7 +19,6 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
         help="calculate a version from pending fragments",
     )
     choice.add_argument("--previous", action="store_true", help="print the preceding tag from standard input")
-    choice.add_argument("--require-newer", action="store_true", help="require a tag newer than those on standard input")
     tags.add_argument("--prefix", choices=("v",), default="", help="prefix the calculated tag with v")
     tags.add_argument("--package", help="scope tags to package/ and print package-prefixed results")
     tags.add_argument(
@@ -46,24 +45,14 @@ def _select(args: argparse.Namespace) -> None:
         msg = "provide a tag or --next"
         raise ValueError(msg)
     tag = _scoped_target(args.tag, args.package)
-    parse_tag(tag)
-    if not args.previous and not args.require_newer:
-        return
-    tags = _scoped_tags(sys.stdin.read().splitlines(), args.package)
-    if args.require_newer:
-        require_newer_tag(tag, tags)
-    elif (previous := previous_tag(tag, tags)) is not None:
+    if (previous := previous_tag(tag, _scoped_tags(sys.stdin.read().splitlines(), args.package))) is not None:
         sys.stdout.write(f"{args.package}/{previous}\n" if args.package else f"{previous}\n")
 
 
 def _scoped_target(tag: str, package: str | None) -> str:
     if package is None or "/" not in tag:
         return tag
-    namespace, _, version = tag.partition("/")
-    if namespace != package:
-        msg = f"tag {tag} does not belong to package {package}"
-        raise ValueError(msg)
-    return version
+    return tag.removeprefix(f"{package}/")
 
 
 def _scoped_tags(tags: list[str], package: str | None) -> list[str]:

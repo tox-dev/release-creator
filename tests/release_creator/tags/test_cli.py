@@ -12,11 +12,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def test_tags_validate(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "argv", ["release-creator", "tags", "1.2.3"])
-    main()
-
-
 @pytest.mark.parametrize("extension", [pytest.param("md", id="markdown"), pytest.param("rst", id="rst")])
 def test_tags_next(
     extension: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
@@ -151,72 +146,8 @@ def test_tags_previous_scopes_package(
     assert capsys.readouterr().out == "pyproject-fmt/2.30.3\n"
 
 
-def test_tags_require_newer_scopes_package(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["release-creator", "tags", "tox-toml-fmt/1.11.2", "--require-newer", "--package", "tox-toml-fmt"],
-    )
-    monkeypatch.setattr(sys, "stdin", StringIO("tox-toml-fmt/1.11.1\npyproject-fmt/99.0.0\n"))
-
-    main()
-
-
-def test_tags_require_newer_rejects_newer_same_package(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["release-creator", "tags", "tox-toml-fmt/1.11.2", "--require-newer", "--package", "tox-toml-fmt"],
-    )
-    monkeypatch.setattr(sys, "stdin", StringIO("tox-toml-fmt/1.11.3\npyproject-fmt/99.0.0\n"))
-
-    with pytest.raises(SystemExit, match="2"):
-        main()
-
-    assert "must be newer" in capsys.readouterr().err
-
-
-@pytest.mark.parametrize(
-    ("arguments", "message"),
-    [
-        pytest.param(
-            ["tags", "other/1.0.0", "--package", "pyproject-fmt"],
-            "does not belong to package",
-            id="target-namespace",
-        ),
-    ],
-)
-def test_tags_rejects_invalid_package(
-    arguments: list[str], message: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(sys, "argv", ["release-creator", *arguments])
-
-    with pytest.raises(SystemExit, match="2"):
-        main()
-
-    assert message in capsys.readouterr().err
-
-
 def test_tags_previous_missing(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     monkeypatch.setattr(sys, "argv", ["release-creator", "tags", "1.2.3", "--previous"])
     monkeypatch.setattr(sys, "stdin", StringIO("1.2.3\n"))
     main()
     assert not capsys.readouterr().out
-
-
-def test_tags_require_newer(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "argv", ["release-creator", "tags", "1.2.3", "--require-newer"])
-    monkeypatch.setattr(sys, "stdin", StringIO("1.2.2\n"))
-    main()
-
-
-def test_tags_require_newer_rejects_existing(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(sys, "argv", ["release-creator", "tags", "1.2.3", "--require-newer"])
-    monkeypatch.setattr(sys, "stdin", StringIO("1.2.3\n"))
-    with pytest.raises(SystemExit, match="2"):
-        main()
-    assert "must be newer" in capsys.readouterr().err

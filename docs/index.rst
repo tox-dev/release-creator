@@ -2,7 +2,7 @@
  release-creator
 #################
 
-``release-creator`` links changelog fragments to squash pull requests, validates release tags, renders GitHub Release
+``release-creator`` links changelog fragments to squash pull requests, calculates release tags, renders GitHub Release
 notes, and previews draft news in documentation. Install a published version with ``uvx --from release-creator
 release-creator``.
 
@@ -19,7 +19,7 @@ Run each command at the stage it serves:
       - Adds the pull request link to each named or numbered fragment
     - - :doc:`tags <how-to/select-release-tag>`
       - Before preparing a release, then when making the comparison link
-      - Checks the version or prints its predecessor
+      - Calculates the version or prints its predecessor
     - - :doc:`notes <how-to/render-notes>`
       - After the changelog and tag exist
       - Prints the GitHub Release body from the tagged changelog

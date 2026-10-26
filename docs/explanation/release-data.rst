@@ -3,7 +3,7 @@
 ###############################
 
 Each release command uses a different source. ``fragments`` gets pull request numbers from squash commits. Towncrier
-builds the changelog from reviewed fragments. ``tags`` checks the version against existing tags. ``notes`` reads the
+builds the changelog from reviewed fragments. ``tags`` calculates the version from existing tags. ``notes`` reads the
 tagged changelog to make the GitHub description.
 
 .. mermaid::

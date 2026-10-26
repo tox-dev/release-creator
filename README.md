@@ -55,12 +55,10 @@ credited only when they are the only author. The checkout needs complete fragmen
 the repository. Merge commits and rebase merges cannot identify a fragment's PR through its introducing commit; use
 squash merges.
 
-The `tags` command calculates a version from pending fragments, validates numeric tags, and selects the preceding tag
-for GitHub comparisons:
+The `tags` command calculates a version from pending fragments and selects the preceding tag for GitHub comparisons:
 
 ```bash
 git tag --list | uvx --from 'release-creator' release-creator tags --next auto
-git tag --list | uvx --from 'release-creator' release-creator tags 1.2.3 --require-newer
 git tag --list | uvx --from 'release-creator' release-creator tags 1.2.3 --previous
 ```
 

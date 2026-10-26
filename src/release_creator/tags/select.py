@@ -1,4 +1,4 @@
-"""Validate numeric tags and find their predecessors."""
+"""Calculate numeric tags and find their predecessors."""
 
 from __future__ import annotations
 
@@ -17,11 +17,7 @@ def next_tag(bump: str, tags: list[str], fragments: list[str], prefix: str = "")
     :param fragments: Pending fragment filenames.
     :param prefix: Optional prefix for the new tag.
     :returns: The next major.minor.patch version, with the requested prefix.
-    :raises ValueError: No fragments exist.
     """
-    if not fragments:
-        msg = "no changelog fragments to release"
-        raise ValueError(msg)
     versions: list[Version] = []
     for tag in tags:
         try:
@@ -55,9 +51,12 @@ def previous_tag(tag: str, tags: list[str]) -> str | None:
 
     :param tag: Release tag whose predecessor is needed.
     :param tags: Existing repository tags.
-    :returns: The preceding tag, or ``None`` when this is the first release.
+    :returns: The preceding tag, or ``None`` when this is the first release or ``tag`` is not a release version.
     """
-    target = parse_tag(tag)
+    try:
+        target = parse_tag(tag)
+    except ValueError:
+        return None
     candidates: list[tuple[Version, str]] = []
     for candidate in tags:
         try:
@@ -67,25 +66,6 @@ def previous_tag(tag: str, tags: list[str]) -> str | None:
         if version < target:
             candidates.append((version, candidate))
     return max(candidates)[1] if candidates else None
-
-
-def require_newer_tag(tag: str, tags: list[str]) -> None:
-    """Require ``tag`` to follow every existing numeric release tag.
-
-    :param tag: Candidate release tag.
-    :param tags: Existing repository tags.
-    :raises ValueError: A matching or newer release tag already exists.
-    """
-    target = parse_tag(tag)
-    versions: list[Version] = []
-    for candidate in tags:
-        try:
-            versions.append(parse_tag(candidate))
-        except ValueError:
-            continue
-    if versions and target <= max(versions):
-        msg = f"{tag} must be newer than the latest release tag"
-        raise ValueError(msg)
 
 
 def parse_tag(tag: str) -> Version:
@@ -113,5 +93,4 @@ __all__ = [
     "next_tag",
     "parse_tag",
     "previous_tag",
-    "require_newer_tag",
 ]
