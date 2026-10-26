@@ -56,12 +56,48 @@ def test_fragment_pull_requests_sends_valid_graphql(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.parametrize(
+    "nodes",
+    [
+        pytest.param([], id="no-pull"),
+        pytest.param([_pull("b" * 40)], id="other-commit"),
+        pytest.param([{}], id="missing-merge"),
+    ],
+)
+def test_fragment_pull_requests_leaves_out_commit_without_squash_pull(
+    monkeypatch: pytest.MonkeyPatch, nodes: list[dict[str, object]]
+) -> None:
+    monkeypatch.setattr(
+        process.subprocess,
+        "run",
+        create_autospec(
+            process.subprocess.run,
+            return_value=subprocess.CompletedProcess([], 0, json.dumps(_graph_response(nodes)), ""),
+        ),
+    )
+
+    assert pull_requests.fragment_pull_requests("tox-dev/example", {"+news.feature.md": "a" * 40}) == {}
+
+
+def test_fragment_pull_requests_uses_first_squash_pull(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        process.subprocess,
+        "run",
+        create_autospec(
+            process.subprocess.run,
+            return_value=subprocess.CompletedProcess(
+                [], 0, json.dumps(_graph_response([_pull("a" * 40, number=3), _pull("a" * 40, number=4)])), ""
+            ),
+        ),
+    )
+
+    result = pull_requests.fragment_pull_requests("tox-dev/example", {"+news.feature.md": "a" * 40})
+
+    assert result["+news.feature.md"].number == "3"
+
+
+@pytest.mark.parametrize(
     ("nodes", "error", "message"),
     [
-        pytest.param([], ValueError, "expected one squash-merged pull request", id="no-pull"),
-        pytest.param([_pull("b" * 40)], ValueError, "expected one squash-merged pull request", id="other-commit"),
-        pytest.param([_pull("a" * 40)] * 2, ValueError, "expected one squash-merged pull request", id="two-pulls"),
-        pytest.param([{}], ValueError, "expected one squash-merged pull request", id="missing-merge"),
         pytest.param([_pull("a" * 40, account_type="Organization")], ValueError, "invalid GitHub author", id="type"),
         pytest.param([_pull("a" * 40, number=0)], ValueError, "invalid pull request number", id="number"),
         pytest.param([_pull("a" * 40, number=True)], TypeError, "invalid pull request response", id="boolean"),
@@ -446,3 +482,29 @@ def test_fragment_pull_requests_rejects_bad_merge_commit_authors(
 
     with pytest.raises(error, match=message):
         pull_requests.fragment_pull_requests("tox-dev/example", {"+news.feature.md": "a" * 40})
+
+
+@pytest.mark.parametrize(
+    ("name", "email", "expected"),
+    [
+        pytest.param("Alice Doe", "alice@example.com", (PullRequestCredit(name="Alice Doe", linked=False),), id="name"),
+        pytest.param(
+            "Alice Doe",
+            "12345+alice@users.noreply.github.com",
+            (PullRequestCredit(name="alice", linked=True),),
+            id="login",
+        ),
+        pytest.param(
+            "dependabot[bot]",
+            "49699333+dependabot[bot]@users.noreply.github.com",
+            (PullRequestCredit(name="dependabot", linked=True),),
+            id="bot",
+        ),
+        pytest.param("Claude", "noreply@anthropic.com", (), id="ai-email"),
+        pytest.param("Copilot", "198982749+Copilot@users.noreply.github.com", (), id="ai-email-login"),
+        pytest.param("Claude", "12345+claude@users.noreply.github.com", (), id="ai-login"),
+        pytest.param(" ", "anonymous@example.com", (), id="unnamed"),
+    ],
+)
+def test_commit_author_credits(name: str, email: str, expected: tuple[PullRequestCredit, ...]) -> None:
+    assert pull_requests.commit_author_credits(name, email) == expected

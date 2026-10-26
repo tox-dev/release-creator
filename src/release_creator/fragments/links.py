@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 lazy import re
-lazy from collections.abc import Iterator
+lazy from collections.abc import Iterator, Mapping
 lazy from dataclasses import dataclass
 lazy from itertools import accumulate
 lazy from pathlib import Path
@@ -14,6 +14,7 @@ lazy from typing import Final, Literal
 lazy from markdown_it import MarkdownIt
 lazy from markdown_it.token import Token
 
+lazy from release_creator.fragments.git import FragmentCommit
 lazy from release_creator.fragments.knope import changeset_parts
 lazy from release_creator.fragments.names import fragment_number, pending_changesets, pending_fragments
 lazy from release_creator.fragments.pull_requests import PullRequest, PullRequestCredit
@@ -60,15 +61,20 @@ type _LinkMode = Literal["towncrier", "knope"]
 def add_pull_request_links(
     directory: Path,
     repository: str,
-    pull_requests: dict[str, PullRequest],
+    pull_requests: Mapping[str, PullRequest],
     *,
+    commits: Mapping[str, FragmentCommit],
     mode: _LinkMode = "towncrier",
 ) -> None:
-    """Keep fragment links and credits tied to their introducing pull requests."""
+    """Keep fragment links and credits tied to their introducing pull requests.
+
+    A fragment without a pull request is credited to its introducing commit's author, and one without either, or whose
+    author gets no credit, is left unchanged.
+    """
     updates: list[tuple[Path, str]] = [
         (
             fragment,
-            _link_fragment(fragment, repository, pull_requests, mode=mode),
+            _link_fragment(fragment, repository, pull_requests, commits, mode=mode),
         )
         for fragment in (pending_changesets(directory) if mode == "knope" else pending_fragments(directory))
     ]
@@ -79,21 +85,25 @@ def add_pull_request_links(
 def _link_fragment(
     fragment: Path,
     repository: str,
-    pull_requests: dict[str, PullRequest],
+    pull_requests: Mapping[str, PullRequest],
+    commits: Mapping[str, FragmentCommit],
     *,
     mode: _LinkMode,
 ) -> str:
-    if (pull_request := pull_requests.get(fragment.name)) is None:
-        msg = f"no pull request data for {fragment}"
-        raise ValueError(msg)
     content = fragment.read_text(encoding="utf-8")
+    if (pull_request := pull_requests.get(fragment.name)) is not None:
+        number, credited = pull_request.number, pull_request.credits
+    elif (commit := commits.get(fragment.name)) is not None and commit.credits:
+        number, credited = None, commit.credits
+    else:
+        return content
     if mode == "towncrier":
         validate_towncrier_fragment(content, fragment)
     target = _LinkTarget(
         fragment=fragment,
         repository=repository,
-        number=pull_request.number,
-        credits=pull_request.credits,
+        number=number,
+        credits=credited,
         knope=mode == "knope",
     )
     if mode == "knope":
@@ -106,7 +116,7 @@ def _link_fragment(
 class _LinkTarget:
     fragment: Path
     repository: str
-    number: str
+    number: str | None
     credits: tuple[PullRequestCredit, ...]
     knope: bool
 
@@ -116,14 +126,16 @@ def _link_text(
     target: _LinkTarget,
 ) -> str:
     fragment = target.fragment
-    linked = _has_pull_request_link(content, target.repository, target.number, fragment.suffix)
+    if (number := target.number) is None:
+        return _append_pull_request_link(content, target, _credit_list(target.credits, fragment.suffix))
+    linked = _has_pull_request_link(content, target.repository, number, fragment.suffix)
     if not target.knope and fragment_number(fragment) is None and linked:
         msg = f"pull request already linked in {fragment}"
         raise ValueError(msg)
     credit_prose = _credit_prose(content, fragment.suffix)
     match = _RE_AUTHOR_MARKER.search(credit_prose)
     if match is not None or _RE_USER_ROLE.search(credit_prose) is not None:
-        return _keep_explicit_credit(content, target, match, linked=linked)
+        return _keep_explicit_credit(content, target, number, match, linked=linked)
     if not target.credits:
         return content if linked else _append_pull_request_link(content, target, None)
     credit = _credit_list(target.credits, fragment.suffix)
@@ -148,7 +160,9 @@ def _escape_name(name: str) -> str:
     return "".join(f"\\{character}" if character in punctuation else character for character in name)
 
 
-def _keep_explicit_credit(content: str, target: _LinkTarget, match: re.Match[str] | None, *, linked: bool) -> str:
+def _keep_explicit_credit(
+    content: str, target: _LinkTarget, number: str, match: re.Match[str] | None, *, linked: bool
+) -> str:
     fragment = target.fragment
     if linked:
         return content
@@ -157,7 +171,7 @@ def _keep_explicit_credit(content: str, target: _LinkTarget, match: re.Match[str
     if fragment.suffix == ".md":
         return _append_pull_request_link(content, target, None, anchor=_markdown_credit_anchor(content))
     return (
-        f"{content[: match.start()]} {_pull_request_link(target.repository, target.number, fragment.suffix)} "
+        f"{content[: match.start()]} {_pull_request_link(target.repository, number, fragment.suffix)} "
         f"by {content[match.end() :]}"
     )
 
@@ -353,7 +367,10 @@ def _markdown_credit_children(children: list[Token]) -> str:
 def _append_pull_request_link(
     content: str, target: _LinkTarget, credit: str | None, *, anchor: int | None = None
 ) -> str:
-    link = _pull_request_link(target.repository, target.number, target.fragment.suffix)
+    link = (
+        None if target.number is None else _pull_request_link(target.repository, target.number, target.fragment.suffix)
+    )
+    addition = " ".join(part for part in (link, None if credit is None else f"by {credit}") if part is not None)
     if anchor is None:
         before, after = _split_trailing_code(content, target.fragment.suffix)
     else:
@@ -361,12 +378,8 @@ def _append_pull_request_link(
         after = content[len(before) :]
     if not before:
         opening, _, body = after.partition("\n")
-        suffix = f"{link} by {credit}" if credit is not None else link
-        return f"{opening[:-2]} {suffix}::\n{body.rstrip()}"
-    content = f"{before.removesuffix('.')} {link}"
-    if credit is not None:
-        content += f" by {credit}"
-    return f"{content}{'' if target.knope else '.'}{after}"
+        return f"{opening[:-2]} {addition}::\n{body.rstrip()}"
+    return f"{before.removesuffix('.')} {addition}{'' if target.knope else '.'}{after}"
 
 
 def _split_trailing_code(content: str, suffix: str) -> tuple[str, str]:

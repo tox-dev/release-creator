@@ -8,6 +8,7 @@ import pytest
 from docutils.core import publish_doctree
 from markdown_it import MarkdownIt
 
+from release_creator.fragments.git import FragmentCommit
 from release_creator.fragments.links import add_pull_request_links
 from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor, PullRequestCredit
 from release_creator.notes.render import ReleaseContext, render_markdown, render_rst
@@ -27,14 +28,10 @@ def _link(
 ) -> None:
     pull_requests: dict[str, PullRequest] = {}
     for name, subject in subjects.items():
-        if "#" not in subject:
-            continue
         number = subject.rpartition("#")[2].removesuffix(")")
-        if authors is not None and number not in authors:
-            continue
         author = authors[number] if authors is not None else PullRequestAuthor(handle="alice", is_bot=False)
         pull_requests[name] = PullRequest(number=number, credits=(PullRequestCredit(name=author.handle, linked=True),))
-    add_pull_request_links(directory, repository, pull_requests, mode=mode)
+    add_pull_request_links(directory, repository, pull_requests, commits={}, mode=mode)
 
 
 @pytest.mark.parametrize(
@@ -1193,16 +1190,6 @@ def test_add_pull_request_links_matches_credit_case(tmp_path: Path) -> None:
         pytest.param(
             (
                 "tox-dev/example",
-                "Add news",
-                "Fix a bug.\n",
-                {"42": PullRequestAuthor(handle="alice", is_bot=False)},
-                "no pull request data",
-            ),
-            id="commit",
-        ),
-        pytest.param(
-            (
-                "tox-dev/example",
                 "Add news (#42)",
                 "Fix a bug ([#42](https://github.com/tox-dev/example/pull/42)).\n",
                 {"42": PullRequestAuthor(handle="alice", is_bot=False)},
@@ -1220,9 +1207,6 @@ def test_add_pull_request_links_matches_credit_case(tmp_path: Path) -> None:
             ),
             id="existing-rst-link",
         ),
-        pytest.param(
-            ("tox-dev/example", "Add news (#42)", "Fix a bug.\n", {}, "no pull request data"), id="missing-author"
-        ),
     ],
 )
 def test_add_pull_request_links_rejects_invalid_input(
@@ -1234,6 +1218,68 @@ def test_add_pull_request_links_rejects_invalid_input(
 
     with pytest.raises(ValueError, match=message):
         _link(tmp_path, repository, {fragment.name: subject}, authors)
+
+
+@pytest.mark.parametrize(
+    "commits",
+    [
+        pytest.param({}, id="no-commit"),
+        pytest.param({"+fix.bugfix.md": FragmentCommit(sha="a" * 40, credits=())}, id="uncredited-author"),
+    ],
+)
+def test_add_pull_request_links_leaves_fragment_without_pull_request_or_credit(
+    tmp_path: Path, commits: dict[str, FragmentCommit]
+) -> None:
+    fragment = tmp_path / "+fix.bugfix.md"
+    fragment.write_text("Fix a bug.\n")
+
+    add_pull_request_links(tmp_path, "tox-dev/example", {}, commits=commits)
+
+    assert fragment.read_text() == "Fix a bug.\n"
+
+
+@pytest.mark.parametrize(
+    ("case", "expected"),
+    [
+        pytest.param(
+            ("+fix.bugfix.md", "Fix a bug.\n", PullRequestCredit(name="alice", linked=True), "towncrier"),
+            "Fix a bug by [@alice](https://github.com/alice).\n",
+            id="markdown-login",
+        ),
+        pytest.param(
+            ("+fix.bugfix.rst", "Fix a bug.\n", PullRequestCredit(name="alice", linked=True), "towncrier"),
+            "Fix a bug by :user:`alice`.\n",
+            id="rst-login",
+        ),
+        pytest.param(
+            ("+fix.bugfix.md", "Fix a bug.\n", PullRequestCredit(name="Alice Doe", linked=False), "towncrier"),
+            "Fix a bug by Alice Doe.\n",
+            id="markdown-name",
+        ),
+        pytest.param(
+            (
+                "fix.md",
+                "---\ndefault: patch\n---\n\n# Fix a bug\n",
+                PullRequestCredit(name="alice", linked=True),
+                "knope",
+            ),
+            "---\ndefault: patch\n---\n\n# Fix a bug by [@alice](https://github.com/alice)\n",
+            id="knope-login",
+        ),
+    ],
+)
+def test_add_pull_request_links_credits_commit_author_without_pull_request(
+    tmp_path: Path, case: tuple[str, str, PullRequestCredit, Literal["towncrier", "knope"]], expected: str
+) -> None:
+    filename, content, author, mode = case
+    fragment = tmp_path / filename
+    fragment.write_text(content)
+
+    add_pull_request_links(
+        tmp_path, "tox-dev/example", {}, commits={filename: FragmentCommit(sha="a" * 40, credits=(author,))}, mode=mode
+    )
+
+    assert fragment.read_text() == expected
 
 
 @pytest.mark.parametrize(
@@ -1671,7 +1717,9 @@ def test_add_pull_request_links_formats_credits(
     fragment = tmp_path / filename
     fragment.write_text(content)
 
-    add_pull_request_links(tmp_path, "tox-dev/example", {filename: PullRequest(number="42", credits=credited)})
+    add_pull_request_links(
+        tmp_path, "tox-dev/example", {filename: PullRequest(number="42", credits=credited)}, commits={}
+    )
 
     assert fragment.read_text() == expected
 
@@ -1700,6 +1748,7 @@ def test_add_pull_request_links_without_credits_adds_only_link(
         tmp_path,
         "tox-dev/example",
         {filename: PullRequest(number="42", credits=())},
+        commits={},
     )
 
     assert fragment.read_text() == expected
@@ -1713,6 +1762,7 @@ def test_add_pull_request_links_knope_formats_credits(tmp_path: Path) -> None:
         tmp_path,
         "tox-dev/example",
         {fragment.name: PullRequest(number="42", credits=(_ALICE, _BOB, _CAROL))},
+        commits={},
         mode="knope",
     )
 
@@ -1730,7 +1780,9 @@ def _linked_unlinked_name(tmp_path: Path, extension: str) -> str:
     fragment.write_text("Add a feature.\n")
     credit = PullRequestCredit(name=_MARKUP_NAME, linked=False)
 
-    add_pull_request_links(tmp_path, "tox-dev/example", {fragment.name: PullRequest(number="42", credits=(credit,))})
+    add_pull_request_links(
+        tmp_path, "tox-dev/example", {fragment.name: PullRequest(number="42", credits=(credit,))}, commits={}
+    )
 
     return fragment.read_text()
 
@@ -1779,7 +1831,7 @@ def test_add_pull_request_links_rerun_keeps_unlinked_credit(
     pull = PullRequest(number="42", credits=(PullRequestCredit(name=name, linked=False),))
 
     for _ in range(2):
-        add_pull_request_links(tmp_path, "tox-dev/example", {filename: pull})
+        add_pull_request_links(tmp_path, "tox-dev/example", {filename: pull}, commits={})
 
     assert fragment.read_text() == expected
 
@@ -1790,7 +1842,7 @@ def test_add_pull_request_links_knope_rerun_keeps_unlinked_credit(tmp_path: Path
     pull = PullRequest(number="42", credits=(PullRequestCredit(name="Carol", linked=False),))
 
     for _ in range(2):
-        add_pull_request_links(tmp_path, "tox-dev/example", {fragment.name: pull}, mode="knope")
+        add_pull_request_links(tmp_path, "tox-dev/example", {fragment.name: pull}, commits={}, mode="knope")
 
     assert fragment.read_text() == (
         "---\ndefault: security\n---\n\n# Remove a root ([#42](https://github.com/tox-dev/example/pull/42)) by Carol\n"

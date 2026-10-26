@@ -110,6 +110,24 @@ def _mock_github_pull(mocker: MockerFixture, commit: str) -> MagicMock:
     return cast("MagicMock", mocker.patch("release_creator.process.subprocess.run", autospec=True, side_effect=execute))
 
 
+def test_fragments_cli_leaves_fragments_in_shallow_clone(
+    git_repository: tuple[Path, str], tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repository, git = git_repository
+    (repository / "changelog.d").mkdir()
+    (repository / "changelog.d" / "+topic.feature.md").write_text("Add a feature.\n")
+    assert run_text([git, "add", "changelog.d"]).returncode == 0
+    assert run_text([git, "commit", "-qm", "Add a feature (#3)"]).returncode == 0
+    checkout = tmp_path_factory.mktemp("shallow")
+    assert run_text([git, "clone", "-q", "--depth", "1", f"file://{repository}", str(checkout)]).returncode == 0
+    monkeypatch.chdir(checkout)
+    monkeypatch.setattr(sys, "argv", ["release-creator", "fragments", "--repository", "tox-dev/example"])
+
+    main()
+
+    assert (checkout / "changelog.d" / "+topic.feature.md").read_text() == "Add a feature.\n"
+
+
 def test_fragments_cli_rejects_unsupported_name(
     git_repository: tuple[Path, str], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

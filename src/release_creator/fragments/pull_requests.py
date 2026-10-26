@@ -20,6 +20,14 @@ _RE_AI_ASSISTANT_EMAIL: Final = re.compile(
     """,
     re.VERBOSE | re.IGNORECASE,
 )
+_RE_GITHUB_NOREPLY: Final = re.compile(
+    r"""
+    ^(?:\d+\+)?                     # Optional numeric account ID
+    (?P<login>[^@]+)                # GitHub login
+    @users\.noreply\.github\.com$   # GitHub's private commit email domain
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
 AI_ASSISTANT_LOGINS: Final = frozenset(
     login.casefold()
     for login in (
@@ -36,17 +44,18 @@ def fragment_pull_requests(repository: str, commits: dict[str, str]) -> dict[str
 
     :param repository: GitHub owner and repository.
     :param commits: Fragment names mapped to introducing commit hashes.
-    :returns: Fragment names mapped to the merged pull request and its author.
+    :returns: Fragment names mapped to the merged pull request and its author; a fragment whose commit has no
+        squash-merged pull request is left out.
     """
     by_commit = _pulls(repository, list(dict.fromkeys(commits.values())))
-    return {name: by_commit[sha] for name, sha in commits.items()}
+    return {name: pull for name, sha in commits.items() if (pull := by_commit[sha]) is not None}
 
 
-def _pulls(repository: str, shas: list[str]) -> dict[str, PullRequest]:
+def _pulls(repository: str, shas: list[str]) -> dict[str, PullRequest | None]:
     if not shas:
         return {}
     owner, name = repository.split("/", 1)
-    pulls: dict[str, PullRequest] = {}
+    pulls: dict[str, PullRequest | None] = {}
     aliases = [
         (
             f"c{index}",
@@ -80,7 +89,7 @@ def _pulls(repository: str, shas: list[str]) -> dict[str, PullRequest]:
     return pulls
 
 
-def _read_alias(response: object, alias: str, identifier: str) -> PullRequest:
+def _read_alias(response: object, alias: str, identifier: str) -> PullRequest | None:
     if not isinstance(response, dict):
         msg = f"invalid pull request response for {identifier}"
         raise TypeError(msg)
@@ -95,10 +104,7 @@ def _read_alias(response: object, alias: str, identifier: str) -> PullRequest:
         msg = f"invalid pull request response for commit {identifier}"
         raise TypeError(msg)
     merged = [item for item in nodes if _is_squash_pull(item, identifier)]
-    if len(merged) != 1:
-        msg = f"expected one squash-merged pull request for commit {identifier}, found {len(merged)}"
-        raise ValueError(msg)
-    return _pull_request(merged[0], f"commit {identifier}")
+    return _pull_request(merged[0], f"commit {identifier}") if merged else None
 
 
 def _is_squash_pull(pull: object, sha: str) -> bool:
@@ -166,6 +172,22 @@ def _credits(author: PullRequestAuthor, commit: object, number: int) -> tuple[Pu
     return humans or tuple(credit for credit, _ in entries.values())
 
 
+def commit_author_credits(name: str, email: str) -> tuple[PullRequestCredit, ...]:
+    """Credit a Git commit author by the rules pull request credits use.
+
+    :param name: Commit author name, after mailmap.
+    :param email: Commit author email, after mailmap; a GitHub noreply address names the GitHub login.
+    :returns: The author's credit, or nothing for an AI assistant or an unnamed author.
+    """
+    if _RE_AI_ASSISTANT_EMAIL.search(email):
+        return ()
+    if (match := _RE_GITHUB_NOREPLY.match(email)) is None:
+        return (PullRequestCredit(name=name, linked=False),) if name.strip() else ()
+    login = match["login"]
+    handle = login.removesuffix("[bot]")
+    return () if handle.casefold() in AI_ASSISTANT_LOGINS else (PullRequestCredit(name=handle, linked=True),)
+
+
 @dataclass(frozen=True, kw_only=True)
 class PullRequestAuthor:
     """GitHub account attached to a merged pull request."""
@@ -195,6 +217,7 @@ __all__ = [
     "PullRequest",
     "PullRequestAuthor",
     "PullRequestCredit",
+    "commit_author_credits",
     "fragment_pull_requests",
     "github_account",
 ]

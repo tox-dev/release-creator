@@ -51,9 +51,9 @@ Named Towncrier fragments need no issue or PR number. Before Towncrier builds th
 `release-creator fragments --repository owner/repo`. The command reads the commits that introduced pending fragments,
 asks GitHub which squash-merged pull request owns each commit, and adds its PR link and a credit computed from the merge
 commit: the PR author first, then every other author and co-author. AI assistant identities are dropped, and bots are
-credited only when they are the only author. The checkout needs complete fragment history, and `gh` needs read access to
-the repository. Merge commits and rebase merges cannot identify a fragment's PR through its introducing commit; use
-squash merges.
+credited only when they are the only author. `gh` needs read access to the repository. A fragment whose introducing
+commit has no squash-merged PR, as after a merge commit or rebase merge, gets no PR link and credits the commit author
+by the same rules. In a shallow checkout the linker leaves every fragment unchanged.
 
 The `tags` command calculates a version from pending fragments and selects the preceding tag for GitHub comparisons:
 
