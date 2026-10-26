@@ -63,7 +63,6 @@ docs = [
 ]
 fix = [ "prek>=0.2" ]
 pkg-meta = [ "check-wheel-contents>=0.6.3", "twine>=7", "uv>=0.12.22" ]
-release-check = [ "prek>=0.2" ]
 
 [tool.hatch]
 version.source = "vcs"

@@ -79,19 +79,6 @@ def _reject_hand_written_attribution(content: str, suffix: str, path: Path) -> N
         raise ValueError(msg)
 
 
-def validate_fragment_deletions(config: Path) -> None:
-    """Reject staged deletions that Towncrier could not have consumed.
-
-    :param config: Towncrier configuration file.
-    :raises ValueError: A deleted path is not a configured fragment.
-    """
-    _, directory, suffix, categories, _ = _towncrier_settings(config)
-    for path in _git_paths(directory, ["--cached", "--diff-filter=D", "--no-renames"]):
-        if path.parent != directory or path.suffix != suffix or fragment_category(path, categories) is None:
-            msg = f"unsupported release fragment: {path}"
-            raise ValueError(msg)
-
-
 def changed_changesets(config: Path, base: str) -> int:
     """Count and validate changed Knope changesets.
 
@@ -172,5 +159,4 @@ def _git_paths(directory: Path, options: list[str]) -> list[Path]:
 __all__ = [
     "changed_changesets",
     "changed_fragments",
-    "validate_fragment_deletions",
 ]

@@ -93,16 +93,6 @@ selected base branch to catch conflicts that individual filenames cannot reveal.
 ``topic.feature.md`` from becoming an issue reference. It does not change files or decide whether a pull request needs
 news; the caller uses the count with the ``skip news`` label and the PR author to make that decision.
 
-Before a release writer commits Towncrier's prepared patch, validate the staged fragment deletions:
-
-.. code-block:: bash
-
-    release-creator validate-fragment-deletions
-
-The command reads ``towncrier.toml`` when present, otherwise ``pyproject.toml``. It accepts numbered and ``+`` named
-fragments with an optional ``.N`` counter. It rejects a deleted template, nested file, unknown category, or wrong file
-extension. It reads the Git index and makes no changes.
-
 Write one fragment per user-visible change, including multiple changes in one pull request. Maintenance work without a
 user-visible change needs no fragment. A bot pull request needs a fragment only when that pull request supplies one. The
 command does not decide whether a change is newsworthy; review that before merging.
