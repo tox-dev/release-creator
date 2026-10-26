@@ -210,6 +210,7 @@ def test_fragments_explains_shallow_clone(
 
     _link(monkeypatch)
 
-    assert capsys.readouterr().err.splitlines()[1] == (
-        "Shallow clone: the history that added the fragments is cut off, so they stay unchanged"
-    )
+    assert capsys.readouterr().err.splitlines() == [
+        "Fragment directory: changelog.d (default for towncrier)",
+        "Shallow clone: the history that added the fragments is cut off, so they stay unchanged",
+    ]

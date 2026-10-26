@@ -5,6 +5,10 @@
 ``tags`` calculates a version from pending changelog fragments and existing tags. It also finds the tag for the GitHub
 comparison link. It reads tag names from standard input and never creates or moves a tag.
 
+Standard output carries only the tag, so ``$(...)`` captures it unchanged. The command explains its choice on standard
+error; from ``1.2.3`` with one feature fragment it logs ``Next version: 1.3.0 (minor bump from 1 pending fragment: 1
+feature)``.
+
 Calculate the next version
 ==========================
 

@@ -6,6 +6,10 @@
 description matches the source that was published. It reads the changelog and prints Markdown to standard output; it
 does not edit the changelog or create the GitHub Release.
 
+Every release-creator command explains its choices on standard error, one line per decision, while standard output and
+the files it writes carry only the data. For the example below, ``notes`` logs ``Release notes for 1.2.3: 1 entry in 1
+category from docs/changelog.md``, and ``> release-notes.md`` still captures the body alone.
+
 A complete Markdown example
 ===========================
 
@@ -145,6 +149,10 @@ In reStructuredText, the heading uses the categories' underline character:
 Entries follow merge order. With no new contributor, the changelog stays unchanged. ``notes`` renders the subsection
 last in the release body, before the artifact and Full Changelog links. Pull requests that are not merged are skipped.
 Run the command once per release: a second run appends another subsection.
+
+The command logs each decision on standard error and leaves standard output empty. For the example above it logs ``New
+Contributors: @alice (#42)``, or a reason such as ``New Contributors: none for 1.2.3 (no first-time author among its
+pull requests)``.
 
 reStructuredText changelogs
 ===========================

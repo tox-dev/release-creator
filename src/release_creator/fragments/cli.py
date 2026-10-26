@@ -31,9 +31,10 @@ def _link(args: argparse.Namespace) -> None:
     else:
         directory, source = Path(".changeset" if knope else "changelog.d"), f"default for {args.format}"
     explain(f"Fragment directory: {directory} ({source})")
-    if shallow := is_shallow_clone(directory):
+    if is_shallow_clone(directory):
         explain("Shallow clone: the history that added the fragments is cut off, so they stay unchanged")
-    commits = {} if shallow else fragment_commits_from_git(directory, knope=knope)
+        return
+    commits = fragment_commits_from_git(directory, knope=knope)
     pull_requests = fragment_pull_requests(args.repository, {name: commit.sha for name, commit in commits.items()})
     mode = "knope" if knope else "towncrier"
     add_pull_request_links(directory, args.repository, pull_requests, commits=commits, mode=mode)
