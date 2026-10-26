@@ -10,7 +10,7 @@ concurrency:
 jobs:
   upgrade:
     name: 🔀 Upgrade release tools
-    uses: tox-dev/github-workflows/.github/workflows/upgrade-release-tools.yaml@522076eaf6fa1e6ecb26322be5252973cd466357 # v6.0.0
+    uses: tox-dev/github-workflows/.github/workflows/upgrade-release-tools.yaml@d96a86e7f0ef1f84fe8971c8c63575081fd1d931 # v6.0.0
     permissions:
       contents: read
     secrets:

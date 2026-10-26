@@ -1647,7 +1647,7 @@ sha256 = "d0dae1f74bb273b534770cb4cccb6bb78735540afdb03c2146f4e19dcd412560"
 
 [[packages]]
 name = "release-creator"
-version = "4.0.0"
+version = "4.1.0"
 marker = "\"release-news\" in dependency_groups or \"release-notes\" in dependency_groups or \"release-prepare\" in dependency_groups"
 requires-python = ">=3.15"
 dependencies = [
@@ -1662,22 +1662,22 @@ dependencies = [
 index = "https://pypi.org/simple/"
 
 [packages.sdist]
-name = "release_creator-4.0.0.tar.gz"
-upload-time = 2026-10-26 16:21:39.157838+00:00
-url = "https://files.pythonhosted.org/packages/c0/64/cfd6c068445858d4a5d7b3ed27241562d5e7bfde70fc261101c9432e718d/release_creator-4.0.0.tar.gz"
-size = 178372
+name = "release_creator-4.1.0.tar.gz"
+upload-time = 2026-10-26 18:24:45.805437+00:00
+url = "https://files.pythonhosted.org/packages/7f/fd/05d7f3c604476a238d67d5aaa2a4085312e7078c193dbd7ad99ad48d560d/release_creator-4.1.0.tar.gz"
+size = 186016
 
 [packages.sdist.hashes]
-sha256 = "c3a61ab0502fe9916990d43198b4a695f4f471afb3e63ffbe85eb64c160d4726"
+sha256 = "c783037f5ca2efc16fa7cccfb1c2abf0a442f116a63ca82bd7bfb7e2a8343a15"
 
 [[packages.wheels]]
-name = "release_creator-4.0.0-py3-none-any.whl"
-upload-time = 2026-10-26 16:21:37.836466+00:00
-url = "https://files.pythonhosted.org/packages/96/77/4c4d6212d3b59eab660dcb0c5c07f2209756bdf7f4f1288a3d38c1b8bff4/release_creator-4.0.0-py3-none-any.whl"
-size = 49646
+name = "release_creator-4.1.0-py3-none-any.whl"
+upload-time = 2026-10-26 18:24:44.353933+00:00
+url = "https://files.pythonhosted.org/packages/30/d0/38480e99025c021d07e0710af02547562dfadbd798bef26dc01869a3f81e/release_creator-4.1.0-py3-none-any.whl"
+size = 52922
 
 [packages.wheels.hashes]
-sha256 = "c6ce7929c82c517faf747e64492ea3c25a8377bdae4111fb5c8b35532592289c"
+sha256 = "67deae16d11ac261a1512f18a22c0cf13418f43afc3e56cb74e58ad4422062e3"
 
 [[packages]]
 name = "requests"
@@ -2589,7 +2589,7 @@ sha256 = "3fa599046443d4ca830d06e3d180cd0a675d5871af0a68daa5623318bb4d17e3"
 
 [tool.nab]
 nab-version = "0.0.22"
-created-at = 2026-10-26 17:00:16.958235+00:00
+created-at = 2026-10-26 20:06:33.346872+00:00
 command-line = [
     "nab",
     "lock",
