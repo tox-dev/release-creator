@@ -314,6 +314,7 @@ def test_changed_fragments_reports_missing_repository_root(news_repository: Path
         "release_creator.process.subprocess.run",
         autospec=True,
         side_effect=[
+            subprocess.CompletedProcess([], 0, "", ""),
             subprocess.CompletedProcess([], 0, "changelog.d/+topic.feature.md\0", ""),
             subprocess.CompletedProcess([], 1, "", "no root"),
         ],
@@ -366,6 +367,28 @@ def test_changed_fragments_rejects_unsupported_towncrier_layout(
 
     with pytest.raises(ValueError, match=message):
         changed_fragments(config, "main")
+
+
+def test_changed_fragments_skips_layout_check_for_unchanged_towncrier_config(news_repository: Path) -> None:
+    config = news_repository / "pyproject.toml"
+    config.write_text(f'{config.read_text(encoding="utf-8")}[[tool.towncrier.section]]\npath = ""\n', encoding="utf-8")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Sections")
+    _git("update-ref", "refs/remotes/origin/main", "HEAD")
+    (news_repository / "changelog.d" / "+topic.feature.md").write_text("Add a feature.\n", encoding="utf-8")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+
+    assert changed_fragments(config, "main") == 1
+
+
+def test_changed_fragments_checks_layout_of_new_towncrier_toml(news_repository: Path) -> None:
+    (news_repository / "towncrier.toml").write_text(
+        '[tool.towncrier]\ndirectory = "changelog.d"\n[[tool.towncrier.section]]\npath = "core"\n', encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="sections are not supported"):
+        changed_fragments(news_repository / "pyproject.toml", "main")
 
 
 def test_changed_fragments_from_subdirectory(news_repository: Path, monkeypatch: pytest.MonkeyPatch) -> None:

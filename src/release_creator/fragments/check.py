@@ -4,6 +4,7 @@ lazy import sys
 lazy import tomllib
 lazy from fnmatch import fnmatch
 lazy from pathlib import Path
+lazy from typing import Any
 
 lazy import yaml
 
@@ -27,7 +28,7 @@ def changed_fragments(config: Path, base: str) -> int:
     :returns: Number of changed fragments.
     :raises ValueError: The configuration or a changed fragment is invalid.
     """
-    config, directory, suffix, categories, ignored = _towncrier_settings(config)
+    config, directory, suffix, categories, ignored = _towncrier_settings(config, base)
     count = 0
     for path in _git_paths(directory, ["--diff-filter=AM", "--no-renames", f"origin/{base}...HEAD"]):
         count += _validate_changed_fragment(path, directory, suffix, categories, ignored)
@@ -138,16 +139,12 @@ def changed_changesets(config: Path, base: str) -> int:
     return count
 
 
-def _towncrier_settings(config: Path) -> tuple[Path, Path, str, set[str], set[str]]:
+def _towncrier_settings(config: Path, base: str) -> tuple[Path, Path, str, set[str], set[str]]:
     if config.name == "pyproject.toml" and (towncrier_config := config.with_name("towncrier.toml")).is_file():
         config = towncrier_config
-    towncrier = tomllib.loads(config.read_text(encoding="utf-8")).get("tool", {}).get("towncrier")
-    if towncrier.get("section"):
-        msg = f"Towncrier sections are not supported for news validation: {config}"
-        raise ValueError(msg)
-    if towncrier.get("package") and "directory" not in towncrier:
-        msg = f"set an explicit Towncrier fragment directory for news validation: {config}"
-        raise ValueError(msg)
+    towncrier = _towncrier_table(config.read_text(encoding="utf-8"))
+    if _towncrier_changed(config, towncrier, base):
+        _reject_unsupported_towncrier_layout(config, towncrier)
     categories = (
         {str(name) for name in towncrier["fragment"]}
         if "fragment" in towncrier
@@ -166,6 +163,24 @@ def _towncrier_settings(config: Path) -> tuple[Path, Path, str, set[str], set[st
         categories,
         ignored,
     )
+
+
+def _towncrier_table(document: str) -> dict[str, Any]:
+    return tomllib.loads(document).get("tool", {}).get("towncrier")
+
+
+def _towncrier_changed(config: Path, towncrier: dict[str, Any], base: str) -> bool:
+    previous = run_text(["git", "show", f"origin/{base}:./{config.name}"], cwd=config.parent)
+    return bool(previous.returncode) or _towncrier_table(previous.stdout) != towncrier
+
+
+def _reject_unsupported_towncrier_layout(config: Path, towncrier: dict[str, Any]) -> None:
+    if towncrier.get("section"):
+        msg = f"Towncrier sections are not supported for news validation: {config}"
+        raise ValueError(msg)
+    if towncrier.get("package") and "directory" not in towncrier:
+        msg = f"set an explicit Towncrier fragment directory for news validation: {config}"
+        raise ValueError(msg)
 
 
 def _git_paths(directory: Path, options: list[str]) -> list[Path]:
