@@ -8,7 +8,7 @@ lazy import re
 lazy from dataclasses import dataclass
 lazy from typing import Final
 
-lazy from release_creator.process import required_executable, run_text
+lazy from release_creator.process import run_text
 
 _RE_AI_ASSISTANT_EMAIL: Final = re.compile(
     r"""
@@ -34,18 +34,15 @@ AI_ASSISTANT_LOGINS: Final = frozenset(
 def fragment_pull_requests(repository: str, commits: dict[str, str]) -> dict[str, PullRequest]:
     """Resolve each fragment through GitHub's commit-to-pull-request API.
 
-    A missing GitHub CLI executable raises :exc:`FileNotFoundError`.
-
     :param repository: GitHub owner and repository.
     :param commits: Fragment names mapped to introducing commit hashes.
     :returns: Fragment names mapped to the merged pull request and its author.
     """
-    gh = required_executable("gh")
-    by_commit = _pulls(gh, repository, list(dict.fromkeys(commits.values())))
+    by_commit = _pulls(repository, list(dict.fromkeys(commits.values())))
     return {name: by_commit[sha] for name, sha in commits.items()}
 
 
-def _pulls(gh: str, repository: str, shas: list[str]) -> dict[str, PullRequest]:
+def _pulls(repository: str, shas: list[str]) -> dict[str, PullRequest]:
     if not shas:
         return {}
     owner, name = repository.split("/", 1)
@@ -69,7 +66,7 @@ def _pulls(gh: str, repository: str, shas: list[str]) -> dict[str, PullRequest]:
             f"query {{ repository(owner: {json.dumps(owner)}, name: {json.dumps(name)}) "
             f"{{ {' '.join(expression for _, _, expression in batch)} }} }}"
         )
-        result = run_text([gh, "api", "graphql", "-F", "query=@-"], stdin=query)
+        result = run_text(["gh", "api", "graphql", "-F", "query=@-"], stdin=query)
         if result.returncode:
             msg = result.stderr.strip() or "could not read GitHub pull requests"
             raise ValueError(msg)

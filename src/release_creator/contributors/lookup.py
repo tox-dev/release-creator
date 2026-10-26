@@ -8,7 +8,7 @@ lazy from dataclasses import dataclass
 lazy from typing import Final
 
 lazy from release_creator.fragments.pull_requests import AI_ASSISTANT_LOGINS, github_account
-lazy from release_creator.process import required_executable, run_text
+lazy from release_creator.process import run_text
 
 _BATCH_SIZE: Final = 100
 
@@ -16,21 +16,17 @@ _BATCH_SIZE: Final = 100
 def first_contributions(repository: str, numbers: list[str]) -> list[FirstContribution]:
     """Return the release pull requests that are their author's first merged pull request.
 
-    A missing GitHub CLI executable raises :exc:`FileNotFoundError`.
-
     :param repository: GitHub owner and repository.
     :param numbers: Pull request numbers referenced by the release section.
     :returns: First contributions, ordered by merge time.
     """
-    gh = required_executable("gh")
     earliest: dict[str, FirstContribution] = {}
-    for contribution in _merged_pulls(gh, repository, numbers):
+    for contribution in _merged_pulls(repository, numbers):
         key = contribution.login.casefold()
         if key not in earliest or contribution.merged_at < earliest[key].merged_at:
             earliest[key] = contribution
     candidates = sorted(earliest.values(), key=lambda contribution: contribution.merged_at)
     counts = _graphql(
-        gh,
         [
             (
                 f"s{index}",
@@ -50,10 +46,9 @@ def _search(repository: str, candidate: FirstContribution) -> str:
     return f"repo:{repository} is:pr is:merged author:{candidate.login} merged:<{candidate.merged_at}"
 
 
-def _merged_pulls(gh: str, repository: str, numbers: list[str]) -> list[FirstContribution]:
+def _merged_pulls(repository: str, numbers: list[str]) -> list[FirstContribution]:
     owner, name = repository.split("/", 1)
     pulls = _graphql(
-        gh,
         [
             (
                 f"p{number}",
@@ -81,12 +76,12 @@ def _merged_pulls(gh: str, repository: str, numbers: list[str]) -> list[FirstCon
     return contributions
 
 
-def _graphql(gh: str, aliases: list[tuple[str, str]], scope: str) -> dict[str, object]:
+def _graphql(aliases: list[tuple[str, str]], scope: str) -> dict[str, object]:
     result: dict[str, object] = {}
     for offset in range(0, len(aliases), _BATCH_SIZE):
         fields = " ".join(expression for _, expression in aliases[offset : offset + _BATCH_SIZE])
         query = f"query {{ {scope} {{ {fields} }} }}" if scope else f"query {{ {fields} }}"
-        output = run_text([gh, "api", "graphql", "-F", "query=@-"], stdin=query)
+        output = run_text(["gh", "api", "graphql", "-F", "query=@-"], stdin=query)
         if output.returncode:
             msg = output.stderr.strip() or "could not query GitHub"
             raise ValueError(msg)

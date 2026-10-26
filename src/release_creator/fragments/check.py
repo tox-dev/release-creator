@@ -11,13 +11,11 @@ lazy from release_creator.fragments.knope import changeset_parts, knope_kinds, l
 lazy from release_creator.fragments.links import has_hand_written_credit, has_hand_written_pull_request_link
 lazy from release_creator.fragments.names import fragment_category
 lazy from release_creator.fragments.shape import validate_towncrier_fragment
-lazy from release_creator.process import required_executable, run_text
+lazy from release_creator.process import run_text
 
 
 def changed_fragments(config: Path, base: str) -> int:
     """Count valid added or modified fragments relative to the PR base.
-
-    A missing Git executable raises :exc:`FileNotFoundError`.
 
     :param config: Towncrier configuration file.
     :param base: Target branch name for the pull request diff.
@@ -32,7 +30,7 @@ def changed_fragments(config: Path, base: str) -> int:
     for path in _git_paths(directory, ["--diff-filter=AM", "--no-renames", f"origin/{base}...HEAD"]):
         count += _validate_changed_fragment(path, directory, suffix, categories, ignored)
     if count:
-        root = run_text([_git_executable(), "rev-parse", "--show-toplevel"])
+        root = run_text(["git", "rev-parse", "--show-toplevel"])
         if root.returncode:
             msg = root.stderr.strip() or "could not locate repository root"
             raise ValueError(msg)
@@ -87,8 +85,6 @@ def _reject_hand_written_attribution(content: str, suffix: str, path: Path) -> N
 def validate_fragment_deletions(config: Path) -> None:
     """Reject staged deletions that Towncrier could not have consumed.
 
-    A missing Git executable raises :exc:`FileNotFoundError`.
-
     :param config: Towncrier configuration file.
     :raises ValueError: A deleted path is not a configured fragment.
     """
@@ -101,8 +97,6 @@ def validate_fragment_deletions(config: Path) -> None:
 
 def changed_changesets(config: Path, base: str) -> int:
     """Count and validate changed Knope changesets.
-
-    A missing Git executable raises :exc:`FileNotFoundError`.
 
     :param config: Knope configuration file.
     :param base: Target branch name for the pull request diff.
@@ -177,15 +171,11 @@ def _towncrier_settings(config: Path) -> tuple[Path, Path, str, set[str], set[st
 
 
 def _git_paths(directory: Path, options: list[str]) -> list[Path]:
-    result = run_text([_git_executable(), "diff", "--relative", "--name-only", "-z", *options, "--", str(directory)])
+    result = run_text(["git", "diff", "--relative", "--name-only", "-z", *options, "--", str(directory)])
     if result.returncode:
         msg = result.stderr.strip() or "could not inspect changelog fragments"
         raise ValueError(msg)
     return [Path(filename) for filename in result.stdout.strip("\0").split("\0") if filename]
-
-
-def _git_executable() -> str:
-    return required_executable("git")
 
 
 __all__ = [

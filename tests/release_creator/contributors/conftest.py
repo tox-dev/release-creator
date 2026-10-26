@@ -47,7 +47,6 @@ def github(monkeypatch: pytest.MonkeyPatch) -> GitHub:
             return subprocess.CompletedProcess(command, 0, json.dumps({"data": data}), "")
 
         run = cast("MagicMock", create_autospec(process.subprocess.run, side_effect=respond))
-        monkeypatch.setattr(process.shutil, "which", create_autospec(process.shutil.which, return_value="gh"))
         monkeypatch.setattr(process.subprocess, "run", run)
         return run
 

@@ -394,7 +394,6 @@ def test_add_new_contributors_rejects_bad_responses(
     error: type[Exception],
     message: str,
 ) -> None:
-    monkeypatch.setattr(process.shutil, "which", create_autospec(process.shutil.which, return_value="gh"))
     monkeypatch.setattr(
         process.subprocess,
         "run",

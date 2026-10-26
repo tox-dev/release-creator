@@ -115,18 +115,10 @@ def test_fragment_commits_from_git_reports_missing_history(tmp_path: Path, monke
         fragment_git.fragment_commits_from_git(directory)
 
 
-def test_fragment_commits_from_git_reports_missing_git(tmp_path: Path, mocker: MockerFixture) -> None:
-    mocker.patch("release_creator.process.shutil.which", return_value=None)
-
-    with pytest.raises(FileNotFoundError, match="git is required"):
-        fragment_git.fragment_commits_from_git(tmp_path / "changelog.d")
-
-
 def test_fragment_commits_from_git_reports_log_failure(tmp_path: Path, mocker: MockerFixture) -> None:
     directory = tmp_path / "changelog.d"
     directory.mkdir()
     (directory / "+news.feature.md").write_text("News.\n", encoding="utf-8")
-    mocker.patch("release_creator.process.shutil.which", return_value="git")
     mocker.patch(
         "release_creator.process.subprocess.run",
         autospec=True,

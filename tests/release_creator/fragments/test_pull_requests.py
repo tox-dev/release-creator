@@ -45,7 +45,6 @@ def test_fragment_pull_requests_sends_valid_graphql(monkeypatch: pytest.MonkeyPa
             return_value=subprocess.CompletedProcess([], 0, json.dumps(response), ""),
         ),
     )
-    monkeypatch.setattr(process.shutil, "which", create_autospec(process.shutil.which, return_value="gh"))
     monkeypatch.setattr(process.subprocess, "run", run)
 
     pull_requests.fragment_pull_requests(
@@ -54,13 +53,6 @@ def test_fragment_pull_requests_sends_valid_graphql(monkeypatch: pytest.MonkeyPa
 
     assert run.call_args.args[0] == ["gh", "api", "graphql", "-F", "query=@-"]
     parse(run.call_args.kwargs["input"])
-
-
-def test_fragment_pull_requests_reports_missing_gh(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(process.shutil, "which", create_autospec(process.shutil.which, return_value=None))
-
-    with pytest.raises(FileNotFoundError, match="gh is required"):
-        pull_requests.fragment_pull_requests("tox-dev/example", {"+news.feature.md": "a" * 40})
 
 
 @pytest.mark.parametrize(
@@ -78,7 +70,6 @@ def test_fragment_pull_requests_reports_missing_gh(monkeypatch: pytest.MonkeyPat
 def test_fragment_pull_requests_rejects_bad_responses(
     monkeypatch: pytest.MonkeyPatch, nodes: list[dict[str, object]], error: type[Exception], message: str
 ) -> None:
-    monkeypatch.setattr(process.shutil, "which", create_autospec(process.shutil.which, return_value="gh"))
     monkeypatch.setattr(
         process.subprocess,
         "run",
@@ -102,7 +93,6 @@ def test_fragment_pull_requests_rejects_bad_responses(
 def test_fragment_pull_requests_reports_api_failures(
     monkeypatch: pytest.MonkeyPatch, stdout: str, stderr: str, status: int, message: str
 ) -> None:
-    monkeypatch.setattr(process.shutil, "which", create_autospec(process.shutil.which, return_value="gh"))
     monkeypatch.setattr(
         process.subprocess,
         "run",
@@ -133,7 +123,6 @@ def test_fragment_pull_requests_reports_api_failures(
 def test_fragment_pull_requests_rejects_incomplete_graphql_response(
     monkeypatch: pytest.MonkeyPatch, response: dict[str, object], error: type[Exception], message: str
 ) -> None:
-    monkeypatch.setattr(process.shutil, "which", create_autospec(process.shutil.which, return_value="gh"))
     monkeypatch.setattr(
         process.subprocess,
         "run",
@@ -156,7 +145,6 @@ def test_fragment_pull_requests_credits_deleted_author(
 ) -> None:
     pull = _pull("a" * 40)
     pull["author"] = author
-    monkeypatch.setattr(process.shutil, "which", create_autospec(process.shutil.which, return_value="gh"))
     monkeypatch.setattr(
         process.subprocess,
         "run",
@@ -193,7 +181,6 @@ def test_fragment_pull_requests_chunks_large_history(monkeypatch: pytest.MonkeyP
         for batch in batches
     ]
     run: MagicMock = cast("MagicMock", create_autospec(process.subprocess.run, side_effect=responses))
-    monkeypatch.setattr(process.shutil, "which", create_autospec(process.shutil.which, return_value="gh"))
     monkeypatch.setattr(process.subprocess, "run", run)
 
     assert len(pull_requests.fragment_pull_requests("tox-dev/example", commits)) == len(commits)
@@ -202,9 +189,7 @@ def test_fragment_pull_requests_chunks_large_history(monkeypatch: pytest.MonkeyP
     ]
 
 
-def test_fragment_pull_requests_accepts_empty_commit_map(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(process.shutil, "which", create_autospec(process.shutil.which, return_value="gh"))
-
+def test_fragment_pull_requests_accepts_empty_commit_map() -> None:
     assert pull_requests.fragment_pull_requests("tox-dev/example", {}) == {}
 
 
@@ -227,7 +212,6 @@ def _credits(
 ) -> tuple[PullRequestCredit, ...]:
     pull = _pull("a" * 40, login=login, account_type=account_type)
     pull["mergeCommit"] = {"oid": "a" * 40, "authors": {"nodes": authors}}
-    monkeypatch.setattr(process.shutil, "which", create_autospec(process.shutil.which, return_value="gh"))
     monkeypatch.setattr(
         process.subprocess,
         "run",
@@ -249,7 +233,6 @@ def test_fragment_pull_requests_queries_merge_commit_authors(monkeypatch: pytest
             return_value=subprocess.CompletedProcess([], 0, json.dumps(_graph_response([_pull("a" * 40)])), ""),
         ),
     )
-    monkeypatch.setattr(process.shutil, "which", create_autospec(process.shutil.which, return_value="gh"))
     monkeypatch.setattr(process.subprocess, "run", run)
 
     pull_requests.fragment_pull_requests("tox-dev/example", {"+news.feature.md": "a" * 40})
@@ -452,7 +435,6 @@ def test_fragment_pull_requests_rejects_bad_merge_commit_authors(
 ) -> None:
     pull = _pull("a" * 40)
     pull["mergeCommit"] = merge_commit
-    monkeypatch.setattr(process.shutil, "which", create_autospec(process.shutil.which, return_value="gh"))
     monkeypatch.setattr(
         process.subprocess,
         "run",

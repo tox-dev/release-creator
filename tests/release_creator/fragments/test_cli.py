@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess  # ruff: ignore[suspicious-subprocess-import]  # Exercise Git and replace the GitHub CLI boundary.
 import sys
 lazy from pathlib import Path
@@ -92,7 +91,6 @@ def _mock_github_pull(mocker: MockerFixture, commit: str) -> MagicMock:
         }
     }
     original_run = process.subprocess.run
-    original_which = shutil.which
 
     def execute(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         if command[0] == "gh":
@@ -109,11 +107,6 @@ def _mock_github_pull(mocker: MockerFixture, commit: str) -> MagicMock:
             timeout=300,
         )
 
-    mocker.patch(
-        "release_creator.process.shutil.which",
-        autospec=True,
-        side_effect=lambda name: "gh" if name == "gh" else original_which(name),
-    )
     return cast("MagicMock", mocker.patch("release_creator.process.subprocess.run", autospec=True, side_effect=execute))
 
 
