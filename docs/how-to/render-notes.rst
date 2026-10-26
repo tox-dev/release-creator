@@ -71,12 +71,13 @@ The tagged changelog decides which changes appear, their order, their categories
 infer changes or people from commits, and it does not check credits or pull request links: the ``fragments`` linker
 writes them, and ``validate-news`` rejects fragments that carry their own.
 
-``notes`` requires exactly one section for ``--tag`` and rejects unknown categories. It renames ``Fixed`` to ``Bug
-fixes`` and ``Added`` to ``Features`` while keeping each release bullet on one line. For Markdown, leave empty headings
-out of the tagged changelog; the supplied Towncrier template does this. The reStructuredText reader omits empty
-categories. If the source section already has a ``Full Changelog`` line, ``notes`` replaces it with one link built from
-``--previous`` and ``--tag``. The source's category anchors remain stable. See :doc:`the format reference
-<../reference/formats>` for every category name.
+``notes`` uses the first section for ``--tag``. It renames ``Fixed`` to ``Bug fixes`` and ``Added`` to ``Features``
+while keeping each release bullet on one line; an unknown category keeps its own name as the heading. Markdown text
+outside the categories passes through as written, and ``notes`` keeps empty Markdown headings, so leave them out of the
+tagged changelog; the supplied Towncrier template does this. The reStructuredText reader omits empty categories and
+renders blocks outside a category or release item as plain paragraphs. If the source section already has a ``Full
+Changelog`` line, ``notes`` replaces it with one link built from ``--previous`` and ``--tag``. The source's category
+anchors remain stable. See :doc:`the format reference <../reference/formats>` for every category name.
 
 Omit ``--artifact-url`` if there is no external artifact. Use ``--artifact-label`` to name another ecosystem's package
 link. If ``--previous`` is absent, the final link points to the commits at this tag instead of a comparison.

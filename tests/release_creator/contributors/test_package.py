@@ -102,24 +102,6 @@ def test_add_new_contributors_package_renders_in_notes(changelog: Path, github: 
     )
 
 
-@pytest.mark.parametrize(
-    ("package", "version", "message"),
-    [
-        pytest.param("taplo", "1.1.0", "expected one changelog package section for taplo, found 0", id="package"),
-        pytest.param("tox-toml-fmt", "1.0.0", "expected one changelog section for 1.0.0, found 0", id="version"),
-    ],
-)
-def test_add_new_contributors_package_rejects_missing_section(
-    changelog: Path, github: GitHub, package: str, version: str, message: str
-) -> None:
-    github(_PULLS, set())
-
-    with pytest.raises(ValueError, match=message):
-        add_new_contributors(changelog, version, "tox-dev/toml-fmt", package)
-
-    assert changelog.read_text(encoding="utf-8") == _CHANGELOG
-
-
 def _run_cli(monkeypatch: pytest.MonkeyPatch, changelog: Path, package: str) -> None:
     monkeypatch.setattr(
         sys,

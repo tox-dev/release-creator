@@ -75,26 +75,22 @@ def rst_section(lines: list[str], tag: str) -> tuple[int, int]:
 
     :param lines: reStructuredText changelog lines.
     :param tag: Release tag or version; a leading ``v`` is ignored.
-    :returns: Index of the version title and the index just past the section's last line. The next version title, or
-        its overline, ends the section.
-    :raises ValueError: The version section is missing or ambiguous.
+    :returns: Index of the first matching version title and the index just past the section's last line. The next
+        version title, or its overline, ends the section.
     """
-    headings = [
+    heading = next(
         index
         for index in range(len(lines))
         if (match := _rst_version_at(lines, index))
         and (match["tag"] or match["link_tag"]).removeprefix("v") == tag.removeprefix("v")
-    ]
-    if len(headings) != 1:
-        msg = f"expected one changelog section for {tag}, found {len(headings)}"
-        raise ValueError(msg)
+    )
     end = next(
-        (index for index in range(headings[0] + 1, len(lines)) if _rst_version_at(lines, index) is not None),
+        (index for index in range(heading + 1, len(lines)) if _rst_version_at(lines, index) is not None),
         len(lines),
     )
     if end < len(lines) and _is_rst_adornment(lines[end - 1]):
         end -= 1
-    return headings[0], end
+    return heading, end
 
 
 def _rst_version_at(lines: list[str], index: int) -> re.Match[str] | None:
@@ -158,18 +154,14 @@ def markdown_section(lines: list[str], tag: str, package: str | None) -> tuple[i
     :param lines: Markdown changelog lines.
     :param tag: Release tag or version; a package prefix and a leading ``v`` are ignored.
     :param package: Package whose ``## <package>`` section holds ``### <version>`` headings.
-    :returns: Index of the version heading and the index just past the section's last line. A version anchor directly
-        after its own heading belongs to the section; the next version heading or anchor ends it.
-    :raises ValueError: The package or version section is missing or ambiguous.
+    :returns: Index of the first matching version heading and the index just past the section's last line. A version
+        anchor directly after its own heading belongs to the section; the next version heading or anchor ends it. The
+        first matching package section is searched.
     """
     heading_level = "###" if package is not None else "##"
     start, stop = 0, len(lines)
     if package is not None:
-        packages = [index for index, line in enumerate(lines) if line == f"## {package}"]
-        if len(packages) != 1:
-            msg = f"expected one changelog package section for {package}, found {len(packages)}"
-            raise ValueError(msg)
-        start = packages[0] + 1
+        start = next(index for index, line in enumerate(lines) if line == f"## {package}") + 1
         stop = next((index for index in range(start, len(lines)) if lines[index].startswith("## ")), len(lines))
     version = tag.rsplit("/", 1)[-1].removeprefix("v")
     markdown_version = re.compile(
@@ -183,18 +175,15 @@ def markdown_section(lines: list[str], tag: str, package: str | None) -> tuple[i
         """,
         re.VERBOSE,
     )
-    headings = [
+    heading = next(
         index
         for index in range(start, stop)
         if (match := markdown_version.fullmatch(lines[index]))
         and _is_version(match["tag"])
         and match["level"] == heading_level
         and match["tag"].removeprefix("v") == version
-    ]
-    if len(headings) != 1:
-        msg = f"expected one changelog section for {tag}, found {len(headings)}"
-        raise ValueError(msg)
-    body = next((index for index in range(headings[0] + 1, stop) if lines[index].strip()), stop)
+    )
+    body = next((index for index in range(heading + 1, stop) if lines[index].strip()), stop)
     if body < stop and lines[body] == _own_anchor(tag, package):
         body += 1
     end = next(
@@ -210,7 +199,7 @@ def markdown_section(lines: list[str], tag: str, package: str | None) -> tuple[i
         ),
         stop,
     )
-    return headings[0], end
+    return heading, end
 
 
 def _own_anchor(tag: str, package: str | None) -> str:
@@ -241,51 +230,12 @@ def _is_version_anchor(line: str, package: str | None) -> bool:
 
 
 def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
-    body: list[str] = []
-    in_category = False
-    in_item = False
-    category_has_item = False
-    for source_line in lines:
-        line = source_line
-        if source_line.startswith(category_prefix):
-            if in_category and not category_has_item:
-                msg = "empty changelog category"
-                raise ValueError(msg)
-            category = source_line[len(category_prefix) :]
-            if category not in RELEASE_CATEGORIES:
-                msg = f"unknown changelog category: {category}"
-                raise ValueError(msg)
-            line = f"### {RELEASE_CATEGORIES[category]}"
-            in_category = True
-            in_item = False
-            category_has_item = False
-        elif source_line.startswith("- "):
-            if not in_category:
-                msg = f"release item outside a category: {source_line}"
-                raise ValueError(msg)
-            in_item = True
-            category_has_item = True
-        elif (
-            source_line.strip()
-            and re.fullmatch(
-                r"""
-                ^<a\ name="(?P<anchor>release-[A-Za-z0-9_-]+)"></a>$  # Complete release or category anchor
-                """,
-                source_line,
-                flags=re.VERBOSE,
-            )
-            is None
-            and (not in_item or not source_line[0].isspace())
-        ):
-            msg = f"release text outside an item: {source_line}"
-            raise ValueError(msg)
-        body.append(line)
-
-    if in_category and not category_has_item:
-        msg = "empty changelog category"
-        raise ValueError(msg)
-
-    return "\n".join(body).strip()
+    return "\n".join(
+        f"### {RELEASE_CATEGORIES.get(line.removeprefix(category_prefix), line.removeprefix(category_prefix))}"
+        if line.startswith(category_prefix)
+        else line
+        for line in lines
+    ).strip()
 
 
 def _is_comparison_line(line: str) -> bool:

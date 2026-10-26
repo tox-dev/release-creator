@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from textwrap import dedent
 lazy from collections.abc import Callable
 
@@ -53,13 +52,6 @@ def test_render_markdown_maps_categories_and_credits() -> None:
 
         [Full Changelog](https://github.com/tox-dev/example/compare/1.2.2...1.2.3)
         """).replace("@ENTRY@", entry)
-
-
-def test_render_markdown_rejects_markup_inside_anchor() -> None:
-    changelog = '## 1.2.3 (today)\n\n<a name="release-1-2-3-added"><details></a>\n\n### Added\n\n- Add support.\n'
-
-    with pytest.raises(ValueError, match="release text outside an item"):
-        render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
 
 
 def test_render_markdown_first_release_without_artifact() -> None:
@@ -278,21 +270,6 @@ def test_render_markdown_stops_at_next_package_release_anchor() -> None:
     assert "- Preserve formatted input." in result
     assert "- Preserve package-local history." in result
     assert "Draft text for the next release." not in result
-
-
-@pytest.mark.parametrize(
-    ("changelog", "count"),
-    [
-        pytest.param("## other\n", 0, id="absent"),
-        pytest.param("## example\n\n## example\n", 2, id="duplicate"),
-    ],
-)
-def test_render_markdown_requires_one_package_history(changelog: str, count: int) -> None:
-    with pytest.raises(ValueError, match=f"package section for example, found {count}"):
-        render_markdown(
-            changelog,
-            ReleaseContext(tag="example/1.2.3", repository="tox-dev/example", package="example"),
-        )
 
 
 @pytest.mark.parametrize(
@@ -1091,9 +1068,7 @@ def test_render_rst_keeps_group_credit_after_nested_bullets() -> None:
 @pytest.mark.parametrize(
     ("source", "message"),
     [
-        pytest.param(".. code-block:: console\n\n    output\n", "code block outside", id="top-level-code"),
         pytest.param("- Entry.\n\n  .. code-block:: console\n", "empty RST directive", id="empty-code"),
-        pytest.param("  - Nested entry.\n", "release item outside", id="orphan-nested-item"),
         pytest.param("- Entry.\n\n.. note::\n", "unexpected release text", id="unknown-directive"),
     ],
 )
@@ -1307,17 +1282,17 @@ def test_render_rst_omits_empty_prerelease_section() -> None:
     assert result == "[Full Changelog](https://github.com/tox-dev/example/commits/v2.0.0a2)\n"
 
 
-def test_render_rst_rejects_version_without_adornment() -> None:
+def test_render_rst_ignores_version_without_adornment() -> None:
     changelog = "1.2.3 (today)\n\nFixed\n-----\n\n- Correct a bug.\n"
 
-    with pytest.raises(ValueError, match=r"expected one changelog section for 1\.2\.3, found 0"):
+    with pytest.raises(StopIteration):
         render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
 
 
 def test_render_rst_ignores_indented_version_heading() -> None:
     changelog = "1.2.3 (today)\n=============\n\n  1.2.2 (old)\n  ===========\n"
 
-    with pytest.raises(ValueError, match=r"expected one changelog section for 1\.2\.2, found 0"):
+    with pytest.raises(StopIteration):
         render_rst(changelog, ReleaseContext(tag="1.2.2", repository="tox-dev/example"))
 
 
@@ -1573,20 +1548,22 @@ def test_render_rst_escapes_link_destinations() -> None:
     assert "[the guide](https://example.org/a%29b%7Ec)" in result
 
 
-def test_render_rst_rejects_nested_warning() -> None:
+def test_render_rst_renders_nested_warning_as_text() -> None:
     changelog = (
         "1.2.3 (today)\n==============\n\nAdded\n-----\n\n- Add a feature.\n\n  .. warning::\n\n     A caveat.\n"
     )
 
-    with pytest.raises(TypeError, match="unexpected release text: warning"):
-        render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert "### Features\n\n- Add a feature.\n\n  A caveat.\n\n" in result
 
 
-def test_render_rst_rejects_warning_only_item() -> None:
+def test_render_rst_renders_warning_only_item_as_text() -> None:
     changelog = "1.2.3 (today)\n==============\n\nAdded\n-----\n\n- .. warning::\n\n     A caveat.\n"
 
-    with pytest.raises(TypeError, match="unexpected release text: warning"):
-        render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert "### Features\n\n-\n\nA caveat.\n\n" in result
 
 
 def test_render_rst_keeps_bare_url() -> None:
@@ -1717,57 +1694,6 @@ def test_render_rst_stops_at_linked_previous_version() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("changelog", "message"),
-    [
-        pytest.param("", "found 0", id="absent"),
-        pytest.param("1.2.3 (today)\n======\n1.2.3 (today)\n======\n", "found 2", id="duplicate"),
-        pytest.param("1.2.3 (today)\n======\n- Entry.\n", "outside a category", id="uncategorized"),
-        pytest.param("1.2.3 (today)\n======\nAn orphan paragraph.\n", "unexpected release text", id="orphan"),
-        pytest.param(
-            "1.2.3 (today)\n======\nUnsupported\n-----------\n",
-            "unknown changelog category",
-            id="unknown-category",
-        ),
-    ],
-)
-def test_render_rst_rejects_invalid_input(changelog: str, message: str) -> None:
-    with pytest.raises(ValueError, match=message):
-        render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
-
-
-@pytest.mark.parametrize(
-    ("changelog", "overrides", "message"),
-    [
-        pytest.param("", {}, "found 0", id="absent"),
-        pytest.param("## 1.2.3 (today)\n## 1.2.3 (today)\n", {}, "found 2", id="duplicate"),
-        pytest.param("## 1.2.3 (today)\n### Maintenance\n", {}, "unknown changelog category", id="category"),
-        pytest.param("## 1.2.3 (today)\n- Plain bullet.\n", {}, "outside a category", id="uncategorized-bullet"),
-        pytest.param("## 1.2.3 (today)\nPlain note.\n", {}, "outside an item", id="uncategorized-prose"),
-        pytest.param("## 1.2.3 (today)\n### Fixed\n", {}, "empty changelog category", id="empty-category"),
-        pytest.param(
-            "## 1.2.3 (today)\n### Added\n### Fixed\n- Fix a bug.\n",
-            {},
-            "empty changelog category",
-            id="empty-category-before-entry",
-        ),
-        pytest.param(
-            "## 1.2.3 (today)\n### Fixed\n- Fix the bug.\nPlain note.\n",
-            {},
-            "outside an item",
-            id="prose-after-bullet",
-        ),
-    ],
-)
-def test_render_markdown_rejects_invalid_input(
-    changelog: str,
-    overrides: dict[str, str],
-    message: str,
-) -> None:
-    with pytest.raises(ValueError, match=message):
-        render_markdown(changelog, replace(ReleaseContext(tag="1.2.3", repository="tox-dev/example"), **overrides))
-
-
 def test_render_markdown_keeps_new_contributors_section() -> None:
     changelog = dedent("""\
         ## 1.2.3 (today)
@@ -1820,3 +1746,75 @@ def test_render_rst_keeps_new_contributors_section() -> None:
         "- @alice made their first contribution in [#42](https://github.com/tox-dev/example/pull/42)\n\n"
         "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
+
+
+@pytest.mark.parametrize(
+    ("changelog", "body"),
+    [
+        pytest.param(
+            "## 1.2.3 (today)\n### Fixed\n- First.\n## 1.2.3 (today)\n### Fixed\n- Second.\n",
+            "### Bug fixes\n\n- First.",
+            id="first-duplicate",
+        ),
+        pytest.param("## 1.2.3 (today)\n### Maintenance\n- Tidy up.\n", "### Maintenance\n\n- Tidy up.", id="category"),
+        pytest.param(
+            "## 1.2.3 (today)\n- Plain bullet.\nPlain note.\n", "- Plain bullet. Plain note.", id="uncategorized"
+        ),
+        pytest.param(
+            "## 1.2.3 (today)\n### Added\n### Fixed\n- Fix a bug.\n",
+            "### Features\n\n### Bug fixes\n\n- Fix a bug.",
+            id="empty-category",
+        ),
+    ],
+)
+def test_render_markdown_passes_layout_through(changelog: str, body: str) -> None:
+    result = render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert result == f"{body}\n\n[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+
+
+def test_render_markdown_uses_first_package_section() -> None:
+    changelog = (
+        "## example\n\n### 1.2.3 (today)\n\n#### Fixed\n\n- First.\n\n"
+        "## example\n\n### 1.2.3 (today)\n\n#### Fixed\n\n- Second.\n"
+    )
+
+    result = render_markdown(
+        changelog, ReleaseContext(tag="example/1.2.3", repository="tox-dev/example", package="example")
+    )
+
+    assert (
+        result
+        == "### Bug fixes\n\n- First.\n\n[Full Changelog](https://github.com/tox-dev/example/commits/example/1.2.3)\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("changelog", "body"),
+    [
+        pytest.param(
+            "1.2.3 (today)\n======\n\nFixed\n-----\n\n- First.\n\n1.2.3 (today)\n======\n\nFixed\n-----\n\n- Second.\n",
+            '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n- First.',
+            id="first-duplicate",
+        ),
+        pytest.param("1.2.3 (today)\n======\n\n- Entry.\n", "Entry.", id="uncategorized"),
+        pytest.param("1.2.3 (today)\n======\n\nAn orphan paragraph.\n", "An orphan paragraph.", id="orphan"),
+        pytest.param(
+            "1.2.3 (today)\n======\n\nMaintenance\n-----------\n\n- Tidy up.\n",
+            '<a name="release-1-2-3-maintenance"></a>\n\n### Maintenance\n\n- Tidy up.',
+            id="unknown-category",
+        ),
+        pytest.param(
+            "1.2.3 (today)\n======\n\nAdded\n-----\n\n.. code-block:: console\n\n    output\n",
+            "output",
+            id="top-level-code",
+        ),
+        pytest.param(
+            "1.2.3 (today)\n======\n\nAdded\n-----\n\n  - Nested entry.\n", "Nested entry.", id="orphan-nested-item"
+        ),
+    ],
+)
+def test_render_rst_renders_unexpected_layout(changelog: str, body: str) -> None:
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert result == f"{body}\n\n[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"

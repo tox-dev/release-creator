@@ -30,11 +30,10 @@ def render_rst_section(source: str, tag: str, repository: str) -> str:
     register_roles()
     body: list[str] = []
     for block in _parse_document(source, repository).children:
-        if isinstance(block, nodes.target):
-            continue
-        if not isinstance(block, nodes.section):
-            _reject_top_level(block)
-        body.extend(_render_section(block, tag))
+        if isinstance(block, nodes.section):
+            body.extend(_render_section(block, tag))
+        elif not isinstance(block, nodes.target):
+            body.append(_render_paragraph(block))
     return "\n\n".join(body)
 
 
@@ -137,21 +136,8 @@ def _parse_document(source: str, repository: str) -> nodes.document:
     return document
 
 
-def _reject_top_level(block: nodes.Node) -> None:
-    if isinstance(block, nodes.literal_block):
-        msg = "code block outside a release item"
-    elif isinstance(block, (nodes.bullet_list, nodes.block_quote)):
-        msg = "release item outside a category"
-    else:
-        msg = f"unexpected release text: {block.astext()}"
-    raise ValueError(msg)
-
-
 def _render_section(section: nodes.section, tag: str) -> list[str]:
     name = section[0].astext()
-    if name not in RELEASE_CATEGORIES:
-        msg = f"unknown changelog category: {name}"
-        raise ValueError(msg)
     body: list[str] = []
     has_entries = False
     for child in section[1:]:
@@ -163,9 +149,9 @@ def _render_section(section: nodes.section, tag: str) -> list[str]:
         elif isinstance(child, nodes.warning):
             body.append(f"> **Warning:** {' '.join(_render_paragraph(part) for part in child)}")
         else:
-            _reject_top_level(child)
+            body.append(_render_paragraph(child))
     if has_entries:
-        body.insert(0, f'<a name="{release_anchor(tag, name)}"></a>\n\n### {RELEASE_CATEGORIES[name]}')
+        body.insert(0, f'<a name="{release_anchor(tag, name)}"></a>\n\n### {RELEASE_CATEGORIES.get(name, name)}')
     return body
 
 
@@ -264,15 +250,12 @@ def _render_item_child(child: nodes.Node, item: nodes.list_item, depth: int) -> 
         if credit is not None:
             result += f"\n\n{indent}  {credit}" if children or child is not item.children[1] else f" {credit}"
         return result
-    if isinstance(child, nodes.paragraph):
-        return f"\n\n{indent}  {_render_paragraph(child)}"
     if isinstance(child, nodes.literal_block):
         language = next((name for name in child["classes"] if name != "code"), "")
         code = "\n".join(f"{indent}  {line}" for line in child.astext().splitlines())
         fence = _backtick_fence(child.astext(), 3)
         return f"\n\n{indent}  {fence}{language}\n{code}\n{indent}  {fence}"
-    msg = f"unexpected release text: {child.tagname}"
-    raise TypeError(msg)
+    return f"\n\n{indent}  {_render_paragraph(child)}"
 
 
 def _is_credit(item: nodes.Node) -> bool:

@@ -294,26 +294,6 @@ def test_add_new_contributors_finds_notes_headings(
     assert "made their first contribution" in changelog.read_text()
 
 
-@pytest.mark.parametrize(
-    ("filename", "content", "message"),
-    [
-        pytest.param("CHANGELOG.md", "## 1.2.2 (today)\n", "expected one changelog section for 1.2.3", id="md-missing"),
-        pytest.param("CHANGELOG.rst", "1.2.2 (x)\n=========\n", "expected one changelog section", id="rst-missing"),
-    ],
-)
-def test_add_new_contributors_rejects_input(
-    tmp_path: Path, github: GitHub, filename: str, content: str, message: str
-) -> None:
-    github({"42": ("alice", "User", "2026-10-20T10:00:00Z")}, set())
-    changelog = tmp_path / filename
-    changelog.write_text(content)
-
-    with pytest.raises(ValueError, match=message):
-        add_new_contributors(changelog, "1.2.3", "tox-dev/example")
-
-    assert changelog.read_text() == content
-
-
 def test_add_new_contributors_skips_unmerged_pull(tmp_path: Path, github: GitHub) -> None:
     github({"42": ("alice", "User", None), "43": ("carol", "User", "2026-10-21T10:00:00Z")}, set())
     changelog = _write(tmp_path, "md")
