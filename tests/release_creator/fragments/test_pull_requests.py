@@ -13,7 +13,7 @@ from graphql import parse
 
 from release_creator import process
 from release_creator.fragments import pull_requests
-from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor, PullRequestCredit
+from release_creator.fragments.pull_requests import PullRequest, PullRequestCredit
 
 
 def _graph_response(nodes: list[dict[str, object]]) -> dict[str, object]:
@@ -169,7 +169,6 @@ def test_fragment_pull_requests_credits_deleted_author(
     assert pull_requests.fragment_pull_requests("tox-dev/example", {"+news.feature.md": "a" * 40}) == {
         "+news.feature.md": PullRequest(
             number="42",
-            author=PullRequestAuthor(handle="ghost", is_bot=False),
             credits=(PullRequestCredit(name="ghost", linked=True),),
         )
     }

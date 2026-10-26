@@ -10,14 +10,13 @@ lazy from pathlib import Path
 import pytest
 
 from release_creator.fragments.links import add_pull_request_links
-from release_creator.fragments.pull_requests import PullRequest, PullRequestAuthor, PullRequestCredit
+from release_creator.fragments.pull_requests import PullRequest, PullRequestCredit
 from release_creator.notes.render import ReleaseContext, render_markdown, render_rst
 
 
 def _alice_pull(number: str) -> PullRequest:
     return PullRequest(
         number=number,
-        author=PullRequestAuthor(handle="alice", is_bot=False),
         credits=(PullRequestCredit(name="alice", linked=True),),
     )
 

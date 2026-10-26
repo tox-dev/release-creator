@@ -33,9 +33,7 @@ def _link(
         if authors is not None and number not in authors:
             continue
         author = authors[number] if authors is not None else PullRequestAuthor(handle="alice", is_bot=False)
-        pull_requests[name] = PullRequest(
-            number=number, author=author, credits=(PullRequestCredit(name=author.handle, linked=True),)
-        )
+        pull_requests[name] = PullRequest(number=number, credits=(PullRequestCredit(name=author.handle, linked=True),))
     add_pull_request_links(directory, repository, pull_requests, mode=mode)
 
 
@@ -1672,11 +1670,8 @@ def test_add_pull_request_links_formats_credits(
 ) -> None:
     fragment = tmp_path / filename
     fragment.write_text(content)
-    author = PullRequestAuthor(handle="alice", is_bot=False)
 
-    add_pull_request_links(
-        tmp_path, "tox-dev/example", {filename: PullRequest(number="42", author=author, credits=credited)}
-    )
+    add_pull_request_links(tmp_path, "tox-dev/example", {filename: PullRequest(number="42", credits=credited)})
 
     assert fragment.read_text() == expected
 
@@ -1704,7 +1699,7 @@ def test_add_pull_request_links_without_credits_adds_only_link(
     add_pull_request_links(
         tmp_path,
         "tox-dev/example",
-        {filename: PullRequest(number="42", author=PullRequestAuthor(handle="claude", is_bot=False), credits=())},
+        {filename: PullRequest(number="42", credits=())},
     )
 
     assert fragment.read_text() == expected
@@ -1713,12 +1708,11 @@ def test_add_pull_request_links_without_credits_adds_only_link(
 def test_add_pull_request_links_knope_formats_credits(tmp_path: Path) -> None:
     fragment = tmp_path / "trust-roots.md"
     fragment.write_text("---\ndefault: security\n---\n\n# Remove a root\n")
-    author = PullRequestAuthor(handle="alice", is_bot=False)
 
     add_pull_request_links(
         tmp_path,
         "tox-dev/example",
-        {fragment.name: PullRequest(number="42", author=author, credits=(_ALICE, _BOB, _CAROL))},
+        {fragment.name: PullRequest(number="42", credits=(_ALICE, _BOB, _CAROL))},
         mode="knope",
     )
 
@@ -1734,12 +1728,9 @@ _MARKUP_NAME: Final = "Ann *B* _C_ `D` [E](F) <G> |H| \\I &amp; :user:`j` #42 O'
 def _linked_unlinked_name(tmp_path: Path, extension: str) -> str:
     fragment = tmp_path / f"+first.feature.{extension}"
     fragment.write_text("Add a feature.\n")
-    author = PullRequestAuthor(handle="alice", is_bot=False)
     credit = PullRequestCredit(name=_MARKUP_NAME, linked=False)
 
-    add_pull_request_links(
-        tmp_path, "tox-dev/example", {fragment.name: PullRequest(number="42", author=author, credits=(credit,))}
-    )
+    add_pull_request_links(tmp_path, "tox-dev/example", {fragment.name: PullRequest(number="42", credits=(credit,))})
 
     return fragment.read_text()
 
@@ -1785,8 +1776,7 @@ def test_add_pull_request_links_rerun_keeps_unlinked_credit(
 ) -> None:
     fragment = tmp_path / filename
     fragment.write_text("Fix a bug.\n")
-    author = PullRequestAuthor(handle="dependabot", is_bot=True)
-    pull = PullRequest(number="42", author=author, credits=(PullRequestCredit(name=name, linked=False),))
+    pull = PullRequest(number="42", credits=(PullRequestCredit(name=name, linked=False),))
 
     for _ in range(2):
         add_pull_request_links(tmp_path, "tox-dev/example", {filename: pull})
@@ -1797,8 +1787,7 @@ def test_add_pull_request_links_rerun_keeps_unlinked_credit(
 def test_add_pull_request_links_knope_rerun_keeps_unlinked_credit(tmp_path: Path) -> None:
     fragment = tmp_path / "trust-roots.md"
     fragment.write_text("---\ndefault: security\n---\n\n# Remove a root\n")
-    author = PullRequestAuthor(handle="dependabot", is_bot=True)
-    pull = PullRequest(number="42", author=author, credits=(PullRequestCredit(name="Carol", linked=False),))
+    pull = PullRequest(number="42", credits=(PullRequestCredit(name="Carol", linked=False),))
 
     for _ in range(2):
         add_pull_request_links(tmp_path, "tox-dev/example", {fragment.name: pull}, mode="knope")

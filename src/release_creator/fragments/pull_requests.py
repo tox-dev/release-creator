@@ -119,9 +119,7 @@ def _pull_request(response: dict[str, object], source: str) -> PullRequest:
         msg = f"invalid pull request number for {source}: {number}"
         raise ValueError(msg)
     account = github_account(author, number)
-    return PullRequest(
-        number=str(number), author=account, credits=_credits(account, response.get("mergeCommit"), number)
-    )
+    return PullRequest(number=str(number), credits=_credits(account, response.get("mergeCommit"), number))
 
 
 def github_account(account: dict[str, object] | None, number: int) -> PullRequestAuthor:
@@ -192,7 +190,6 @@ class PullRequest:
     """Merged pull request associated with a fragment."""
 
     number: str
-    author: PullRequestAuthor
     credits: tuple[PullRequestCredit, ...]
 
 
