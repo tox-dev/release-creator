@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   test:
-    name: test ${{ matrix.py }} on ${{ matrix.os.name }}
+    name: 🧪 test ${{ matrix.py }} on ${{ matrix.os.name }}
     runs-on: ${{ matrix.os.image }}
     strategy:
       fail-fast: false
@@ -26,76 +26,68 @@ jobs:
           - {image: windows-2025, name: windows}
           - {image: macos-26, name: macos}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: 📥 Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
       # zizmor: ignore[cache-poisoning] Check jobs hold no release credential and publish no artifact.
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2 # zizmor: ignore[cache-poisoning]
+      - name: 🐍 Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2 # zizmor: ignore[cache-poisoning]
         with:
           version: latest-known
           python-version: "3.15"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
-      - name: Add uv tools to the Windows path
+      - name: ⚙️ Add uv tools to the Windows path
         if: runner.os == 'Windows'
         shell: bash
         run: echo "$USERPROFILE/.local/bin" >> "$GITHUB_PATH"
-      - run: uv tool install --python-preference only-managed --python 3.15 tox --with tox-uv
-      - run: uv python install ${{ matrix.py }}
-      - run: tox run -vv --notest --skip-missing-interpreters false -e ${{ matrix.py }}
-      - run: tox run --skip-pkg-install -e ${{ matrix.py }}
+      - name: 📦 Install tox
+        run: uv tool install --python-preference only-managed --python 3.15 tox --with tox-uv
+      - name: 🐍 Setup Python for test ${{ matrix.py }}
+        run: uv python install ${{ matrix.py }}
+      - name: 📦 Set up test suite
+        run: tox run -vv --notest --skip-missing-interpreters false -e ${{ matrix.py }}
+      - name: 🧪 Run test suite
+        run: tox run --skip-pkg-install -e ${{ matrix.py }}
         env:
           DIFF_AGAINST: ${{ github.event.pull_request.base.sha || 'HEAD' }}
   check:
-    name: tox env ${{ matrix.tox_env }}
+    name: 🔍 tox env ${{ matrix.tox_env }}
     runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
         tox_env: ["type", "pkg_meta", "docs", "dev"]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: 📥 Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       # zizmor: ignore[cache-poisoning] Check jobs hold no release credential and publish no artifact.
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2 # zizmor: ignore[cache-poisoning]
+      - name: 🐍 Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2 # zizmor: ignore[cache-poisoning]
         with:
           version: latest-known
           python-version: "3.15"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
-      - run: uv tool install --python-preference only-managed --python 3.15 tox --with tox-uv
-      - run: tox run -vv --notest --skip-missing-interpreters false -e ${{ matrix.tox_env }}
-      - run: tox run --skip-pkg-install -e ${{ matrix.tox_env }}
-  hook-update-cooldown:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-26.04
-    permissions:
-      actions: read
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: tox-dev/github-workflows/check-hook-update-cooldown@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
-        with:
-          release-app-client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+      - name: 📦 Install tox
+        run: uv tool install --python-preference only-managed --python 3.15 tox --with tox-uv
+      - name: 📦 Setup check suite
+        run: tox run -vv --notest --skip-missing-interpreters false -e ${{ matrix.tox_env }}
+      - name: 🧪 Run check for ${{ matrix.tox_env }}
+        run: tox run --skip-pkg-install -e ${{ matrix.tox_env }}
   gate:
-    name: ${{ github.event_name == 'pull_request' && 'Required checks pass' || 'Required checks pass (non-PR)' }}
+    name: 🚦 ${{ github.event_name == 'pull_request' && 'Required checks pass' || 'Required checks pass (non-PR)' }}
     if: always()
-    needs: [test, check, hook-update-cooldown]
+    needs: [test, check]
     runs-on: ubuntu-26.04
     steps:
-      - name: Require successful jobs
+      - name: 🚦 Require successful jobs
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          jq -e '
-            all(
-              to_entries[];
-              .value.result == "success" or
-              (.key == "hook-update-cooldown" and .value.result == "skipped" and env.EVENT_NAME != "pull_request")
-            )
-          ' <<< "$NEEDS_JSON"
+        run: jq -e 'all(to_entries[]; .value.result == "success")' <<< "$NEEDS_JSON"

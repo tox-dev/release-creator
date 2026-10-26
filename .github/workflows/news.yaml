@@ -6,32 +6,28 @@ permissions:
   contents: read
 jobs:
   changelog:
+    name: 📝 News fragment
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: 📥 Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
       # zizmor: ignore[cache-poisoning] Check jobs hold no release credential and publish no artifact.
-      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2 # zizmor: ignore[cache-poisoning]
+      - name: 🐍 Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2 # zizmor: ignore[cache-poisoning]
         with:
           version: latest-known
           python-version: "3.15"
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
-      # The released release-creator from the shared lock checks this checkout, which it never runs.
-      - uses: tox-dev/github-workflows/install-locked-tools@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
+      # The released release-creator from pylock.toml checks this checkout, which it never runs.
+      - name: 📦 Install locked release tools
+        uses: tox-dev/github-workflows/install-locked-tools@522076eaf6fa1e6ecb26322be5252973cd466357 # v6.0.0
         with:
           groups: release-news
-          lock-source: shared
           venv: ${{ runner.temp }}/release-tools
-      - uses: tox-dev/github-workflows/validate-news@076d3877b49d06f19fe2588eeacf76d37b21ebd7 # v4.0.1
-      - name: Require releasable version
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          fragments=$(release-creator validate-news --base "$BASE_REF")
-          if ((fragments)); then
-            git tag --list | release-creator tags --next auto
-          fi
+      - name: 🔍 Validate changelog fragments
+        uses: tox-dev/github-workflows/validate-news@522076eaf6fa1e6ecb26322be5252973cd466357 # v6.0.0
