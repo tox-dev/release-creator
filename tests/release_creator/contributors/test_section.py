@@ -265,6 +265,36 @@ def test_add_new_contributors_layouts(
 
 
 @pytest.mark.parametrize(
+    ("filename", "heading", "version"),
+    [
+        pytest.param("CHANGELOG.rst", "1.18.4 (2026-10-25)\n===================", "1.18.4", id="rst-date"),
+        pytest.param(
+            "CHANGELOG.rst",
+            "`1.18.4 <https://github.com/tox-dev/example/tree/1.18.4>`_ - 2026-10-25\n"
+            "======================================================================",
+            "1.18.4",
+            id="rst-linked",
+        ),
+        pytest.param("CHANGELOG.rst", "v1.6.4 (2026-10-25)\n===================", "1.6.4", id="rst-v-prefix"),
+        pytest.param("CHANGELOG.md", "## [1.2.3] - 2026-10-25", "1.2.3", id="md-keep-a-changelog"),
+    ],
+)
+def test_add_new_contributors_finds_notes_headings(
+    tmp_path: Path, github: GitHub, filename: str, heading: str, version: str
+) -> None:
+    github({"42": ("alice", "User", "2026-10-20T10:00:00Z")}, set())
+    changelog = tmp_path / filename
+    rst = filename.endswith(".rst")
+    item = "- Add a cache (:pr:`42`)." if rst else "- Add a cache ([#42](https://github.com/tox-dev/example/pull/42))."
+    category = "Added\n-----" if rst else "### Added"
+    changelog.write_text(f"{heading}\n\n{category}\n\n{item}\n")
+
+    add_new_contributors(changelog, version, "tox-dev/example")
+
+    assert "made their first contribution" in changelog.read_text()
+
+
+@pytest.mark.parametrize(
     ("filename", "content", "message"),
     [
         pytest.param("CHANGELOG.txt", "", "unsupported changelog format", id="format"),

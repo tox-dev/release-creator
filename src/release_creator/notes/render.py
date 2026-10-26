@@ -72,23 +72,35 @@ def _finish(notes: str, context: ReleaseContext) -> str:
 
 def _extract_rst_body(changelog: str, context: ReleaseContext) -> str:
     lines = [line for line in changelog.splitlines() if not _is_comparison_line(line)]
+    heading, end = rst_section(lines, context.tag)
+    return render_rst_section("\n".join(lines[heading + 2 : end]), context.tag, context.repository)
+
+
+def rst_section(lines: list[str], tag: str) -> tuple[int, int]:
+    """Locate one version section of a reStructuredText changelog.
+
+    :param lines: reStructuredText changelog lines.
+    :param tag: Release tag or version; a leading ``v`` is ignored.
+    :returns: Index of the version title and the index just past the section's last line. The next version title, or
+        its overline, ends the section.
+    :raises ValueError: The version section is missing or ambiguous.
+    """
     headings = [
         index
         for index in range(len(lines))
         if (match := _rst_version_at(lines, index))
-        and (match["tag"] or match["link_tag"]).removeprefix("v") == context.tag.removeprefix("v")
+        and (match["tag"] or match["link_tag"]).removeprefix("v") == tag.removeprefix("v")
     ]
     if len(headings) != 1:
-        msg = f"expected one changelog section for {context.tag}, found {len(headings)}"
+        msg = f"expected one changelog section for {tag}, found {len(headings)}"
         raise ValueError(msg)
     end = next(
         (index for index in range(headings[0] + 1, len(lines)) if _rst_version_at(lines, index) is not None),
         len(lines),
     )
-    start = headings[0] + 2
     if end < len(lines) and _is_rst_adornment(lines[end - 1]):
         end -= 1
-    return render_rst_section("\n".join(lines[start:end]), context.tag, context.repository)
+    return headings[0], end
 
 
 def _rst_version_at(lines: list[str], index: int) -> re.Match[str] | None:
@@ -329,4 +341,5 @@ __all__ = [
     "markdown_section",
     "render_markdown",
     "render_rst",
+    "rst_section",
 ]

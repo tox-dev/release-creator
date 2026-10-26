@@ -4,7 +4,7 @@ lazy import re
 lazy from pathlib import Path
 
 lazy from release_creator.contributors.lookup import FirstContribution, first_contributions
-lazy from release_creator.notes.render import markdown_section
+lazy from release_creator.notes.render import markdown_section, rst_section
 
 
 def add_new_contributors(changelog: Path, version: str, repository: str, package: str | None = None) -> None:
@@ -48,38 +48,14 @@ def add_new_contributors(changelog: Path, version: str, repository: str, package
 
 
 def _markdown_section(lines: list[str], version: str, package: str | None) -> tuple[int, int]:
-    if package is None:
-        heading = re.compile(rf"## {re.escape(version)}(?: \(.*\))?")
-        starts = [index for index, line in enumerate(lines) if heading.fullmatch(line)]
-        if len(starts) != 1:
-            msg = f"expected one changelog section for {version}, found {len(starts)}"
-            raise ValueError(msg)
-        start = starts[0]
-        end = next((index for index in range(start + 1, len(lines)) if lines[index].startswith("## ")), len(lines))
-    else:
-        start, end = markdown_section(lines, version, package)
+    start, end = markdown_section(lines, version, package)
     while end > start + 1 and (not lines[end - 1].strip() or lines[end - 1].startswith('<a name="release-')):
         end -= 1
     return start, end
 
 
 def _rst_section(lines: list[str], version: str) -> tuple[int, int]:
-    starts = [
-        index
-        for index in range(len(lines) - 1)
-        if lines[index].strip().startswith(f"{version} (") and _adornment(lines[index + 1]) is not None
-    ]
-    if len(starts) != 1:
-        msg = f"expected one changelog section for {version}, found {len(starts)}"
-        raise ValueError(msg)
-    start = starts[0]
-    character = _adornment(lines[start + 1])
-    end = len(lines)
-    for index in range(start + 2, len(lines)):
-        if _adornment(lines[index]) == character:
-            overline = index + 2 < len(lines) and _adornment(lines[index + 2]) == character
-            end = index if overline else index - 1
-            break
+    start, end = rst_section(lines, version)
     while end > start + 2 and (not lines[end - 1].strip() or re.fullmatch(r"\.\. _[^:]+:", lines[end - 1])):
         end -= 1
     return start, end
