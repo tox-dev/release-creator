@@ -6,10 +6,8 @@ lazy from fnmatch import fnmatch
 lazy from pathlib import Path
 lazy from typing import Any
 
-lazy import yaml
-
 lazy from release_creator.explain import counted, explain
-lazy from release_creator.fragments.knope import changeset_parts, knope_kinds, load_knope_package
+lazy from release_creator.fragments.knope import changeset_parts, changeset_versioning, knope_kinds, load_knope_package
 lazy from release_creator.fragments.links import (
     has_hand_written_credit,
     has_hand_written_pull_request_link,
@@ -125,22 +123,10 @@ def changed_changesets(config: Path, base: str) -> int:
             explain(f"Skipped {path.as_posix()} (not a changeset)")
             continue
         content = path.read_text(encoding="utf-8")
+        versioning = changeset_versioning(path, content)
         frontmatter, _, _ = changeset_parts(path, content)
-        try:
-            entries = yaml.safe_load(frontmatter[4:].partition("\n---\n")[0])
-        except yaml.YAMLError as error:
-            msg = f"invalid changeset front matter in {path}"
-            raise ValueError(msg) from error
-        if not isinstance(entries, dict) or not entries:
-            msg = f"empty changeset front matter in {path}"
-            raise ValueError(msg)
-        for package, kind in entries.items():
-            if (
-                not isinstance(package, str)
-                or not package.strip()
-                or not isinstance(kind, str)
-                or kind not in categories
-            ):
+        for package, kind in versioning.items():
+            if not package or kind not in categories:
                 msg = f"unsupported changeset type in {path}: {package}: {kind}"
                 raise ValueError(msg)
         body = content.removeprefix(frontmatter)

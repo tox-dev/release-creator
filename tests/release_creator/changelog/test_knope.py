@@ -62,8 +62,8 @@ def test_render_knope_preview_omits_empty_draft(knope_files: tuple[Path, Path, P
     ("content", "error"),
     [
         pytest.param("# Missing front matter\n", "missing YAML front matter", id="missing-frontmatter"),
-        pytest.param("---\n[]\n---\n\n# Summary\n", "empty changeset front matter", id="nonmapping-frontmatter"),
-        pytest.param("---\ndefault: [\n---\n\n# Summary\n", "invalid changeset front matter", id="invalid-yaml"),
+        pytest.param("---\n---\n\n# Summary\n", "empty changeset front matter", id="empty-frontmatter"),
+        pytest.param("---\ndefault\n---\n\n# Summary\n", "invalid changeset front matter", id="no-colon"),
         pytest.param("---\ndefault: bogus\n---\n\n# Summary\n", "unsupported changeset type", id="bad-type"),
         pytest.param("---\ndefault: security\n---\n\n# \n", "empty changeset summary", id="empty-summary"),
     ],

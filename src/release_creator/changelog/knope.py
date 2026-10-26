@@ -2,11 +2,15 @@
 
 lazy from pathlib import Path
 
-lazy import yaml
-
 lazy from release_creator.anchors.names import draft_anchor
 lazy from release_creator.explain import counted, explain
-lazy from release_creator.fragments.knope import changeset_parts, knope_kinds, knope_sections, load_knope_package
+lazy from release_creator.fragments.knope import (
+    changeset_parts,
+    changeset_versioning,
+    knope_kinds,
+    knope_sections,
+    load_knope_package,
+)
 lazy from release_creator.fragments.names import pending_changesets
 
 
@@ -56,18 +60,12 @@ def render_knope_preview(changelog: Path, config: Path, fragments: Path) -> str:
 
 
 def _changeset_items(changeset: Path, categories: dict[str, str]) -> list[tuple[str, str]]:
-    frontmatter, heading, remainder = changeset_parts(changeset, changeset.read_text(encoding="utf-8"))
-    try:
-        entries = yaml.safe_load(frontmatter[4:].partition("\n---\n")[0])
-    except yaml.YAMLError as error:
-        msg = f"invalid changeset front matter in {changeset}"
-        raise ValueError(msg) from error
-    if not isinstance(entries, dict) or not entries:
-        msg = f"empty changeset front matter in {changeset}"
-        raise ValueError(msg)
+    content = changeset.read_text(encoding="utf-8")
+    versioning = changeset_versioning(changeset, content)
+    _, heading, remainder = changeset_parts(changeset, content)
     result: list[tuple[str, str]] = []
-    for kind in entries.values():
-        if not isinstance(kind, str) or kind not in categories:
+    for kind in versioning.values():
+        if kind not in categories:
             msg = f"unsupported changeset type in {changeset}: {kind}"
             raise ValueError(msg)
         body = remainder.removeprefix("\n").rstrip()
