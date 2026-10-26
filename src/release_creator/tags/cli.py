@@ -4,6 +4,7 @@ lazy import argparse
 lazy import sys
 lazy from pathlib import Path
 
+lazy from release_creator.explain import counted, explain
 lazy from release_creator.fragments.names import pending_fragments
 lazy from release_creator.tags.select import next_tag, previous_tag
 
@@ -32,7 +33,13 @@ def _select(args: argparse.Namespace) -> None:
         if args.tag is not None:
             msg = "omit the tag when calculating the next version"
             raise ValueError(msg)
-        directory = args.directory or (Path("changelog.d") / args.package if args.package else Path("changelog.d"))
+        if args.directory is not None:
+            directory, source = args.directory, "from --directory"
+        elif args.package:
+            directory, source = Path("changelog.d") / args.package, f"default for package {args.package}"
+        else:
+            directory, source = Path("changelog.d"), "default"
+        explain(f"Fragment directory: {directory} ({source})")
         version = next_tag(
             args.next,
             _scoped_tags(sys.stdin.read().splitlines(), args.package),
@@ -59,7 +66,9 @@ def _scoped_tags(tags: list[str], package: str | None) -> list[str]:
     if package is None:
         return tags
     prefix = f"{package}/"
-    return [tag.removeprefix(prefix) for tag in tags if tag.startswith(prefix)]
+    scoped = [tag.removeprefix(prefix) for tag in tags if tag.startswith(prefix)]
+    explain(f"Package scope: {package} ({len(scoped)} of {counted(len(tags), 'tag')} start with {prefix})")
+    return scoped
 
 
 __all__ = [

@@ -4,6 +4,7 @@ lazy import re
 lazy from pathlib import Path
 
 lazy from release_creator.contributors.lookup import FirstContribution, first_contributions
+lazy from release_creator.explain import counted, explain
 lazy from release_creator.notes.render import markdown_section, rst_section
 
 
@@ -21,7 +22,15 @@ def add_new_contributors(changelog: Path, version: str, repository: str, package
     section = "\n".join(lines[start:end])
     pattern = r":(?:pr|pull):`(\d+)`" if rst else rf"https://github\.com/{re.escape(repository)}/pull/(\d+)"
     numbers = list(dict.fromkeys(re.findall(pattern, section)))
-    if not numbers or not (contributions := first_contributions(repository, numbers)):
+    if not numbers:
+        explain(f"New Contributors: none for {version} (its section in {changelog} links no pull requests)")
+        return
+    explain(
+        f"Checking {counted(len(numbers), 'pull request')} from the {version} section of {changelog}: "
+        f"{', '.join(f'#{number}' for number in numbers)}"
+    )
+    if not (contributions := first_contributions(repository, numbers)):
+        explain(f"New Contributors: none for {version} (no first-time author among its pull requests)")
         return
     release = f"{package}-{version}" if package is not None else version
     anchor = f"release-{release.replace('.', '-')}-new-contributors"
@@ -35,6 +44,7 @@ def add_new_contributors(changelog: Path, version: str, repository: str, package
         tail.pop(0)
     updated = [*lines[:end], "", *block, *(["", *tail] if tail else [])]
     changelog.write_text("\n".join(updated) + "\n", encoding="utf-8")
+    explain(f"New Contributors: {', '.join(f'@{entry.login} (#{entry.number})' for entry in contributions)}")
 
 
 def _markdown_section(lines: list[str], version: str, package: str | None) -> tuple[int, int]:

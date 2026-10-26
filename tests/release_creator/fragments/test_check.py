@@ -458,6 +458,66 @@ def test_validate_news_cli_reports_count(
     assert capsys.readouterr().out == "1\n"
 
 
+def test_validate_news_explains_on_stderr(
+    news_repository: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (news_repository / "changelog.d" / "+topic.feature.md").write_text("Add a feature.\n", encoding="utf-8")
+    (news_repository / "changelog.d" / ".gitkeep").touch()
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+    monkeypatch.setattr(sys, "argv", ["release-creator", "validate-news", "--base", "main"])
+
+    main()
+
+    lines = capsys.readouterr().err.splitlines()
+    assert lines[:5] + lines[-3:] == [
+        "Towncrier config: pyproject.toml",
+        "Towncrier layout check skipped: the config matches origin/main",
+        "Added or modified in changelog.d since origin/main: 2 files",
+        "Valid fragment: changelog.d/+topic.feature.md",
+        "Skipped changelog.d/.gitkeep (ignored name)",
+        f"1. {news_repository / 'changelog.d' / '+topic.feature.md'}",
+        "Towncrier check passed against origin/main",
+        "Validated 1 changed fragment against origin/main",
+    ]
+
+
+def test_validate_news_keeps_stdout_to_the_count(
+    news_repository: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (news_repository / "changelog.d" / "+topic.feature.md").write_text("Add a feature.\n", encoding="utf-8")
+    (news_repository / "changelog.d" / ".gitkeep").touch()
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+    monkeypatch.setattr(sys, "argv", ["release-creator", "validate-news", "--base", "main"])
+
+    main()
+
+    assert capsys.readouterr().out == "1\n"
+
+
+def test_validate_news_explains_skipped_towncrier_check(
+    news_repository: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (news_repository / "changelog.d" / "nested").mkdir()
+    (news_repository / "changelog.d" / "nested" / "+topic.feature.md").write_text("Add a feature.\n")
+    (news_repository / "towncrier.toml").write_text(
+        (news_repository / "pyproject.toml").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+
+    changed_fragments(news_repository / "pyproject.toml", "main")
+
+    assert capsys.readouterr().err.splitlines() == [
+        f"Towncrier config: {news_repository / 'towncrier.toml'} (found next to {news_repository / 'pyproject.toml'})",
+        "Towncrier layout checked: the config differs from origin/main",
+        "Added or modified in changelog.d since origin/main: 1 file",
+        "Skipped changelog.d/nested/+topic.feature.md (not directly in changelog.d)",
+        "Towncrier check skipped: no changed fragments",
+    ]
+
+
 @pytest.mark.parametrize(
     ("content", "count", "error"),
     [
@@ -553,6 +613,27 @@ def test_validate_news_cli_reports_knope_count(
     main()
 
     assert capsys.readouterr().out == "1\n"
+
+
+def test_validate_news_explains_knope_on_stderr(
+    news_repository: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (news_repository / ".changeset").mkdir()
+    (news_repository / "knope.toml").write_text("[package]\n", encoding="utf-8")
+    (news_repository / ".changeset" / "README.md").write_text("Changeset guide.\n")
+    (news_repository / ".changeset" / "fix.md").write_text("---\ndefault: patch\n---\n\n# Fix a bug\n")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+    monkeypatch.setattr(sys, "argv", ["release-creator", "validate-news", "--format", "knope", "--base", "main"])
+
+    main()
+
+    assert capsys.readouterr().err.splitlines() == [
+        "Added or modified in .changeset since origin/main: 2 files",
+        "Skipped .changeset/README.md (not a changeset)",
+        "Valid changeset: .changeset/fix.md",
+        "Validated 1 changed changeset against origin/main",
+    ]
 
 
 def test_changed_changesets_skips_directory_guide(news_repository: Path) -> None:

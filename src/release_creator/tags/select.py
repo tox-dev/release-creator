@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+lazy from collections import Counter
 lazy from pathlib import Path
 
 lazy from packaging.version import InvalidVersion, Version
 
+lazy from release_creator.explain import counted, explain
 lazy from release_creator.fragments.names import fragment_category
 
 
@@ -18,25 +20,33 @@ def next_tag(bump: str, tags: list[str], fragments: list[str], prefix: str = "")
     :param prefix: Optional prefix for the new tag.
     :returns: The next major.minor.patch version, with the requested prefix.
     """
-    versions: list[Version] = []
-    for tag in tags:
-        try:
-            versions.append(parse_tag(tag))
-        except ValueError:
-            continue
-    current = max(versions, default=Version("0.0.0"))
+    if releases := _release_versions(tags):
+        current, current_tag = max(releases)
+        explain(f"Current version: {current_tag} (newest of {counted(len(releases), 'release tag')})")
+    else:
+        current, current_tag = Version("0.0.0"), "0.0.0"
+        explain("Current version: 0.0.0 (no release tags yet)")
+    reason = f"{bump} bump requested"
     if bump == "auto":
-        bump = _auto_bump(fragments)
+        bump, reason = _auto_bump(fragments)
     if _finalizes_prerelease(current, bump):
-        return f"{prefix}{current.base_version}"
+        version = f"{prefix}{current.base_version}"
+        explain(f"Next version: {version} ({reason}, finalizing prerelease {current_tag})")
+        return version
     major, minor, patch = current.release
-    version = {"major": (major + 1, 0, 0), "minor": (major, minor + 1, 0), "patch": (major, minor, patch + 1)}[bump]
-    return f"{prefix}{'.'.join(map(str, version))}"
+    numbers = {"major": (major + 1, 0, 0), "minor": (major, minor + 1, 0), "patch": (major, minor, patch + 1)}[bump]
+    version = f"{prefix}{'.'.join(map(str, numbers))}"
+    explain(f"Next version: {version} ({reason})")
+    return version
 
 
-def _auto_bump(fragments: list[str]) -> str:
-    categories = {fragment_category(Path(fragment)) for fragment in fragments}
-    return "major" if categories & {"breaking", "removal"} else "minor" if "feature" in categories else "patch"
+def _auto_bump(fragments: list[str]) -> tuple[str, str]:
+    kinds = Counter(fragment_category(Path(fragment)) or "unrecognized" for fragment in fragments)
+    bump = "major" if kinds.keys() & {"breaking", "removal"} else "minor" if "feature" in kinds else "patch"
+    if not fragments:
+        return bump, f"{bump} bump: no pending fragments"
+    found = ", ".join(f"{number} {kind}" for kind, number in sorted(kinds.items()))
+    return bump, f"{bump} bump from {counted(len(fragments), 'pending fragment')}: {found}"
 
 
 def _finalizes_prerelease(current: Version, bump: str) -> bool:
@@ -56,16 +66,27 @@ def previous_tag(tag: str, tags: list[str]) -> str | None:
     try:
         target = parse_tag(tag)
     except ValueError:
+        explain(f"Previous release tag: none ({tag} is not a major.minor.patch tag)")
         return None
-    candidates: list[tuple[Version, str]] = []
-    for candidate in tags:
+    if not (candidates := [(version, name) for version, name in _release_versions(tags) if version < target]):
+        explain(f"Previous release tag: none (no release tag before {tag})")
+        return None
+    previous = max(candidates)[1]
+    explain(f"Previous release tag: {previous} (newest release tag before {tag})")
+    return previous
+
+
+def _release_versions(tags: list[str]) -> list[tuple[Version, str]]:
+    releases: list[tuple[Version, str]] = []
+    ignored: list[str] = []
+    for tag in tags:
         try:
-            version = parse_tag(candidate)
+            releases.append((parse_tag(tag), tag))
         except ValueError:
-            continue
-        if version < target:
-            candidates.append((version, candidate))
-    return max(candidates)[1] if candidates else None
+            ignored.append(tag)
+    if ignored:
+        explain(f"Ignored {counted(len(ignored), 'non-release tag')} (not major.minor.patch): {', '.join(ignored)}")
+    return releases
 
 
 def parse_tag(tag: str) -> Version:

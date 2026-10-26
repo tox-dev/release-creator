@@ -13,6 +13,7 @@ lazy from typing import Final, Literal
 lazy from markdown_it import MarkdownIt
 lazy from markdown_it.token import Token
 
+lazy from release_creator.explain import counted, explain
 lazy from release_creator.fragments.git import FragmentCommit
 lazy from release_creator.fragments.knope import changeset_parts
 lazy from release_creator.fragments.names import pending_changesets, pending_fragments
@@ -69,12 +70,13 @@ def add_pull_request_links(
     A fragment without a pull request is credited to its introducing commit's author, and one without either, or whose
     author gets no credit, is left unchanged.
     """
+    fragments = pending_changesets(directory) if mode == "knope" else pending_fragments(directory)
+    if not fragments:
+        explain(f"No pending fragments in {directory}, nothing to link")
+        return
+    explain(f"Linking {counted(len(fragments), 'pending fragment')} in {directory} to {repository} pull requests")
     updates: list[tuple[Path, str]] = [
-        (
-            fragment,
-            _link_fragment(fragment, repository, pull_requests, commits, mode=mode),
-        )
-        for fragment in (pending_changesets(directory) if mode == "knope" else pending_fragments(directory))
+        (fragment, _link_fragment(fragment, repository, pull_requests, commits, mode=mode)) for fragment in fragments
     ]
     for fragment, content in updates:
         fragment.write_text(content, encoding="utf-8")
@@ -89,11 +91,21 @@ def _link_fragment(
     mode: _LinkMode,
 ) -> str:
     content = fragment.read_text(encoding="utf-8")
+    commit = commits.get(fragment.name)
     if (pull_request := pull_requests.get(fragment.name)) is not None:
         number, credited = pull_request.number, pull_request.credits
-    elif (commit := commits.get(fragment.name)) is not None and commit.credits:
+    elif commit is not None and commit.credits:
         number, credited = None, commit.credits
+        explain(
+            f"Credited {fragment.name} to {_credit_names(credited)} "
+            f"(commit {commit.sha[:7]} has no merged pull request)"
+        )
     else:
+        explain(
+            f"Kept {fragment.name}: no introducing commit found"
+            if commit is None
+            else f"Kept {fragment.name}: commit {commit.sha[:7]} has no merged pull request and an uncredited author"
+        )
         return content
     target = _LinkTarget(
         fragment=fragment,
@@ -104,8 +116,24 @@ def _link_fragment(
     )
     if mode == "knope":
         frontmatter, heading, remainder = changeset_parts(fragment, content)
-        return f"{frontmatter}# {_link_text(heading, target)}{remainder}"
-    return f"{_link_text(content.rstrip(), target)}\n"
+        linked = f"{frontmatter}# {_link_text(heading, target)}{remainder}"
+    else:
+        linked = f"{_link_text(content.rstrip(), target)}\n"
+    if number is not None:
+        explain(_pull_request_outcome(fragment.name, number, credited, changed=linked != content))
+    return linked
+
+
+def _pull_request_outcome(name: str, number: str, credited: tuple[PullRequestCredit, ...], *, changed: bool) -> str:
+    if not changed:
+        return f"Kept {name}: already links #{number}"
+    if not credited:
+        return f"Linked {name} -> #{number} (no credit: only AI assistants authored it)"
+    return f"Linked {name} -> #{number} (credit {_credit_names(credited)})"
+
+
+def _credit_names(credited: tuple[PullRequestCredit, ...]) -> str:
+    return ", ".join(f"@{credit.name}" if credit.linked else credit.name for credit in credited)
 
 
 @dataclass(frozen=True, kw_only=True)

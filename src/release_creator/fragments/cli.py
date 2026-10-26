@@ -4,6 +4,7 @@ lazy import argparse
 lazy import sys
 lazy from pathlib import Path
 
+lazy from release_creator.explain import counted, explain
 lazy from release_creator.fragments.check import changed_changesets, changed_fragments
 lazy from release_creator.fragments.git import fragment_commits_from_git, is_shallow_clone
 lazy from release_creator.fragments.links import add_pull_request_links
@@ -25,8 +26,14 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
 
 def _link(args: argparse.Namespace) -> None:
     knope = args.format == "knope"
-    directory = args.directory or Path(".changeset" if knope else "changelog.d")
-    commits = {} if is_shallow_clone(directory) else fragment_commits_from_git(directory, knope=knope)
+    if args.directory is not None:
+        directory, source = args.directory, "from --directory"
+    else:
+        directory, source = Path(".changeset" if knope else "changelog.d"), f"default for {args.format}"
+    explain(f"Fragment directory: {directory} ({source})")
+    if shallow := is_shallow_clone(directory):
+        explain("Shallow clone: the history that added the fragments is cut off, so they stay unchanged")
+    commits = {} if shallow else fragment_commits_from_git(directory, knope=knope)
     pull_requests = fragment_pull_requests(args.repository, {name: commit.sha for name, commit in commits.items()})
     mode = "knope" if knope else "towncrier"
     add_pull_request_links(directory, args.repository, pull_requests, commits=commits, mode=mode)
@@ -35,7 +42,11 @@ def _link(args: argparse.Namespace) -> None:
 def _check(args: argparse.Namespace) -> None:
     knope = args.format == "knope"
     config = Path("knope.toml" if knope else "pyproject.toml")
-    sys.stdout.write(f"{(changed_changesets if knope else changed_fragments)(config, args.base)}\n")
+    count = (changed_changesets if knope else changed_fragments)(config, args.base)
+    explain(
+        f"Validated {counted(count, 'changed changeset' if knope else 'changed fragment')} against origin/{args.base}"
+    )
+    sys.stdout.write(f"{count}\n")
 
 
 __all__ = [

@@ -4,6 +4,7 @@ lazy import argparse
 lazy import sys
 lazy from pathlib import Path
 
+lazy from release_creator.explain import explain
 lazy from release_creator.marketplace.compare import reconcile_marketplace
 
 
@@ -23,9 +24,12 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
 def _reconcile(args: argparse.Namespace) -> None:
     publish = reconcile_marketplace(args.plugin_id, args.version, args.archive, args.mode)
     result = f"publish={str(publish).lower()}\n"
-    if args.github_output is not None:
+    if args.github_output is None:
+        explain("GitHub step output: not written (no --github-output)")
+    else:
         with args.github_output.open("a", encoding="utf-8") as stream:
             stream.write(result)
+        explain(f"GitHub step output: appended {result.strip()} to {args.github_output}")
     sys.stdout.write(result)
 
 

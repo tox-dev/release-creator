@@ -4,6 +4,7 @@ lazy import argparse
 lazy from pathlib import Path
 
 lazy from release_creator.changelog.knope import render_knope_preview
+lazy from release_creator.explain import explain
 
 
 def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -18,6 +19,7 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
 
 def _render(args: argparse.Namespace) -> None:
     args.output.write_text(render_knope_preview(args.changelog, args.config, args.fragments), encoding="utf-8")
+    explain(f"Wrote {args.output} from {args.changelog}")
 
 
 __all__ = [

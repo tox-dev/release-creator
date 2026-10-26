@@ -8,6 +8,7 @@ lazy from typing import Any
 
 lazy import yaml
 
+lazy from release_creator.explain import counted, explain
 lazy from release_creator.fragments.knope import changeset_parts, knope_kinds, load_knope_package
 lazy from release_creator.fragments.links import (
     has_hand_written_credit,
@@ -30,9 +31,11 @@ def changed_fragments(config: Path, base: str) -> int:
     """
     config, directory, suffix, categories, ignored = _towncrier_settings(config, base)
     count = 0
-    for path in _git_paths(directory, ["--diff-filter=AM", "--no-renames", f"origin/{base}...HEAD"]):
+    for path in _git_paths(directory, base):
         count += _validate_changed_fragment(path, directory, suffix, categories, ignored)
-    if count:
+    if not count:
+        explain("Towncrier check skipped: no changed fragments")
+    else:
         root = run_text(["git", "rev-parse", "--show-toplevel"])
         if root.returncode:
             msg = root.stderr.strip() or "could not locate repository root"
@@ -53,13 +56,19 @@ def changed_fragments(config: Path, base: str) -> int:
         if result.returncode:
             msg = result.stderr.strip() or result.stdout.strip()
             raise ValueError(msg)
+        sys.stderr.write(f"{result.stdout}{result.stderr}")
+        explain(f"Towncrier check passed against origin/{base}")
     return count
 
 
 def _validate_changed_fragment(
     path: Path, directory: Path, suffix: str, categories: set[str], ignored: set[str]
 ) -> int:
-    if path.parent != directory or any(fnmatch(path.name.lower(), pattern) for pattern in ignored):
+    if path.parent != directory:
+        explain(f"Skipped {path} (not directly in {directory})")
+        return 0
+    if any(fnmatch(path.name.lower(), pattern) for pattern in ignored):
+        explain(f"Skipped {path} (ignored name)")
         return 0
     if path.suffix != suffix:
         kind = " extension" if set(path.name.split(".")[1:]) & categories else ""
@@ -77,6 +86,7 @@ def _validate_changed_fragment(
     validate_towncrier_fragment(content, path)
     _reject_release_breaking_text(content, suffix, path)
     _reject_hand_written_attribution(content, suffix, path)
+    explain(f"Valid fragment: {path}")
     return 1
 
 
@@ -110,8 +120,9 @@ def changed_changesets(config: Path, base: str) -> int:
     categories = knope_kinds(knope)
     directory = Path(".changeset")
     count = 0
-    for path in _git_paths(directory, ["--diff-filter=AM", "--no-renames", f"origin/{base}...HEAD"]):
+    for path in _git_paths(directory, base):
         if path.parent != directory or path.suffix != ".md" or path.name == "README.md":
+            explain(f"Skipped {path} (not a changeset)")
             continue
         content = path.read_text(encoding="utf-8")
         frontmatter, _, _ = changeset_parts(path, content)
@@ -135,16 +146,23 @@ def changed_changesets(config: Path, base: str) -> int:
         body = content.removeprefix(frontmatter)
         _reject_release_breaking_text(body, ".md", path)
         _reject_hand_written_attribution(body, ".md", path)
+        explain(f"Valid changeset: {path}")
         count += 1
     return count
 
 
 def _towncrier_settings(config: Path, base: str) -> tuple[Path, Path, str, set[str], set[str]]:
     if config.name == "pyproject.toml" and (towncrier_config := config.with_name("towncrier.toml")).is_file():
+        explain(f"Towncrier config: {towncrier_config} (found next to {config})")
         config = towncrier_config
+    else:
+        explain(f"Towncrier config: {config}")
     towncrier = _towncrier_table(config.read_text(encoding="utf-8"))
     if _towncrier_changed(config, towncrier, base):
+        explain(f"Towncrier layout checked: the config differs from origin/{base}")
         _reject_unsupported_towncrier_layout(config, towncrier)
+    else:
+        explain(f"Towncrier layout check skipped: the config matches origin/{base}")
     categories = (
         {str(name) for name in towncrier["fragment"]}
         if "fragment" in towncrier
@@ -183,12 +201,25 @@ def _reject_unsupported_towncrier_layout(config: Path, towncrier: dict[str, Any]
         raise ValueError(msg)
 
 
-def _git_paths(directory: Path, options: list[str]) -> list[Path]:
-    result = run_text(["git", "diff", "--relative", "--name-only", "-z", *options, "--", str(directory)])
+def _git_paths(directory: Path, base: str) -> list[Path]:
+    result = run_text([
+        "git",
+        "diff",
+        "--relative",
+        "--name-only",
+        "-z",
+        "--diff-filter=AM",
+        "--no-renames",
+        f"origin/{base}...HEAD",
+        "--",
+        str(directory),
+    ])
     if result.returncode:
         msg = result.stderr.strip() or "could not inspect changelog fragments"
         raise ValueError(msg)
-    return [Path(filename) for filename in result.stdout.strip("\0").split("\0") if filename]
+    paths = [Path(filename) for filename in result.stdout.strip("\0").split("\0") if filename]
+    explain(f"Added or modified in {directory} since origin/{base}: {counted(len(paths), 'file')}")
+    return paths
 
 
 __all__ = [

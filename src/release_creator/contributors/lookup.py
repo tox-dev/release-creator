@@ -7,6 +7,7 @@ lazy import json
 lazy from dataclasses import dataclass
 lazy from typing import Final
 
+lazy from release_creator.explain import explain
 lazy from release_creator.fragments.pull_requests import AI_ASSISTANT_LOGINS, github_account
 lazy from release_creator.process import run_text
 
@@ -21,10 +22,20 @@ def first_contributions(repository: str, numbers: list[str]) -> list[FirstContri
     :returns: First contributions, ordered by merge time.
     """
     earliest: dict[str, FirstContribution] = {}
+    others: dict[str, list[str]] = {}
     for contribution in _merged_pulls(repository, numbers):
         key = contribution.login.casefold()
         if key not in earliest or contribution.merged_at < earliest[key].merged_at:
+            if key in earliest:
+                others.setdefault(key, []).append(f"#{earliest[key].number}")
             earliest[key] = contribution
+        else:
+            others.setdefault(key, []).append(f"#{contribution.number}")
+    if others:
+        repeated = ", ".join(
+            f"@{earliest[key].login} #{earliest[key].number} (also {', '.join(rest)})" for key, rest in others.items()
+        )
+        explain(f"Counting each author's earliest pull request: {repeated}")
     candidates = sorted(earliest.values(), key=lambda contribution: contribution.merged_at)
     counts = _graphql(
         [
@@ -39,7 +50,16 @@ def first_contributions(repository: str, numbers: list[str]) -> list[FirstContri
         ],
         "",
     )
-    return [candidate for index, candidate in enumerate(candidates) if _issue_count(counts, f"s{index}") == 0]
+    first: list[FirstContribution] = []
+    returning: list[str] = []
+    for index, candidate in enumerate(candidates):
+        if _issue_count(counts, f"s{index}"):
+            returning.append(f"@{candidate.login}")
+        else:
+            first.append(candidate)
+    if returning:
+        explain(f"Returning contributors: {', '.join(returning)} (merged a pull request before this release)")
+    return first
 
 
 def _search(repository: str, candidate: FirstContribution) -> str:
@@ -59,19 +79,30 @@ def _merged_pulls(repository: str, numbers: list[str]) -> list[FirstContribution
         f"repository(owner: {json.dumps(owner)}, name: {json.dumps(name)})",
     )
     contributions: list[FirstContribution] = []
+    unmerged: list[str] = []
+    automated: list[str] = []
     for number in numbers:
         pull = pulls.get(f"p{number}")
         if not isinstance(pull, dict) or not isinstance(author := pull.get("author"), dict | None):
             msg = f"invalid pull request response for #{number}"
             raise TypeError(msg)
         if (merged_at := pull.get("mergedAt")) is None:
+            unmerged.append(f"#{number}")
             continue
         if not isinstance(merged_at, str):
             msg = f"invalid merge time for pull request #{number}"
             raise TypeError(msg)
         account = github_account(author, int(number))
-        if not account.is_bot and account.handle.casefold() not in AI_ASSISTANT_LOGINS:
+        if account.is_bot:
+            automated.append(f"#{number} @{account.handle} (bot)")
+        elif account.handle.casefold() in AI_ASSISTANT_LOGINS:
+            automated.append(f"#{number} @{account.handle} (AI assistant)")
+        else:
             contributions.append(FirstContribution(login=account.handle, number=number, merged_at=merged_at))
+    if unmerged:
+        explain(f"Skipped unmerged pull requests: {', '.join(unmerged)}")
+    if automated:
+        explain(f"Skipped pull requests by bots and AI assistants: {', '.join(automated)}")
     return contributions
 
 

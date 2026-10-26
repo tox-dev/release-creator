@@ -12,6 +12,8 @@ lazy from urllib.parse import urlencode
 lazy from urllib.request import Request, urlopen
 lazy from zipfile import BadZipFile, ZipFile
 
+lazy from release_creator.explain import counted, explain
+
 
 def reconcile_marketplace(plugin_id: str, version: str, archive: Path, mode: Literal["stage", "verify"]) -> bool:
     """Compare ZIP members so Marketplace recompression does not affect release verification.
@@ -30,6 +32,7 @@ def reconcile_marketplace(plugin_id: str, version: str, archive: Path, mode: Lit
     except BadZipFile as error:
         msg = f"{error}: {archive}"
         raise BadZipFile(msg) from error
+    explain(f"Signed ZIP: {archive} has {counted(len(local), 'member')}")
     request = Request(
         f"https://plugins.jetbrains.com/plugin/download?{urlencode({'pluginId': plugin_id, 'version': version})}",
         headers={"Accept": "application/zip", "Cache-Control": "no-cache"},
@@ -42,10 +45,12 @@ def reconcile_marketplace(plugin_id: str, version: str, archive: Path, mode: Lit
         if mode == "verify":
             msg = f"Marketplace has no visible version {version} for {plugin_id}"
             raise ValueError(msg) from error
+        explain(f"Marketplace: no visible version {version} of {plugin_id}, so it needs publishing")
         return True
     if remote != local:
         msg = f"Marketplace archive differs from the signed plugin ZIP for {plugin_id} {version}"
         raise ValueError(msg)
+    explain(f"Marketplace: version {version} of {plugin_id} matches the signed ZIP, so it is already published")
     return False
 
 
