@@ -339,6 +339,14 @@ def test_render_rst_checks_credit_before_pull_request() -> None:
     assert "Patch by @alice. ([#42](https://github.com/tox-dev/example/pull/42))" in result
 
 
+def test_render_rst_reads_role_names_case_insensitively() -> None:
+    changelog = "1.2.3 (2026-10-23)\n==================\n\nAdded\n-----\n\n- Patch by :User:`alice`. (:PR:`42`)\n"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert "Patch by @alice. ([#42](https://github.com/tox-dev/example/pull/42))" in result
+
+
 def test_render_markdown_checks_shared_credit_for_multiple_pull_requests() -> None:
     changelog = (
         "## 1.2.3 (today)\n\n### Added\n\n"

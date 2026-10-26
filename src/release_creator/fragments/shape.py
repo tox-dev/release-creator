@@ -58,18 +58,22 @@ def validate_towncrier_fragment(content: str, fragment: Path) -> None:
 
 
 def markdown_visible_children(tokens: list[Token]) -> list[tuple[Token | None, int]]:
-    """Literal HTML text cannot establish visible release attribution."""
+    """Literal HTML text cannot establish visible release attribution.
+
+    An HTML block yields one ``html_block`` token whose children are its visible tags and text.
+    """
     visible: list[tuple[Token | None, int]] = []
     hidden: list[str] = []
     block_parser = _BlockLiteralParser(hidden)
     has_inline = False
     for token in tokens:
+        end_line = token.map[1] if token.map is not None else 0
         if token.type == "html_block":
             _feed_html_block(block_parser, token.content)
+            visible.append((Token("html_block", "", 0, children=block_parser.take_visible()), end_line))
             continue
         if token.type != "inline":
             continue
-        end_line = token.map[1] if token.map is not None else 0
         if has_inline:
             visible.append((None, end_line))
         has_inline = True
@@ -121,18 +125,32 @@ class _BlockLiteralParser(HTMLParser):
     def __init__(self, hidden: list[str]) -> None:
         super().__init__()
         self._hidden = hidden
+        self._visible: list[Token] = []
+
+    def take_visible(self) -> list[Token]:
+        visible, self._visible = self._visible, []
+        return visible
 
     @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:  # Required callback signature.
-        _update_literal_stack(cast("str", self.get_starttag_text()), self._hidden)
+        self._tag(cast("str", self.get_starttag_text()))
 
     @override
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:  # Required callback signature.
-        _update_literal_stack(cast("str", self.get_starttag_text()), self._hidden)
+        self._tag(cast("str", self.get_starttag_text()))
 
     @override
     def handle_endtag(self, tag: str) -> None:
-        _update_literal_stack(f"</{tag}>", self._hidden)
+        self._tag(f"</{tag}>")
+
+    @override
+    def handle_data(self, data: str) -> None:
+        if not self._hidden:
+            self._visible.append(Token("text", "", 0, content=data))
+
+    def _tag(self, markup: str) -> None:
+        if not _update_literal_stack(markup, self._hidden) and not self._hidden:
+            self._visible.append(Token("html_inline", "", 0, content=markup))
 
 
 __all__ = [

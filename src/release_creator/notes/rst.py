@@ -50,9 +50,9 @@ def register_roles() -> None:
         **ignored: dict[str, str] | list[str],
     ) -> tuple[list[nodes.Node], list[nodes.system_message]]:
         del ignored
-        if name == "user":
+        if (role := name.lower()) == "user":
             return [nodes.Text(f"@{text}")], []
-        if name.lower() == "pep":
+        if role == "pep":
             number, _, anchor = text.partition("#")
             if not number.isdecimal():
                 msg = f"invalid PEP number: {text}"
@@ -62,7 +62,7 @@ def register_roles() -> None:
         if not text.isdecimal():
             msg = f"invalid {name} number: {text}"
             raise ValueError(msg)
-        path = "pull" if name in {"pr", "pull"} else "issues"
+        path = "pull" if role in {"pr", "pull"} else "issues"
         repository = inliner.document.settings.release_repository
         return [nodes.reference(rawtext, f"#{text}", refuri=f"https://github.com/{repository}/{path}/{text}")], []
 

@@ -206,6 +206,31 @@ def test_changed_fragments_rejects_rst_structure(news_repository: Path, content:
         pytest.param(".rst", "Fix #5.\n", "pull request link", id="rst-bare-reference"),
         pytest.param(".rst", "Fix ``#5`` and ``by @alice``.\n", "", id="rst-bare-forms-in-literal"),
         pytest.param(".rst", "Fix it::\n\n    by @alice :user:`alice` #5\n", "", id="rst-literal-block"),
+        pytest.param(".md", "Add a feature (by @alice).\n", "author credit", id="markdown-parenthesized-by"),
+        pytest.param(".md", "Add a feature. By @alice.\n", "author credit", id="markdown-capitalized-by"),
+        pytest.param(".md", "Thanks :user:`renovate[bot]`.\n", "author credit", id="markdown-user-role-bot"),
+        pytest.param(".md", "Thanks :User:`alice`.\n", "author credit", id="markdown-user-role-case"),
+        pytest.param(".md", "Add a feature :PR:`5`.\n", "pull request link", id="markdown-pr-role-case"),
+        pytest.param(
+            ".md", "Add a feature by [`@alice`](https://github.com/alice).\n", "author credit", id="markdown-code-label"
+        ),
+        pytest.param(
+            ".md",
+            'Add a feature (<a href="https://github.com/tox-dev/example/pull/5">PR</a>).\n',
+            "pull request link",
+            id="markdown-html-anchor",
+        ),
+        pytest.param(".md", "Add a feature.\n\n<p>see #5</p>\n", "pull request link", id="markdown-html-block"),
+        pytest.param(".md", "Add a feature.\n\n<p><code>#5</code></p>\n", "", id="markdown-html-block-code"),
+        pytest.param(".md", "Add a feature.\n\n<!-- see #5 -->\n", "", id="markdown-html-comment"),
+        pytest.param(".rst", "Add a feature (by @alice).\n", "author credit", id="rst-parenthesized-by"),
+        pytest.param(".rst", "Add a feature. By @alice.\n", "author credit", id="rst-capitalized-by"),
+        pytest.param(".rst", "Thanks :user:`Alice <alice>`.\n", "author credit", id="rst-user-role-titled"),
+        pytest.param(".rst", "Thanks :user:`renovate[bot]`.\n", "author credit", id="rst-user-role-bot"),
+        pytest.param(".rst", "Thanks :User:`alice`.\n", "author credit", id="rst-user-role-case"),
+        pytest.param(".rst", "Add a feature :PR:`5`.\n", "pull request link", id="rst-pr-role-case"),
+        pytest.param(".rst", "Add a feature :Pull:`5`.\n", "pull request link", id="rst-pull-role-case"),
+        pytest.param(".rst", "Document ``(by @alice)`` and ``:PR:`5```.\n", "", id="rst-literal-new-forms"),
     ],
 )
 def test_changed_fragments_rejects_hand_written_attribution(
@@ -495,6 +520,19 @@ def test_changed_changesets(news_repository: Path, content: str, count: int, err
         pytest.param("# Fix a bug\n\nRegressed in #5.\n", "pull request link", id="bare-reference-in-body"),
         pytest.param("# Fix a bug\n\nThanks to @alice and `#5`.\n", "", id="handle-without-marker"),
         pytest.param("# Fix a bug\n\n```\nby @alice #5\n```\n", "", id="fence"),
+        pytest.param("# Fix a bug (by @alice)\n", "author credit", id="parenthesized-by"),
+        pytest.param("# Fix a bug. By @alice\n", "author credit", id="capitalized-by"),
+        pytest.param("# Fix a bug for :user:`renovate[bot]`\n", "author credit", id="user-role-bot"),
+        pytest.param("# Fix a bug for :User:`alice`\n", "author credit", id="user-role-case"),
+        pytest.param("# Fix a bug :PR:`5`\n", "pull request link", id="pr-role-case"),
+        pytest.param("# Fix a bug by [`@alice`](https://github.com/alice)\n", "author credit", id="code-label"),
+        pytest.param(
+            '# Fix a bug (<a href="https://github.com/tox-dev/example/pull/5">PR</a>)\n',
+            "pull request link",
+            id="html-anchor",
+        ),
+        pytest.param("# Fix a bug\n\n<p>see #5</p>\n", "pull request link", id="html-block"),
+        pytest.param("# Fix a bug\n\n<p><code>#5</code></p>\n\n<!-- see #5 -->\n", "", id="html-code-and-comment"),
     ],
 )
 def test_changed_changesets_rejects_hand_written_attribution(news_repository: Path, body: str, error: str) -> None:

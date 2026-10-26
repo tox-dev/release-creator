@@ -21,15 +21,22 @@ lazy from release_creator.fragments.shape import markdown_visible_children, vali
 
 _RE_AUTHOR_MARKER: Final = re.compile(
     r"""
-    (?:,?\s+)                     # Optional comma and whitespace before the credit
-    by\s+                         # Credit marker and following whitespace
+    (?P<lead>,?\s+)?             # Optional comma and whitespace before the credit
+    (?<!\w)by\s+                 # Credit marker after the start or a non-word character, and following whitespace
     (?=(?:\*{1,2})?(?:\[@|:user:`|`@|@[A-Za-z0-9-]))  # Supported author syntax, optionally emphasized in RST
     """,
-    re.VERBOSE,
+    re.VERBOSE | re.IGNORECASE,
 )
 _RE_USER_ROLE: Final = re.compile(
     r"""
-    :user:`(?P<handle>[A-Za-z0-9-]+)`  # GitHub user role, with or without a credit marker
+    :user:`[^`]+`  # GitHub user role with any content, with or without a credit marker
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+_RE_HTML_ANCHOR: Final = re.compile(
+    r"""
+    <a\s(?:[^>"']|"[^"]*"|'[^']*')*?                 # Anchor tag; attributes may contain quoted >
+    (?<=\s)href\s*=\s*(?P<href>"[^"]*"|'[^']*'|[^\s"'>]+)  # Quoted or bare link target
     """,
     re.VERBOSE | re.IGNORECASE,
 )
@@ -143,7 +150,7 @@ def _keep_explicit_credit(content: str, target: _LinkTarget, match: re.Match[str
     fragment = target.fragment
     if linked:
         return content
-    if match is None:
+    if match is None or (fragment.suffix == ".rst" and match["lead"] is None):
         return _append_pull_request_link(content, target, None)
     if fragment.suffix == ".md":
         return _append_pull_request_link(content, target, None, anchor=_markdown_credit_anchor(content))
@@ -195,23 +202,37 @@ def _pull_request_links(content: str, extension: str) -> Iterator[re.Match[str]]
             \B\#(?P<bare_number>\d+)\b                                                             # Bare reference
             """,
             text,
-            flags=re.VERBOSE,
+            flags=re.VERBOSE | re.IGNORECASE,
         )
     )
 
 
 def _markdown_prose(content: str) -> list[str]:
     prose: list[str] = []
-    for child, _ in markdown_visible_children(MarkdownIt().parse(content)):
-        if child is None:
-            continue
+    anchor = ""
+    for child in _markdown_prose_children(content):
+        if anchor and child.type in {"text", "code_inline"} and child.content.strip():
+            prose.append(anchor)
+            anchor = ""
         if child.type == "text":
             prose.append(child.content)
         elif child.type == "link_open" and isinstance(destination := child.attrGet("href"), str):
             prose.append(destination)
-        elif child.type == "code_inline" and prose and prose[-1].endswith((":pr:", ":pull:")):
+        elif child.type == "html_inline" and (match := _RE_HTML_ANCHOR.match(child.content)) is not None:
+            anchor = match["href"].strip("\"'")
+        elif child.type == "html_inline" and re.fullmatch(r"</a\s*>", child.content, re.IGNORECASE) is not None:
+            anchor = ""
+        elif child.type == "code_inline" and prose and prose[-1].casefold().endswith((":pr:", ":pull:")):
             prose.append(f":pr:`{child.content}`")
     return prose
+
+
+def _markdown_prose_children(content: str) -> Iterator[Token]:
+    for child, _ in markdown_visible_children(MarkdownIt().parse(content)):
+        if child is not None and child.type == "html_block":
+            yield from child.children or ()
+        elif child is not None:
+            yield child
 
 
 def _rst_prose(content: str) -> list[str]:
@@ -280,7 +301,7 @@ def _markdown_credit_blocks(content: str) -> list[tuple[str, int]]:
         if child is None:
             blocks.append((_markdown_credit_children(children), end_line))
             children = []
-        else:
+        elif child.type != "html_block":
             children.append(child)
             end_line = line
     blocks.append((_markdown_credit_children(children), end_line))
@@ -305,9 +326,11 @@ def _markdown_credit_children(children: list[Token]) -> str:
             (link_text if link_destination is not None else prose).append(
                 child.content if link_destination is not None else child.content.replace("[", "\0")
             )
+        elif child.type == "code_inline" and link_destination is not None:
+            link_text.append(child.content)
         elif link_destination is not None and child.type not in {"em_open", "em_close", "strong_open", "strong_close"}:
             link_plain = False
-        elif child.type == "code_inline" and prose and prose[-1].endswith(":user:"):
+        elif child.type == "code_inline" and prose and prose[-1].casefold().endswith(":user:"):
             prose.append(f"`{child.content}`")
         elif child.type in {"softbreak", "hardbreak"} or (
             child.type == "html_inline"
