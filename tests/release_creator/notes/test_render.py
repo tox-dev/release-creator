@@ -1744,16 +1744,6 @@ def test_render_rst_rejects_invalid_input(changelog: str, message: str) -> None:
 @pytest.mark.parametrize(
     ("changelog", "overrides", "message"),
     [
-        pytest.param("## 1.2.3 (today)\n", {"tag": "bad//tag"}, "invalid release tag", id="tag"),
-        pytest.param("## 1.2.3 (today)\n", {"previous": "bad//tag"}, "invalid previous tag", id="previous"),
-        pytest.param(
-            "## 1.2.3 (today)\n",
-            {"tag": "other/1.2.3", "package": "example"},
-            "does not match package",
-            id="package-tag",
-        ),
-        pytest.param("## 1.2.3 (today)\n", {"repository": "bad"}, "invalid repository", id="repository"),
-        pytest.param("## 1.2.3 (today)\n", {"artifact_url": "http://bad"}, "artifact URL", id="artifact"),
         pytest.param("", {}, "found 0", id="absent"),
         pytest.param("## 1.2.3 (today)\n## 1.2.3 (today)\n", {}, "found 2", id="duplicate"),
         pytest.param("## 1.2.3 (today)\n### Maintenance\n", {}, "unknown changelog category", id="category"),

@@ -10,7 +10,6 @@ lazy import mdformat
 lazy from packaging.version import InvalidVersion, Version
 
 lazy from release_creator.categories import RELEASE_CATEGORIES
-lazy from release_creator.github import validate_repository
 lazy from release_creator.notes.rst import TILDE_PLACEHOLDER, render_rst_section
 
 
@@ -34,7 +33,6 @@ def render_markdown(changelog: str, context: ReleaseContext) -> str:
     :returns: The complete GitHub Release body.
 
     """
-    _validate_context(context)
     notes = mdformat.text(_extract_body(changelog, context), options={"wrap": "no"}, extensions={"gfm"}).strip()
     return _finish(notes, context)
 
@@ -47,7 +45,6 @@ def render_rst(changelog: str, context: ReleaseContext) -> str:
     :returns: The complete GitHub Release body.
     :raises ValueError: Package selection requires a Markdown changelog.
     """
-    _validate_context(context)
     if context.package is not None:
         msg = "package selection requires a Markdown changelog"
         raise ValueError(msg)
@@ -129,36 +126,6 @@ def _rst_version_at(lines: list[str], index: int) -> re.Match[str] | None:
 def _is_rst_adornment(line: str) -> bool:
     stripped = line.strip()
     return bool(stripped[2:]) and len(set(stripped)) == 1 and stripped[0] in "=-*~^"
-
-
-def _validate_context(context: ReleaseContext) -> None:
-    if not re.fullmatch(
-        r"""
-        (?P<tag>[A-Za-z0-9][A-Za-z0-9_.-]*)     # Release tag or package prefix
-        (?:/(?P<version>[A-Za-z0-9][A-Za-z0-9_.-]*))?  # Optional package version
-        """,
-        context.tag,
-        re.VERBOSE,
-    ):
-        msg = f"invalid release tag: {context.tag}"
-        raise ValueError(msg)
-    if context.previous is not None and not re.fullmatch(
-        r"""
-        (?P<tag>[A-Za-z0-9][A-Za-z0-9_.-]*)     # Previous tag or package prefix
-        (?:/(?P<version>[A-Za-z0-9][A-Za-z0-9_.-]*))?  # Optional package version
-        """,
-        context.previous,
-        re.VERBOSE,
-    ):
-        msg = f"invalid previous tag: {context.previous}"
-        raise ValueError(msg)
-    if context.package is not None and "/" in context.tag and not context.tag.startswith(f"{context.package}/"):
-        msg = f"release tag does not match package: {context.tag}"
-        raise ValueError(msg)
-    validate_repository(context.repository)
-    if context.artifact_url is not None and not context.artifact_url.startswith("https://"):
-        msg = "artifact URL must use HTTPS"
-        raise ValueError(msg)
 
 
 def _extract_body(changelog: str, context: ReleaseContext) -> str:

@@ -6,7 +6,6 @@ lazy from release_creator.anchors.names import draft_anchor
 lazy from release_creator.categories import CHANGELOG_CATEGORIES
 lazy from release_creator.fragments.names import fragment_category
 lazy from release_creator.markdown import prose_lines
-lazy from release_creator.package_name import valid_package_name
 
 
 def render_preview(changelog: Path, package: str, fragments: Path) -> str:
@@ -18,9 +17,6 @@ def render_preview(changelog: Path, package: str, fragments: Path) -> str:
     :returns: The package's released history and current draft entries.
     :raises ValueError: The package or a fragment has an unsupported form.
     """
-    if not valid_package_name(package):
-        msg = f"invalid package: {package}"
-        raise ValueError(msg)
     history = _package_history(changelog.read_text(encoding="utf-8").splitlines(), package)
     names = {kind: heading for kind, (heading, _) in CHANGELOG_CATEGORIES.items()}
     sections: dict[str, list[str]] = {}

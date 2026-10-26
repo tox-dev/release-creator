@@ -100,8 +100,6 @@ def test_render_preview_keeps_fenced_package_headings(changelog: Path, tmp_path:
 @pytest.mark.parametrize(
     ("package", "source", "error"),
     [
-        pytest.param("", "## pyproject-fmt\n", "invalid package", id="empty-package"),
-        pytest.param("../other", "## pyproject-fmt\n", "invalid package", id="path-package"),
         pytest.param("missing", "## pyproject-fmt\n", "found 0", id="missing-package"),
         pytest.param("pyproject-fmt", "## pyproject-fmt\n\n## pyproject-fmt\n", "found 2", id="duplicate-package"),
     ],

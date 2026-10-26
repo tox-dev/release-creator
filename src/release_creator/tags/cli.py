@@ -5,7 +5,6 @@ lazy import sys
 lazy from pathlib import Path
 
 lazy from release_creator.fragments.names import pending_fragments
-lazy from release_creator.package_name import valid_package_name
 lazy from release_creator.tags.select import next_tag, parse_tag, previous_tag, require_newer_tag
 
 
@@ -30,9 +29,6 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
 
 
 def _select(args: argparse.Namespace) -> None:
-    if args.package is not None and not valid_package_name(args.package):
-        msg = f"invalid package name: {args.package}"
-        raise ValueError(msg)
     if args.next is not None:
         if args.tag is not None:
             msg = "omit the tag when calculating the next version"

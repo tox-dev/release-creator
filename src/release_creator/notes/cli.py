@@ -15,7 +15,7 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
     notes.add_argument("--repository", required=True, help="GitHub owner/repository")
     notes.add_argument("--package", help="package section in a shared Markdown changelog")
     notes.add_argument("--previous", help="previous tag for the comparison link")
-    notes.add_argument("--artifact-url", help="HTTPS link to the published package or artifact")
+    notes.add_argument("--artifact-url", help="link to the published package or artifact")
     notes.add_argument("--artifact-label", default="PyPI release", help="text for the artifact link")
     notes.set_defaults(handler=_render)
 

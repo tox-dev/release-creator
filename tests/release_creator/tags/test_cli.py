@@ -181,8 +181,6 @@ def test_tags_require_newer_rejects_newer_same_package(
 @pytest.mark.parametrize(
     ("arguments", "message"),
     [
-        pytest.param(["tags", "1.0.0", "--package", "../other"], "invalid package name", id="package"),
-        pytest.param(["tags", "1.0.0", "--package", ".."], "invalid package name", id="parent-directory"),
         pytest.param(
             ["tags", "other/1.0.0", "--package", "pyproject-fmt"],
             "does not belong to package",

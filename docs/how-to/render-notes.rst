@@ -79,8 +79,7 @@ categories. If the source section already has a ``Full Changelog`` line, ``notes
 <../reference/formats>` for every category name.
 
 Omit ``--artifact-url`` if there is no external artifact. Use ``--artifact-label`` to name another ecosystem's package
-link. If ``--previous`` is absent, the final link points to the commits at this tag instead of a comparison. Artifact
-links must use HTTPS.
+link. If ``--previous`` is absent, the final link points to the commits at this tag instead of a comparison.
 
 Shared changelog with separate packages
 =======================================

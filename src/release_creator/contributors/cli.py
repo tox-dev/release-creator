@@ -4,8 +4,6 @@ lazy import argparse
 lazy from pathlib import Path
 
 lazy from release_creator.contributors.section import add_new_contributors
-lazy from release_creator.github import validate_repository
-lazy from release_creator.package_name import valid_package_name
 
 
 def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -21,10 +19,6 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
 
 
 def _add(args: argparse.Namespace) -> None:
-    if args.package is not None and not valid_package_name(args.package):
-        msg = f"invalid package name: {args.package}"
-        raise ValueError(msg)
-    validate_repository(args.repository)
     add_new_contributors(args.changelog, args.version, args.repository, args.package)
 
 

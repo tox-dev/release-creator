@@ -8,7 +8,6 @@ lazy from release_creator.fragments.check import changed_changesets, changed_fra
 lazy from release_creator.fragments.git import fragment_commits_from_git
 lazy from release_creator.fragments.links import add_pull_request_links
 lazy from release_creator.fragments.pull_requests import fragment_pull_requests
-lazy from release_creator.github import validate_repository
 
 
 def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -27,7 +26,6 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
 
 
 def _link(args: argparse.Namespace) -> None:
-    validate_repository(args.repository)
     knope = args.format == "knope"
     directory = args.directory or Path(".changeset" if knope else "changelog.d")
     commits = fragment_commits_from_git(directory, knope=knope)

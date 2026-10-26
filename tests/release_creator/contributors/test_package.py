@@ -167,20 +167,3 @@ def test_contributors_cli_package_edits_package_section(
     assert changelog.read_text(encoding="utf-8") == _CHANGELOG.replace(
         "### 1.0.0 (2026-01-01)\n", f"{_SUBSECTION}### 1.0.0 (2026-01-01)\n", 1
     )
-
-
-@pytest.mark.parametrize("package", [pytest.param("../pyproject-fmt", id="relative"), pytest.param("..", id="parent")])
-def test_contributors_cli_rejects_invalid_package(
-    changelog: Path,
-    github: GitHub,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-    package: str,
-) -> None:
-    run = github(_PULLS, set())
-
-    with pytest.raises(SystemExit, match="2"):
-        _run_cli(monkeypatch, changelog, package)
-
-    assert "invalid package name" in capsys.readouterr().err
-    run.assert_not_called()
