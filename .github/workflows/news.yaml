@@ -25,9 +25,9 @@ jobs:
             pyproject.toml
       # The released release-creator from pylock.toml checks this checkout, which it never runs.
       - name: 📦 Install locked release tools
-        uses: tox-dev/github-workflows/install-locked-tools@d96a86e7f0ef1f84fe8971c8c63575081fd1d931 # v6.0.0
+        uses: tox-dev/github-workflows/install-locked-tools@259a3d3fb578d00517ffb73341fdd463259b0b2f # 6.0.1
         with:
           groups: release-news
           venv: ${{ runner.temp }}/release-tools
       - name: 🔍 Validate changelog fragments
-        uses: tox-dev/github-workflows/validate-news@d96a86e7f0ef1f84fe8971c8c63575081fd1d931 # v6.0.0
+        uses: tox-dev/github-workflows/validate-news@259a3d3fb578d00517ffb73341fdd463259b0b2f # 6.0.1

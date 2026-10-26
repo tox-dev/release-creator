@@ -8,8 +8,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    name: 🏗️ Build and validate distributions
-    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@d96a86e7f0ef1f84fe8971c8c63575081fd1d931 # v6.0.0
+    name: 🏗️ Build
+    uses: tox-dev/github-workflows/.github/workflows/validate-python-release.yaml@259a3d3fb578d00517ffb73341fdd463259b0b2f # 6.0.1
     permissions:
       contents: read
   previous:
@@ -33,13 +33,13 @@ jobs:
           python-version: "3.15"
           enable-cache: false
       - name: 📦 Install locked release tools
-        uses: tox-dev/github-workflows/install-locked-tools@d96a86e7f0ef1f84fe8971c8c63575081fd1d931 # v6.0.0
+        uses: tox-dev/github-workflows/install-locked-tools@259a3d3fb578d00517ffb73341fdd463259b0b2f # 6.0.1
         with:
           groups: release-notes
           venv: ${{ runner.temp }}/release-tools
       - name: 🏷️ Select previous tag
         id: tag
-        uses: tox-dev/github-workflows/select-previous-tag@d96a86e7f0ef1f84fe8971c8c63575081fd1d931 # v6.0.0
+        uses: tox-dev/github-workflows/select-previous-tag@259a3d3fb578d00517ffb73341fdd463259b0b2f # 6.0.1
         with:
           tag: ${{ github.ref_name }}
   notes:
@@ -64,12 +64,12 @@ jobs:
           enable-cache: false
       # The notes come from the previous release-creator in pylock.toml, never from the tagged checkout.
       - name: 📦 Install locked release tools
-        uses: tox-dev/github-workflows/install-locked-tools@d96a86e7f0ef1f84fe8971c8c63575081fd1d931 # v6.0.0
+        uses: tox-dev/github-workflows/install-locked-tools@259a3d3fb578d00517ffb73341fdd463259b0b2f # 6.0.1
         with:
           groups: release-notes
           venv: ${{ runner.temp }}/release-tools
       - name: 📝 Render release notes
-        uses: tox-dev/github-workflows/render-release-notes@d96a86e7f0ef1f84fe8971c8c63575081fd1d931 # v6.0.0
+        uses: tox-dev/github-workflows/render-release-notes@259a3d3fb578d00517ffb73341fdd463259b0b2f # 6.0.1
         with:
           tag: ${{ github.ref_name }}
           previous: ${{ needs.previous.outputs.tag }}
@@ -123,7 +123,7 @@ jobs:
           artifact-ids: ${{ needs.build.outputs.distributions-artifact-id }}
           path: dist
       - name: 🔍 Verify PyPI artifacts
-        uses: tox-dev/github-workflows/reconcile-pypi-artifacts@d96a86e7f0ef1f84fe8971c8c63575081fd1d931 # v6.0.0
+        uses: tox-dev/github-workflows/reconcile-pypi-artifacts@259a3d3fb578d00517ffb73341fdd463259b0b2f # 6.0.1
         with:
           project: release-creator
           version: ${{ github.ref_name }}
@@ -142,7 +142,7 @@ jobs:
           artifact-ids: ${{ needs.notes.outputs.artifact-id }}
           path: ${{ runner.temp }}
       - name: 🚀 Publish GitHub release
-        uses: tox-dev/github-workflows/publish-github-release@d96a86e7f0ef1f84fe8971c8c63575081fd1d931 # v6.0.0
+        uses: tox-dev/github-workflows/publish-github-release@259a3d3fb578d00517ffb73341fdd463259b0b2f # 6.0.1
         env:
           GH_TOKEN: ${{ github.token }}
         with:
