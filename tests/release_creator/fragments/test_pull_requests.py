@@ -328,6 +328,23 @@ def test_fragment_pull_requests_credits_unlinked_author_by_name(monkeypatch: pyt
     )
 
 
+@pytest.mark.parametrize(
+    "author",
+    [
+        pytest.param({"name": " ", "email": "bob@example.com", "user": None}, id="blank-name"),
+        pytest.param({"name": "", "email": "bob@example.com", "user": None}, id="empty-name"),
+        pytest.param({"email": None, "user": None}, id="missing-name"),
+    ],
+)
+def test_fragment_pull_requests_skips_unnamed_unlinked_author(
+    monkeypatch: pytest.MonkeyPatch, author: dict[str, object]
+) -> None:
+    assert _credits(monkeypatch, [author, _commit_author(login="bob")]) == (
+        PullRequestCredit(name="alice", linked=True),
+        PullRequestCredit(name="bob", linked=True),
+    )
+
+
 def test_fragment_pull_requests_orders_pull_request_author_first(monkeypatch: pytest.MonkeyPatch) -> None:
     authors: list[object] = [
         _commit_author(name="Carol", login="carol"),
@@ -422,18 +439,6 @@ def test_fragment_pull_requests_credits_mannequin_co_author_as_ghost(monkeypatch
             TypeError,
             "invalid merge commit author ",
             id="user-type",
-        ),
-        pytest.param(
-            {"oid": "a" * 40, "authors": {"nodes": [{"name": " ", "email": "bob@example.com", "user": None}]}},
-            ValueError,
-            "unnamed merge commit author",
-            id="blank-name",
-        ),
-        pytest.param(
-            {"oid": "a" * 40, "authors": {"nodes": [{"email": None, "user": None}]}},
-            ValueError,
-            "unnamed merge commit author",
-            id="missing-name",
         ),
         pytest.param(
             {"oid": "a" * 40, "authors": {"nodes": [_commit_author(account_type="Organization")]}},

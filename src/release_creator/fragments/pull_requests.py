@@ -159,10 +159,8 @@ def _credits(author: PullRequestAuthor, commit: object, number: int) -> tuple[Pu
         if isinstance(email := node.get("email"), str) and _RE_AI_ASSISTANT_EMAIL.search(email):
             continue
         if user is None:
-            if not isinstance(name := node.get("name"), str) or not name.strip():
-                msg = f"unnamed merge commit author for pull request #{number}"
-                raise ValueError(msg)
-            entries.setdefault((False, name.casefold()), (PullRequestCredit(name=name, linked=False), False))
+            if isinstance(name := node.get("name"), str) and name.strip():
+                entries.setdefault((False, name.casefold()), (PullRequestCredit(name=name, linked=False), False))
             continue
         if (account := github_account(user, number)).handle.casefold() in AI_ASSISTANT_LOGINS:
             continue
