@@ -128,20 +128,6 @@ def test_fragments_cli_leaves_fragments_in_shallow_clone(
     assert (checkout / "changelog.d" / "+topic.feature.md").read_text() == "Add a feature.\n"
 
 
-def test_fragments_cli_rejects_unsupported_name(
-    git_repository: tuple[Path, str], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    directory = git_repository[0] / "changelog.d"
-    directory.mkdir()
-    (directory / "topic.feature.md").write_text("Add a feature.\n")
-    monkeypatch.setattr(sys, "argv", ["release-creator", "fragments", "--repository", "tox-dev/example"])
-
-    with pytest.raises(SystemExit, match="2"):
-        main()
-
-    assert "unsupported changelog fragment name" in capsys.readouterr().err
-
-
 def test_fragments_cli_reports_missing_history(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

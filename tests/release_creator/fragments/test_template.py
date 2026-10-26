@@ -58,8 +58,8 @@ def test_markdown_template_links_two_fragments_from_one_pull_request(tmp_path: P
     changelog = _build_markdown_fragments(
         tmp_path,
         {
-            "+first.feature.md": "Add an option by [@alice](https://github.com/alice).\n",
-            "+second.bugfix.md": "Fix a fallback by [@alice](https://github.com/alice).\n",
+            "+first.feature.md": "Add an option.\n",
+            "+second.bugfix.md": "Fix a fallback.\n",
         },
         {name: _alice_pull("42") for name in ("+first.feature.md", "+second.bugfix.md")},
         categories=("feature", "bugfix"),
@@ -70,10 +70,10 @@ def test_markdown_template_links_two_fragments_from_one_pull_request(tmp_path: P
         ReleaseContext(tag="1.2.3", repository="tox-dev/example"),
     )
     assert (
-        "Add an option by [@alice](https://github.com/alice) ([#42](https://github.com/tox-dev/example/pull/42))."
+        "Add an option ([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice)."
     ) in notes
     assert (
-        "Fix a fallback by [@alice](https://github.com/alice) ([#42](https://github.com/tox-dev/example/pull/42))."
+        "Fix a fallback ([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice)."
     ) in notes
 
 

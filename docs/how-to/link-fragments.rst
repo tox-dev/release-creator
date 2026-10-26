@@ -98,18 +98,17 @@ user-visible change needs no fragment. A bot pull request needs a fragment only 
 command does not decide whether a change is newsworthy; review that before merging.
 
 Write the Towncrier fragment as prose. The supported templates add the list bullet around it. Lists, block quotes,
-tables, headings, and raw RST directives in a fragment can move its link or credit outside that item, so both the PR
-news check and the release linker reject them. Code blocks remain supported. Use another fragment file for another
-change.
+tables, headings, and raw RST directives in a fragment can move its link or credit outside that item, so the PR news
+check rejects them. Code blocks remain supported. Use another fragment file for another change.
 
 For Towncrier, the linker processes filenames beginning with ``+`` and numeric filenames in the fragment directory. When
 GitHub associates no squash-merged PR with a fragment's introducing commit, the linker adds no PR link and credits the
 commit author after Git's mailmap: the GitHub login for a GitHub noreply email, otherwise the author name. The PR credit
 rules apply: AI assistant authors get no credit, and a bot's ``[bot]`` suffix is dropped. A fragment with no introducing
-commit, such as an uncommitted one, or with an AI assistant as its commit author, stays unchanged. A named fragment that
-already links its pull request is rejected; a numeric fragment can retain an existing link. A fragment that skipped
-``validate-news`` and already carries a credit keeps it as written and gains only the PR link. A failed GitHub lookup
-stops the command before Towncrier builds the changelog. The linker validates every fragment before writing any of them.
+commit, such as an uncommitted one, or with an AI assistant as its commit author, stays unchanged. A fragment that
+already links its pull request keeps that link and gains the credit. A fragment that skipped ``validate-news`` keeps any
+hand-written credit as written and gains the PR link and computed credit after it. A failed GitHub lookup stops the
+command before Towncrier builds the changelog.
 
 For Knope, the linker processes Markdown files in ``.changeset`` except ``README.md``. Each file needs YAML front matter
 and a level-one heading after it. The command checks the introducing commit and computes the credit in the same way. To
@@ -118,8 +117,8 @@ reads ``knope.toml``, checks each changed Markdown file's front matter type and 
 and pull request references in its body, then prints a count. Apply the repository's news policy to that count for both
 human and bot pull requests.
 
-Both ``fragments`` and ``tags --next`` reject a named fragment without its ``+`` prefix. Otherwise Towncrier would
-publish the filename stem in place of a pull request link. The pull request check applies the same rule before merge.
+``validate-news`` rejects a named fragment without its ``+`` prefix before merge. Otherwise Towncrier would publish the
+filename stem in place of a pull request link.
 
 For ``123.bugfix.md``, Towncrier uses ``123`` with ``issue_format``. That number may identify an issue rather than the
 merged pull request. The linker asks GitHub for the PR associated with the introducing commit. If that is PR #124, it

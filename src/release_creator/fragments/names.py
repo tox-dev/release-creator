@@ -6,18 +6,12 @@ lazy from typing import Final
 
 
 def pending_fragments(directory: Path) -> list[Path]:
-    """Reject names Towncrier would publish without a PR reference.
+    """List pending Towncrier fragments.
 
     :param directory: Towncrier fragment directory.
-    :returns: Pending fragment paths.
-    :raises ValueError: A fragment lacks a supported name.
+    :returns: Pending Markdown and reStructuredText fragment paths.
     """
-    fragments = sorted(path for extension in ("md", "rst") for path in directory.glob(f"*.*.{extension}"))
-    for fragment in fragments:
-        if fragment_category(fragment) is None:
-            msg = f"unsupported changelog fragment name {fragment.name!r}; prefix a name with + or use a PR number"
-            raise ValueError(msg)
-    return fragments
+    return sorted(path for extension in ("md", "rst") for path in directory.glob(f"*.*.{extension}"))
 
 
 def fragment_category(fragment: Path, categories: Collection[str] | None = None) -> str | None:
@@ -51,19 +45,8 @@ def pending_changesets(directory: Path) -> list[Path]:
     return sorted(path for path in directory.glob("*.md") if path.name != "README.md")
 
 
-def fragment_number(fragment: Path) -> str | None:
-    """Recognize legacy issue-number fragments before finding their pull requests.
-
-    :param fragment: Fragment whose stem may be a PR number.
-    :returns: The filename's issue number, or None for a named fragment.
-    """
-    stem = fragment.name.partition(".")[0]
-    return stem if stem.isascii() and stem.isdecimal() else None
-
-
 __all__ = [
     "fragment_category",
-    "fragment_number",
     "pending_changesets",
     "pending_fragments",
 ]

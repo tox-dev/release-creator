@@ -92,17 +92,16 @@ def test_tags_next_scopes_package(
         pytest.param("\N{ARABIC-INDIC DIGIT ONE}.feature.md", id="non-ascii-number"),
     ],
 )
-def test_tags_next_rejects_unsupported_fragment_name(
+def test_tags_next_bumps_patch_for_unsupported_fragment_name(
     filename: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     (tmp_path / filename).write_text("Add a feature.\n")
     monkeypatch.setattr(sys, "argv", ["release-creator", "tags", "--next", "auto", "--directory", str(tmp_path)])
     monkeypatch.setattr(sys, "stdin", StringIO("0.1.0\n"))
 
-    with pytest.raises(SystemExit, match="2"):
-        main()
+    main()
 
-    assert filename in capsys.readouterr().err
+    assert capsys.readouterr().out == "0.1.1\n"
 
 
 @pytest.mark.parametrize(

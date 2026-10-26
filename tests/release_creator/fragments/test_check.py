@@ -231,6 +231,12 @@ def test_changed_fragments_rejects_rst_structure(news_repository: Path, content:
         pytest.param(".rst", "Add a feature :PR:`5`.\n", "pull request link", id="rst-pr-role-case"),
         pytest.param(".rst", "Add a feature :Pull:`5`.\n", "pull request link", id="rst-pull-role-case"),
         pytest.param(".rst", "Document ``(by @alice)`` and ``:PR:`5```.\n", "", id="rst-literal-new-forms"),
+        pytest.param(
+            ".md", "Add a feature by\n[@alice](https://github.com/alice).\n", "author credit", id="markdown-line-break"
+        ),
+        pytest.param(
+            ".md", "Add a feature by [<b>@alice</b>](https://github.com/alice).\n", "", id="markdown-nontext-label"
+        ),
     ],
 )
 def test_changed_fragments_rejects_hand_written_attribution(

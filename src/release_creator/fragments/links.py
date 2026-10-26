@@ -6,7 +6,6 @@ from __future__ import annotations
 lazy import re
 lazy from collections.abc import Iterator, Mapping
 lazy from dataclasses import dataclass
-lazy from itertools import accumulate
 lazy from pathlib import Path
 lazy from string import punctuation
 lazy from typing import Final, Literal
@@ -16,13 +15,12 @@ lazy from markdown_it.token import Token
 
 lazy from release_creator.fragments.git import FragmentCommit
 lazy from release_creator.fragments.knope import changeset_parts
-lazy from release_creator.fragments.names import fragment_number, pending_changesets, pending_fragments
+lazy from release_creator.fragments.names import pending_changesets, pending_fragments
 lazy from release_creator.fragments.pull_requests import PullRequest, PullRequestCredit
-lazy from release_creator.fragments.shape import markdown_visible_children, validate_towncrier_fragment
+lazy from release_creator.fragments.shape import markdown_visible_children
 
 _RE_AUTHOR_MARKER: Final = re.compile(
     r"""
-    (?P<lead>,?\s+)?             # Optional comma and whitespace before the credit
     (?<!\w)by\s+                 # Credit marker after the start or a non-word character, and following whitespace
     (?=(?:\*{1,2})?(?:\[@|:user:`|`@|@[A-Za-z0-9-]))  # Supported author syntax, optionally emphasized in RST
     """,
@@ -97,8 +95,6 @@ def _link_fragment(
         number, credited = None, commit.credits
     else:
         return content
-    if mode == "towncrier":
-        validate_towncrier_fragment(content, fragment)
     target = _LinkTarget(
         fragment=fragment,
         repository=repository,
@@ -129,13 +125,6 @@ def _link_text(
     if (number := target.number) is None:
         return _append_pull_request_link(content, target, _credit_list(target.credits, fragment.suffix))
     linked = _has_pull_request_link(content, target.repository, number, fragment.suffix)
-    if not target.knope and fragment_number(fragment) is None and linked:
-        msg = f"pull request already linked in {fragment}"
-        raise ValueError(msg)
-    credit_prose = _credit_prose(content, fragment.suffix)
-    match = _RE_AUTHOR_MARKER.search(credit_prose)
-    if match is not None or _RE_USER_ROLE.search(credit_prose) is not None:
-        return _keep_explicit_credit(content, target, number, match, linked=linked)
     if not target.credits:
         return content if linked else _append_pull_request_link(content, target, None)
     credit = _credit_list(target.credits, fragment.suffix)
@@ -158,22 +147,6 @@ def _credit_list(credited: tuple[PullRequestCredit, ...], extension: str) -> str
 def _escape_name(name: str) -> str:
     # Markdown and reStructuredText both render a backslash-escaped ASCII punctuation character literally.
     return "".join(f"\\{character}" if character in punctuation else character for character in name)
-
-
-def _keep_explicit_credit(
-    content: str, target: _LinkTarget, number: str, match: re.Match[str] | None, *, linked: bool
-) -> str:
-    fragment = target.fragment
-    if linked:
-        return content
-    if match is None or (fragment.suffix == ".rst" and match["lead"] is None):
-        return _append_pull_request_link(content, target, None)
-    if fragment.suffix == ".md":
-        return _append_pull_request_link(content, target, None, anchor=_markdown_credit_anchor(content))
-    return (
-        f"{content[: match.start()]} {_pull_request_link(target.repository, number, fragment.suffix)} "
-        f"by {content[match.end() :]}"
-    )
 
 
 def has_hand_written_credit(content: str, extension: str) -> bool:
@@ -295,32 +268,19 @@ def _credit_prose(content: str, extension: str) -> str:
 
 
 def _markdown_credit_prose(content: str) -> str:
-    return " ".join(block for block, _ in _markdown_credit_blocks(content))
+    return " ".join(_markdown_credit_blocks(content))
 
 
-def _markdown_credit_anchor(content: str) -> int:
-    blocks = _markdown_credit_blocks(content)
-    markers = list(_RE_AUTHOR_MARKER.finditer(" ".join(block for block, _ in blocks)))
-    if len(markers) > 1:
-        msg = "split multiple credited changes into separate fragments"
-        raise ValueError(msg)
-    limits = accumulate(len(block) + 1 for block, _ in blocks)
-    end_line = next(end for limit, (_, end) in zip(limits, blocks, strict=True) if markers[0].end() < limit)
-    return sum(map(len, content.splitlines(keepends=True)[:end_line]))
-
-
-def _markdown_credit_blocks(content: str) -> list[tuple[str, int]]:
-    blocks: list[tuple[str, int]] = []
+def _markdown_credit_blocks(content: str) -> list[str]:
+    blocks: list[str] = []
     children: list[Token] = []
-    end_line = 0
-    for child, line in markdown_visible_children(MarkdownIt().parse(content)):
+    for child, _ in markdown_visible_children(MarkdownIt().parse(content)):
         if child is None:
-            blocks.append((_markdown_credit_children(children), end_line))
+            blocks.append(_markdown_credit_children(children))
             children = []
         elif child.type != "html_block":
             children.append(child)
-            end_line = line
-    blocks.append((_markdown_credit_children(children), end_line))
+    blocks.append(_markdown_credit_children(children))
     return blocks
 
 
@@ -364,18 +324,12 @@ def _markdown_credit_children(children: list[Token]) -> str:
     return "".join(prose)
 
 
-def _append_pull_request_link(
-    content: str, target: _LinkTarget, credit: str | None, *, anchor: int | None = None
-) -> str:
+def _append_pull_request_link(content: str, target: _LinkTarget, credit: str | None) -> str:
     link = (
         None if target.number is None else _pull_request_link(target.repository, target.number, target.fragment.suffix)
     )
     addition = " ".join(part for part in (link, None if credit is None else f"by {credit}") if part is not None)
-    if anchor is None:
-        before, after = _split_trailing_code(content, target.fragment.suffix)
-    else:
-        before = content[:anchor].rstrip()
-        after = content[len(before) :]
+    before, after = _split_trailing_code(content, target.fragment.suffix)
     if not before:
         opening, _, body = after.partition("\n")
         return f"{opening[:-2]} {addition}::\n{body.rstrip()}"
