@@ -149,9 +149,9 @@ def _credits(author: PullRequestAuthor, commit: object, number: int) -> tuple[Pu
     if not isinstance(authors, dict) or not isinstance(nodes := authors.get("nodes"), list):
         msg = f"invalid merge commit authors for pull request #{number}"
         raise TypeError(msg)
-    entries: dict[tuple[bool, str], tuple[PullRequestCredit, bool]] = {
-        (True, author.handle.casefold()): (PullRequestCredit(name=author.handle, linked=True), author.is_bot)
-    }
+    entries: dict[tuple[bool, str], tuple[PullRequestCredit, bool]] = {}
+    if author.handle.casefold() not in AI_ASSISTANT_LOGINS:
+        entries[True, author.handle.casefold()] = (PullRequestCredit(name=author.handle, linked=True), author.is_bot)
     for node in nodes:
         if not isinstance(node, dict) or not isinstance(user := node.get("user"), dict | None):
             msg = f"invalid merge commit author for pull request #{number}"
@@ -164,7 +164,8 @@ def _credits(author: PullRequestAuthor, commit: object, number: int) -> tuple[Pu
                 raise ValueError(msg)
             entries.setdefault((False, name.casefold()), (PullRequestCredit(name=name, linked=False), False))
             continue
-        account = github_account(user, number)
+        if (account := github_account(user, number)).handle.casefold() in AI_ASSISTANT_LOGINS:
+            continue
         entries.setdefault(
             (True, account.handle.casefold()), (PullRequestCredit(name=account.handle, linked=True), account.is_bot)
         )

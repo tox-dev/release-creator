@@ -1681,6 +1681,35 @@ def test_add_pull_request_links_formats_credits(
     assert fragment.read_text() == expected
 
 
+@pytest.mark.parametrize(
+    ("filename", "content", "expected"),
+    [
+        pytest.param(
+            "+first.feature.md",
+            "Add a feature.\n",
+            "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)).\n",
+            id="markdown",
+        ),
+        pytest.param("+first.feature.rst", "Add a feature.\n", "Add a feature (:pr:`42`).\n", id="rst"),
+        pytest.param("42.feature.md", "Fix #42.\n", "Fix #42.\n", id="markdown-linked"),
+        pytest.param("42.feature.rst", "Fix #42.\n", "Fix #42.\n", id="rst-linked"),
+    ],
+)
+def test_add_pull_request_links_without_credits_adds_only_link(
+    tmp_path: Path, filename: str, content: str, expected: str
+) -> None:
+    fragment = tmp_path / filename
+    fragment.write_text(content)
+
+    add_pull_request_links(
+        tmp_path,
+        "tox-dev/example",
+        {filename: PullRequest(number="42", author=PullRequestAuthor(handle="claude", is_bot=False), credits=())},
+    )
+
+    assert fragment.read_text() == expected
+
+
 def test_add_pull_request_links_knope_formats_credits(tmp_path: Path) -> None:
     fragment = tmp_path / "trust-roots.md"
     fragment.write_text("---\ndefault: security\n---\n\n# Remove a root\n")

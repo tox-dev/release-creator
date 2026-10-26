@@ -124,6 +124,8 @@ def _link_text(
     match = _RE_AUTHOR_MARKER.search(credit_prose)
     if match is not None or _RE_USER_ROLE.search(credit_prose) is not None:
         return _keep_explicit_credit(content, target, match, linked=linked)
+    if not target.credits:
+        return content if linked else _append_pull_request_link(content, target, None)
     credit = _credit_list(target.credits, fragment.suffix)
     if linked:
         before, after = _split_trailing_code(content, fragment.suffix)

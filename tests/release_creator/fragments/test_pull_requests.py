@@ -280,6 +280,33 @@ def test_fragment_pull_requests_drops_ai_assistant_authors(monkeypatch: pytest.M
 
 
 @pytest.mark.parametrize(
+    "login",
+    [
+        pytest.param("claude", id="claude"),
+        pytest.param("codex", id="codex"),
+        pytest.param("CommandCodeBot", id="commandcode"),
+        pytest.param("COPILOT", id="copilot-case-insensitive"),
+    ],
+)
+def test_fragment_pull_requests_drops_ai_assistant_commit_logins(monkeypatch: pytest.MonkeyPatch, login: str) -> None:
+    assert _credits(monkeypatch, [_commit_author(name="Agent", email="agent@example.com", login=login)]) == (
+        PullRequestCredit(name="alice", linked=True),
+    )
+
+
+def test_fragment_pull_requests_drops_ai_assistant_pull_request_author(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert _credits(monkeypatch, [_commit_author(login="bob")], login="Claude") == (
+        PullRequestCredit(name="bob", linked=True),
+    )
+
+
+def test_fragment_pull_requests_credits_nobody_when_only_ai_assistants_remain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert _credits(monkeypatch, [_commit_author(login="claude")], login="claude") == ()
+
+
+@pytest.mark.parametrize(
     "email",
     [
         pytest.param("claude@example.com", id="ai-name-human-email"),
@@ -288,9 +315,9 @@ def test_fragment_pull_requests_drops_ai_assistant_authors(monkeypatch: pytest.M
     ],
 )
 def test_fragment_pull_requests_keeps_authors_outside_ai_list(monkeypatch: pytest.MonkeyPatch, email: str) -> None:
-    assert _credits(monkeypatch, [_commit_author(name="Claude", email=email, login="claude")]) == (
+    assert _credits(monkeypatch, [_commit_author(name="Claude", email=email, login="carol")]) == (
         PullRequestCredit(name="alice", linked=True),
-        PullRequestCredit(name="claude", linked=True),
+        PullRequestCredit(name="carol", linked=True),
     )
 
 
