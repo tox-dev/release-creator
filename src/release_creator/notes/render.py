@@ -43,11 +43,7 @@ def render_rst(changelog: str, context: ReleaseContext) -> str:
     :param changelog: Tagged reStructuredText changelog.
     :param context: Repository and release links.
     :returns: The complete GitHub Release body.
-    :raises ValueError: The changelog contains the private-use character reserved for escaping.
     """
-    if TILDE_PLACEHOLDER in changelog:
-        msg = "changelog contains a private-use character reserved for escaping"
-        raise ValueError(msg)
     notes = mdformat.text(_extract_rst_body(changelog, context), options={"wrap": "no"}, extensions={"gfm"})
     return _finish(notes.strip().replace(TILDE_PLACEHOLDER, "\\~"), context)
 

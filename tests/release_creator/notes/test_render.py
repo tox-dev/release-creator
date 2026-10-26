@@ -1065,20 +1065,6 @@ def test_render_rst_keeps_group_credit_after_nested_bullets() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("source", "message"),
-    [
-        pytest.param("- Entry.\n\n  .. code-block:: console\n", "empty RST directive", id="empty-code"),
-        pytest.param("- Entry.\n\n.. note::\n", "unexpected release text", id="unknown-directive"),
-    ],
-)
-def test_render_rst_rejects_malformed_blocks(source: str, message: str) -> None:
-    changelog = f"1.2.3 (today)\n=============\n\nAdded\n-----\n\n{source}"
-
-    with pytest.raises(ValueError, match=message):
-        render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
-
-
 def test_render_rst_joins_wrapped_author_credit() -> None:
     changelog = dedent("""\
         1.2.3 (2026-10-18)
@@ -1376,11 +1362,12 @@ def test_render_rst_escapes_markdown_syntax(source: str, expected: str) -> None:
     assert f"- Show {expected}." in result
 
 
-def test_render_rst_rejects_escape_placeholder() -> None:
+def test_render_rst_turns_escape_placeholder_into_escaped_tilde() -> None:
     changelog = "1.2.3 (today)\n==============\n\nAdded\n-----\n\n- Show \ue000.\n"
 
-    with pytest.raises(ValueError, match="private-use character reserved for escaping"):
-        render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert "- Show \\~." in result
 
 
 def test_render_rst_uses_longer_fence_for_backticks() -> None:
@@ -1501,11 +1488,30 @@ def test_render_rst_keeps_roles_inside_inline_code() -> None:
     assert "[#43](https://github.com/tox-dev/example/pull/43) by @alice" in result
 
 
-def test_render_rst_rejects_file_inclusion() -> None:
-    changelog = "1.2.3 (today)\n==============\n\nAdded\n-----\n\n.. include:: /etc/passwd\n"
+def test_render_rst_leaves_out_file_inclusion() -> None:
+    changelog = "1.2.3 (today)\n==============\n\nAdded\n-----\n\n- Add a feature.\n\n.. include:: /etc/passwd\n"
 
-    with pytest.raises(ValueError, match="unexpected release text"):
-        render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert result == (
+        '<a name="release-1-2-3-added"></a>\n\n### Features\n\n- Add a feature.\n\n'
+        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+    )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param("- Entry.\n\n  .. code-block:: console\n", id="empty-code"),
+        pytest.param("- Entry.\n\n.. note::\n", id="unknown-directive"),
+    ],
+)
+def test_render_rst_drops_parser_messages(source: str) -> None:
+    changelog = f"1.2.3 (today)\n=============\n\nAdded\n-----\n\n{source}"
+
+    result = render_rst(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example"))
+
+    assert result.startswith('<a name="release-1-2-3-added"></a>\n\n### Features\n\n- Entry.')
 
 
 @pytest.mark.parametrize(

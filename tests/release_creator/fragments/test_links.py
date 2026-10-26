@@ -270,15 +270,16 @@ def test_add_pull_request_links_ignores_other_fence_inside_trailing_code(tmp_pat
     "ending",
     [pytest.param("```unfinished", id="text-after-fence"), pytest.param("```", id="unmatched-fence")],
 )
-def test_add_pull_request_links_rejects_unmatched_fence(tmp_path: Path, ending: str) -> None:
+def test_add_pull_request_links_after_unmatched_fence(tmp_path: Path, ending: str) -> None:
     fragment = tmp_path / "+first.feature.md"
-    content = f"Add a feature.\n\n{ending}\n"
-    fragment.write_text(content)
+    fragment.write_text(f"Add a feature.\n\n{ending}\n")
 
-    with pytest.raises(ValueError, match="unclosed Markdown code fence"):
-        _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
+    _link(tmp_path, "tox-dev/example", {fragment.name: "Add release notes (#42)"})
 
-    assert fragment.read_text() == content
+    assert fragment.read_text() == (
+        "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) "
+        f"by [@alice](https://github.com/alice).\n\n{ending}\n"
+    )
 
 
 def test_add_pull_request_links_ignores_indented_fence_inside_code(tmp_path: Path) -> None:

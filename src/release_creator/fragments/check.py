@@ -8,9 +8,14 @@ lazy from pathlib import Path
 lazy import yaml
 
 lazy from release_creator.fragments.knope import changeset_parts, knope_kinds, load_knope_package
-lazy from release_creator.fragments.links import has_hand_written_credit, has_hand_written_pull_request_link
+lazy from release_creator.fragments.links import (
+    has_hand_written_credit,
+    has_hand_written_pull_request_link,
+    has_unclosed_code_fence,
+)
 lazy from release_creator.fragments.names import fragment_category
 lazy from release_creator.fragments.shape import validate_towncrier_fragment
+lazy from release_creator.notes.rst import TILDE_PLACEHOLDER, rst_errors
 lazy from release_creator.process import run_text
 
 
@@ -65,9 +70,22 @@ def _validate_changed_fragment(
     if not (content := path.read_text(encoding="utf-8")).strip():
         msg = f"empty changelog fragment: {path}"
         raise ValueError(msg)
+    if suffix == ".rst" and (errors := rst_errors(content)):
+        msg = f"invalid reStructuredText in changelog fragment ({errors[0]}): {path}"
+        raise ValueError(msg)
     validate_towncrier_fragment(content, path)
+    _reject_release_breaking_text(content, suffix, path)
     _reject_hand_written_attribution(content, suffix, path)
     return 1
+
+
+def _reject_release_breaking_text(content: str, suffix: str, path: Path) -> None:
+    if TILDE_PLACEHOLDER in content:
+        msg = f"private-use character U+E000 in changelog fragment; release notes reserve it for escaping: {path}"
+        raise ValueError(msg)
+    if suffix == ".md" and has_unclosed_code_fence(content):
+        msg = f"unclosed Markdown code fence in changelog fragment: {path}"
+        raise ValueError(msg)
 
 
 def _reject_hand_written_attribution(content: str, suffix: str, path: Path) -> None:
@@ -113,7 +131,9 @@ def changed_changesets(config: Path, base: str) -> int:
             ):
                 msg = f"unsupported changeset type in {path}: {package}: {kind}"
                 raise ValueError(msg)
-        _reject_hand_written_attribution(content.removeprefix(frontmatter), ".md", path)
+        body = content.removeprefix(frontmatter)
+        _reject_release_breaking_text(body, ".md", path)
+        _reject_hand_written_attribution(body, ".md", path)
         count += 1
     return count
 

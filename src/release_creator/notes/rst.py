@@ -10,7 +10,6 @@ lazy from docutils import nodes
 lazy from docutils.core import publish_doctree
 lazy from docutils.parsers.rst import roles
 lazy from docutils.parsers.rst.states import Inliner
-lazy from docutils.utils import SystemMessage
 
 lazy from release_creator.anchors.names import release_anchor
 lazy from release_creator.categories import RELEASE_CATEGORIES
@@ -104,36 +103,43 @@ def register_roles() -> None:
         roles.register_local_role(name, literal_role)
 
 
+def rst_errors(source: str) -> list[str]:
+    """Report the problems the release notes reader drops from reStructuredText.
+
+    :param source: reStructuredText to check.
+    :returns: The text of each warning or error, such as an unknown directive or a blocked include.
+    """
+    register_roles()
+    return [
+        message[0].astext()
+        for message in _publish(source, "fragment/check").findall(nodes.system_message)
+        if message["type"] != "INFO"
+    ]
+
+
 def _parse_document(source: str, repository: str) -> nodes.document:
-    try:
-        document = cast(
-            "nodes.document",
-            publish_doctree(
-                source,
-                settings_overrides={
-                    "doctitle_xform": False,
-                    "file_insertion_enabled": False,
-                    "halt_level": 3,
-                    "raw_enabled": False,
-                    "release_repository": repository,
-                    "report_level": 5,
-                    "warning_stream": StringIO(),
-                },
-            ),
-        )
-    except SystemMessage as error:
-        detail = str(error)
-        if '"code-block" directive' in detail:
-            msg = "empty RST directive: code-block"
-        else:
-            msg = f"unexpected release text: {detail}"
-        raise ValueError(msg) from error
+    document = _publish(source, repository)
     for message in list(document.findall(nodes.system_message)):
-        if message["type"] != "INFO":
-            msg = f"unexpected release text: {message.astext()}"
-            raise ValueError(msg)
         message.parent.remove(message)
     return document
+
+
+def _publish(source: str, repository: str) -> nodes.document:
+    return cast(
+        "nodes.document",
+        publish_doctree(
+            source,
+            settings_overrides={
+                "doctitle_xform": False,
+                "file_insertion_enabled": False,
+                "halt_level": 5,
+                "raw_enabled": False,
+                "release_repository": repository,
+                "report_level": 5,
+                "warning_stream": StringIO(),
+            },
+        ),
+    )
 
 
 def _render_section(section: nodes.section, tag: str) -> list[str]:
@@ -271,4 +277,5 @@ __all__ = [
     "TILDE_PLACEHOLDER",
     "register_roles",
     "render_rst_section",
+    "rst_errors",
 ]

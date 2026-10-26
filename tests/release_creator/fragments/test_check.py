@@ -76,6 +76,12 @@ def news_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         pytest.param("+topic.doc.md", "Add a feature.\n", 0, "unsupported changelog fragment", id="category"),
         pytest.param("topic.feature.md", "Add a feature.\n", 0, "unsupported changelog fragment", id="name"),
         pytest.param("+topic.feature.md", " \n", 0, "empty changelog fragment", id="empty"),
+        pytest.param(
+            "+topic.feature.md", "Add a feature.\n\n```\ncode\n", 0, "unclosed Markdown code fence", id="unclosed-fence"
+        ),
+        pytest.param(
+            "+topic.feature.md", "Show \ue000.\n", 0, "private-use character U\\+E000", id="markdown-placeholder"
+        ),
         pytest.param("README.md", "Read me.\n", 0, "", id="outside-directory"),
         pytest.param("nested/+topic.feature.md", "Nested.\n", 0, "", id="nested-directory"),
         pytest.param("notes.txt", "Other file.\n", 0, "unsupported changelog fragment", id="other-extension"),
@@ -117,10 +123,34 @@ def test_changed_fragments(news_repository: Path, filename: str, content: str, c
 
 
 @pytest.mark.parametrize(
+    ("content", "error"),
+    [
+        pytest.param("Show \ue000.\n", "private-use character U\\+E000", id="placeholder"),
+        pytest.param(
+            "Add a feature.\n\n.. note::\n",
+            r'invalid reStructuredText in changelog fragment \(Content block expected for the "note" directive',
+            id="error",
+        ),
+        pytest.param("Add a feature.\n\n.. include:: /etc/passwd\n", '"include" directive disabled', id="include"),
+        pytest.param("Fix A.\n\n.. raw:: html\n\n   <b>x</b>\n", '"raw" directive disabled', id="raw-directive"),
+        pytest.param("Add *a feature.\n", "Inline emphasis start-string without end-string", id="warning"),
+    ],
+)
+def test_changed_fragments_rejects_release_breaking_rst(news_repository: Path, content: str, error: str) -> None:
+    config = news_repository / "pyproject.toml"
+    config.write_text(config.read_text().replace("CHANGELOG.md", "CHANGELOG.rst"), encoding="utf-8")
+    (news_repository / "changelog.d/+topic.feature.rst").write_text(content, encoding="utf-8")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+
+    with pytest.raises(ValueError, match=error):
+        changed_fragments(config, "main")
+
+
+@pytest.mark.parametrize(
     "content",
     [
         pytest.param("Fix A.\n\n  - subdetail\n", id="nested-list"),
-        pytest.param("Fix A.\n\n.. raw:: html\n\n   <b>x</b>\n", id="raw-directive"),
         pytest.param("Fix A.\n\nDetails\n=======\n", id="section"),
         pytest.param("=== ===\nA   B\n=== ===\n1   2\n=== ===\n", id="table"),
         pytest.param("Fix A.\n\n.. hidden comment\n\nMore detail.\n", id="embedded-comment"),
@@ -417,6 +447,15 @@ def test_validate_news_cli_reports_count(
         ),
         pytest.param("---\n---\n\n# Fix a bug\n", 0, "empty changeset front matter", id="empty-front-matter"),
         pytest.param("---\ndefault: patch\n---\n\n# \n", 0, "empty changeset summary", id="empty-summary"),
+        pytest.param(
+            "---\ndefault: patch\n---\n\n# Fix a bug\n\n```\ncode\n",
+            0,
+            "unclosed Markdown code fence",
+            id="unclosed-fence",
+        ),
+        pytest.param(
+            "---\ndefault: patch\n---\n\n# Fix \ue000\n", 0, "private-use character U\\+E000", id="placeholder"
+        ),
         pytest.param("Fix a bug\n", 0, "missing YAML front matter", id="missing-front-matter"),
     ],
 )

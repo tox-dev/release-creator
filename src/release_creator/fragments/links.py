@@ -377,8 +377,22 @@ def _indent_width(line: str) -> int:
     return len(expanded) - len(expanded.lstrip())
 
 
+def has_unclosed_code_fence(content: str) -> bool:
+    """Detect a Markdown code fence that would swallow the link and credit appended after it.
+
+    :param content: Markdown fragment text.
+    :returns: Whether a fence opens without a matching close.
+    """
+    return _scan_fences(content.splitlines(keepends=True))[1]
+
+
 def _final_fence_opening(lines: list[str]) -> int | None:
+    return _scan_fences(lines)[0]
+
+
+def _scan_fences(lines: list[str]) -> tuple[int | None, bool]:
     fence: tuple[int, str, int] | None = None
+    final: int | None = None
     max_fence_indent: Final = 3
     for index, line in enumerate(lines):
         if len(line) - len(line.lstrip(" ")) > max_fence_indent:
@@ -391,12 +405,9 @@ def _final_fence_opening(lines: list[str]) -> int | None:
             fence = index, stripped[0], width
         elif stripped == fence[1] * len(stripped) and width >= fence[2]:
             if index == len(lines) - 1:
-                return fence[0]
+                final = fence[0]
             fence = None
-    if fence is not None:
-        msg = "unclosed Markdown code fence in changelog fragment"
-        raise ValueError(msg)
-    return None
+    return final, fence is not None
 
 
 def _pull_request_link(repository: str, number: str, extension: str) -> str:
@@ -415,4 +426,5 @@ __all__ = [
     "add_pull_request_links",
     "has_hand_written_credit",
     "has_hand_written_pull_request_link",
+    "has_unclosed_code_fence",
 ]
