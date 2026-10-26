@@ -62,7 +62,7 @@ def _pulls(gh: str, repository: str, shas: list[str]) -> dict[str, PullRequest]:
         )
         for index, sha in enumerate(shas)
     ]
-    batch_size: Final = 100
+    batch_size: Final = 40
     for offset in range(0, len(aliases), batch_size):
         batch = aliases[offset : offset + batch_size]
         query = (

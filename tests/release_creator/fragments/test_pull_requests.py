@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess  # ruff: ignore[suspicious-subprocess-import]  # Model the GitHub CLI boundary.
 from typing import cast
 from unittest.mock import MagicMock, create_autospec
@@ -175,7 +176,8 @@ def test_fragment_pull_requests_credits_deleted_author(
 
 
 def test_fragment_pull_requests_chunks_large_history(monkeypatch: pytest.MonkeyPatch) -> None:
-    commits = {f"+news-{index}.feature.md": f"{index:040x}" for index in range(101)}
+    commits = {f"+news-{index}.feature.md": f"{index:040x}" for index in range(81)}
+    batches = (range(40), range(40, 80), range(80, 81))
     responses = [
         subprocess.CompletedProcess(
             [],
@@ -189,16 +191,16 @@ def test_fragment_pull_requests_chunks_large_history(monkeypatch: pytest.MonkeyP
             }),
             "",
         )
-        for batch in (range(100), range(100, 101))
+        for batch in batches
     ]
     run: MagicMock = cast("MagicMock", create_autospec(process.subprocess.run, side_effect=responses))
     monkeypatch.setattr(process.shutil, "which", create_autospec(process.shutil.which, return_value="gh"))
     monkeypatch.setattr(process.subprocess, "run", run)
 
     assert len(pull_requests.fragment_pull_requests("tox-dev/example", commits)) == len(commits)
-    assert run.call_count == len(responses)
-    assert "c99: object" in run.call_args_list[0].kwargs["input"]
-    assert "c100: object" in run.call_args_list[1].kwargs["input"]
+    assert [re.findall(r"\bc(\d+): object", call.kwargs["input"]) for call in run.call_args_list] == [
+        [str(index) for index in batch] for batch in batches
+    ]
 
 
 def test_fragment_pull_requests_accepts_empty_commit_map(monkeypatch: pytest.MonkeyPatch) -> None:
