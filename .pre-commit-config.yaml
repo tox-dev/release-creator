@@ -1,3 +1,5 @@
+ci:
+  autoupdate_schedule: quarterly
 default_language_version:
   python: python3.15
 repos:
