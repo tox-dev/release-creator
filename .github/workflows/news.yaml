@@ -4,6 +4,7 @@ on:
     types: [opened, reopened, synchronize, labeled, unlabeled]
 permissions:
   contents: read
+  pull-requests: read
 jobs:
   changelog:
     name: 📝 News fragment
@@ -25,9 +26,9 @@ jobs:
             pyproject.toml
       # The released release-creator from pylock.toml checks this checkout, which it never runs.
       - name: 📦 Install locked release tools
-        uses: tox-dev/github-workflows/install-locked-tools@29d4d5e6900db30502d7249043b59c18284a9777 # 6.2.0
+        uses: tox-dev/github-workflows/install-locked-tools@57a765127aae73adf7d0e24a7fe0f067f2d3ea3e # 6.2.1
         with:
           groups: release-news
           venv: ${{ runner.temp }}/release-tools
       - name: 🔍 Validate changelog fragments
-        uses: tox-dev/github-workflows/validate-news@29d4d5e6900db30502d7249043b59c18284a9777 # 6.2.0
+        uses: tox-dev/github-workflows/validate-news@57a765127aae73adf7d0e24a7fe0f067f2d3ea3e # 6.2.1
