@@ -65,7 +65,7 @@ def test_notes_package_drops_anchor_after_heading() -> None:
         "### Features\n\n"
         "- **Require 3.11 and default to 3.15.** ([#480](https://github.com/tox-dev/toml-fmt/pull/480)) by "
         "[@gaborbernat](https://github.com/gaborbernat).\n\n"
-        "[Full Changelog](https://github.com/tox-dev/toml-fmt/commits/pyproject-fmt/2.30.3)\n"
+        "[📜 Full Changelog](https://github.com/tox-dev/toml-fmt/commits/pyproject-fmt/2.30.3)\n"
     )
 
 

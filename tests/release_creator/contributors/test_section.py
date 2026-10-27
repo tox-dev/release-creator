@@ -416,7 +416,7 @@ def test_release_body_matches_changelog_section(tmp_path: Path, github: GitHub, 
         tag="1.2.3",
         repository="tox-dev/example",
         previous="1.2.2",
-        artifact_url="https://pypi.org/project/example/1.2.3/",
+        artifacts=(("PyPI release", "https://pypi.org/project/example/1.2.3/"),),
     )
 
     body = (render_markdown if extension == "md" else render_rst)(changelog.read_text(), context)
@@ -439,8 +439,8 @@ def test_release_body_matches_changelog_section(tmp_path: Path, github: GitHub, 
         + added
         + '<a name="release-1-2-3-new-contributors"></a>\n\n### New Contributors\n\n'
         + contributor
-        + "[PyPI release](https://pypi.org/project/example/1.2.3/)\n\n"
-        "[Full Changelog](https://github.com/tox-dev/example/compare/1.2.2...1.2.3)\n"
+        + "[🐍 PyPI release](https://pypi.org/project/example/1.2.3/)\n\n"
+        "[📜 Full Changelog](https://github.com/tox-dev/example/compare/1.2.2...1.2.3)\n"
     )
 
 

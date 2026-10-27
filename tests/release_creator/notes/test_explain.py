@@ -52,6 +52,36 @@ def test_notes_explains_on_stderr(
     )
 
 
+def test_notes_pairs_each_artifact_with_its_label(
+    changelog: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _render(
+        monkeypatch,
+        changelog,
+        *("--artifact-url", "https://pypi.org/project/example/1.2.3/", "--artifact-label", "PyPI: example"),
+        *("--artifact-url", "https://pypi.org/project/example-bare/1.2.3/", "--artifact-label", "PyPI: example-bare"),
+    )
+
+    assert capsys.readouterr().err.splitlines()[-2:] == [
+        "Artifact link: PyPI: example -> https://pypi.org/project/example/1.2.3/",
+        "Artifact link: PyPI: example-bare -> https://pypi.org/project/example-bare/1.2.3/",
+    ]
+
+
+def test_notes_rejects_unpaired_artifact_label(
+    changelog: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit):
+        _render(
+            monkeypatch,
+            changelog,
+            *("--artifact-url", "https://pypi.org/project/example/1.2.3/", "--artifact-label", "PyPI: example"),
+            *("--artifact-url", "https://pypi.org/project/example-bare/1.2.3/"),
+        )
+
+    assert capsys.readouterr().err.endswith("error: got 1 --artifact-label for 2 --artifact-url\n")
+
+
 def test_notes_keeps_stdout_to_the_body(
     changelog: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -59,7 +89,7 @@ def test_notes_keeps_stdout_to_the_body(
 
     assert capsys.readouterr().out == (
         "### Features\n\n- Add a flag.\n- Add a cache.\n\n### Bug fixes\n\n- Correct a bug.\n\n"
-        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+        "[📜 Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 

@@ -16,18 +16,28 @@ def register(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> N
     notes.add_argument("--repository", required=True, help="GitHub owner/repository")
     notes.add_argument("--package", help="package section in a shared Markdown changelog")
     notes.add_argument("--previous", help="previous tag for the comparison link")
-    notes.add_argument("--artifact-url", help="link to the published package or artifact")
-    notes.add_argument("--artifact-label", default="PyPI release", help="text for the artifact link")
+    notes.add_argument(
+        "--artifact-url", action="append", default=[], help="link to a published package or artifact; repeatable"
+    )
+    notes.add_argument(
+        "--artifact-label",
+        action="append",
+        default=[],
+        help="text for each --artifact-url, in the same order; default PyPI release",
+    )
     notes.set_defaults(handler=_render)
 
 
 def _render(args: argparse.Namespace) -> None:
+    labels = args.artifact_label or ["PyPI release"] * len(args.artifact_url)
+    if len(labels) != len(args.artifact_url):
+        msg = f"got {len(labels)} --artifact-label for {len(args.artifact_url)} --artifact-url"
+        raise ValueError(msg)
     context = ReleaseContext(
         tag=args.tag,
         repository=args.repository,
         previous=args.previous,
-        artifact_url=args.artifact_url,
-        artifact_label=args.artifact_label,
+        artifacts=tuple(zip(labels, args.artifact_url, strict=True)),
         package=args.package,
     )
     changelog = args.changelog.read_text(encoding="utf-8")
@@ -49,10 +59,10 @@ def _render(args: argparse.Namespace) -> None:
         explain(f"Comparison link: commits/{args.tag} (no --previous tag)")
     else:
         explain(f"Comparison link: compare/{args.previous}...{args.tag}")
-    if args.artifact_url is None:
+    if not args.artifact_url:
         explain("Artifact link: none (no --artifact-url)")
-    else:
-        explain(f"Artifact link: {args.artifact_label} -> {args.artifact_url}")
+    for label, url in context.artifacts:
+        explain(f"Artifact link: {label} -> {url}")
     sys.stdout.write(notes)
 
 

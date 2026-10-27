@@ -28,8 +28,8 @@ uvx --from 'release-creator' release-creator notes \
 For automation, replace `release-creator` after `--from` with a tested `release-creator==VERSION`. The command reads the
 tagged section, maps `Added` to `Features` and `Fixed` to `Bug fixes`, changes linked author handles to GitHub mentions,
 and leaves bullets unwrapped. It keeps stable category anchors, omits empty categories when they are absent from the
-source, and adds artifact and comparison links. Use `--artifact-label` for an ecosystem other than PyPI; omit
-`--artifact-url` when there is no external artifact.
+source, and adds artifact and comparison links. Use `--artifact-label` for an ecosystem other than PyPI, repeat both
+options for each published package, and omit `--artifact-url` when there is no external artifact.
 
 The command also accepts a `.rst` changelog with the same category names. It links `:issue:` roles to issues and `:pr:`
 or `:pull:` roles to pull requests:

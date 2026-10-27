@@ -61,9 +61,9 @@ the :doc:`tags command <select-release-tag>` can find it. ``--artifact-url`` add
 
     - Avoid stale cache reads ([#42](https://github.com/owner/project/pull/42)) by @alice.
 
-    [PyPI release](https://pypi.org/project/project/1.2.3/)
+    [🐍 PyPI release](https://pypi.org/project/project/1.2.3/)
 
-    [Full Changelog](https://github.com/owner/project/compare/1.2.2...1.2.3)
+    [📜 Full Changelog](https://github.com/owner/project/compare/1.2.2...1.2.3)
 
 Review that file before passing it to ``gh release create --notes-file release-notes.md``. The ``by`` credit stays in
 the changelog; the GitHub body uses an ``@alice`` mention.
@@ -84,7 +84,10 @@ Changelog`` line, ``notes`` replaces it with one link built from ``--previous`` 
 anchors remain stable. See :doc:`the format reference <../reference/formats>` for every category name.
 
 Omit ``--artifact-url`` if there is no external artifact. Use ``--artifact-label`` to name another ecosystem's package
-link. If ``--previous`` is absent, the final link points to the commits at this tag instead of a comparison.
+link. A project that publishes several packages repeats ``--artifact-url``, each followed by its ``--artifact-label``;
+the links share one line, separated by commas. Each link starts with an emoji picked from its host: 🐍 for PyPI, 🧩 for
+the JetBrains Marketplace, and 📦 for anything else. If ``--previous`` is absent, the final link points to the commits
+at this tag instead of a comparison.
 
 Shared changelog with separate packages
 =======================================

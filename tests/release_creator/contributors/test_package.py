@@ -98,7 +98,7 @@ def test_add_new_contributors_package_renders_in_notes(changelog: Path, github: 
         '<a name="release-pyproject-fmt-1-1-0-new-contributors"></a>\n\n### New Contributors\n\n'
         "- [@alice](https://github.com/alice) made their first contribution in "
         "[#42](https://github.com/tox-dev/toml-fmt/pull/42)\n\n"
-        "[Full Changelog](https://github.com/tox-dev/toml-fmt/commits/pyproject-fmt/1.1.0)\n"
+        "[📜 Full Changelog](https://github.com/tox-dev/toml-fmt/commits/pyproject-fmt/1.1.0)\n"
     )
 
 

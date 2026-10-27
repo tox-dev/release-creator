@@ -152,9 +152,9 @@ linked author to an ``@alice`` mention. With no previous numeric release, the fi
 
     - Avoid stale cache reads ([#42](https://github.com/owner/project/pull/42)) by @alice.
 
-    [PyPI release](https://pypi.org/project/project/0.1.0/)
+    [🐍 PyPI release](https://pypi.org/project/project/0.1.0/)
 
-    [Full Changelog](https://github.com/owner/project/commits/0.1.0)
+    [📜 Full Changelog](https://github.com/owner/project/commits/0.1.0)
 
 Review the complete body, then create the GitHub Release if the repository does not do that in its tag workflow:
 

@@ -5,12 +5,16 @@ from __future__ import annotations
 
 lazy import re
 lazy from dataclasses import dataclass
+lazy from typing import Final
+lazy from urllib.parse import urlsplit
 
 lazy import mdformat
 lazy from packaging.version import InvalidVersion, Version
 
 lazy from release_creator.categories import RELEASE_CATEGORIES
 lazy from release_creator.notes.rst import TILDE_PLACEHOLDER, render_rst_section
+
+_ECOSYSTEM_EMOJI: Final = {"pypi.org": "🐍", "plugins.jetbrains.com": "🧩"}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -20,8 +24,7 @@ class ReleaseContext:
     tag: str
     repository: str
     previous: str | None = None
-    artifact_url: str | None = None
-    artifact_label: str = "PyPI release"
+    artifacts: tuple[tuple[str, str], ...] = ()
     package: str | None = None
 
 
@@ -49,15 +52,19 @@ def render_rst(changelog: str, context: ReleaseContext) -> str:
 
 
 def _finish(notes: str, context: ReleaseContext) -> str:
-    if context.artifact_url is not None:
-        link = f"[{context.artifact_label}]({context.artifact_url})"
-        notes = f"{notes}\n\n{link}" if notes else link
+    if context.artifacts:
+        links = ", ".join(f"[{_ecosystem_emoji(url)} {label}]({url})" for label, url in context.artifacts)
+        notes = f"{notes}\n\n{links}" if notes else links
     comparison = (
         f"compare/{context.previous}...{context.tag}" if context.previous is not None else f"commits/{context.tag}"
     )
     if notes:
         notes += "\n\n"
-    return f"{notes}[Full Changelog](https://github.com/{context.repository}/{comparison})\n"
+    return f"{notes}[📜 Full Changelog](https://github.com/{context.repository}/{comparison})\n"
+
+
+def _ecosystem_emoji(url: str) -> str:
+    return _ECOSYSTEM_EMOJI.get(urlsplit(url).hostname or "", "📦")
 
 
 def _extract_rst_body(changelog: str, context: ReleaseContext) -> str:
@@ -235,7 +242,13 @@ def _convert_markdown_body(lines: list[str], category_prefix: str) -> str:
 
 
 def _is_comparison_line(line: str) -> bool:
-    return line.strip().startswith(("**Full Changelog**:", "Full Changelog:", "[Full Changelog](", "`Full Changelog <"))
+    return line.strip().startswith((
+        "**Full Changelog**:",
+        "Full Changelog:",
+        "[Full Changelog](",
+        "[📜 Full Changelog](",
+        "`Full Changelog <",
+    ))
 
 
 def _is_version(tag: str) -> bool:

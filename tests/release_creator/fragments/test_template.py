@@ -50,7 +50,7 @@ def test_markdown_template_keeps_numbered_and_named_pull_requests(
         f"by [@alice](https://github.com/alice).{issue_suffix}\n"
         "- Fix a named bug ([#124](https://github.com/tox-dev/example/pull/124)) "
         "by [@alice](https://github.com/alice).\n\n"
-        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+        "[📜 Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -108,7 +108,7 @@ def test_markdown_template_preserves_prose_continuations(tmp_path: Path, source:
     assert notes == (
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
         f"{entry}\n\n"
-        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+        "[📜 Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -164,7 +164,7 @@ def test_markdown_template_preserves_balanced_literal_block(tmp_path: Path) -> N
         "- Add support ([#42](https://github.com/tox-dev/example/pull/42)) "
         "by [@alice](https://github.com/alice).\n\n"
         "  <pre>sample</pre>\n\n"
-        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+        "[📜 Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -311,7 +311,7 @@ def test_rst_template_renders_notes_with_stable_anchors(
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
         "- Fix the loader ([#2](https://github.com/tox-dev/example/pull/2)) by @alice. "
         "([#1](https://github.com/tox-dev/example/pull/1))\n\n"
-        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+        "[📜 Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -327,7 +327,7 @@ def test_rst_template_renders_literal_marker_credit(tmp_path: Path) -> None:
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
         "- Fix the loader ([#2](https://github.com/tox-dev/example/pull/2)) by @alice:\n\n"
         "  ```\n  code output\n  ```\n\n"
-        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+        "[📜 Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
@@ -342,7 +342,7 @@ def test_rst_template_preserves_two_paragraphs(tmp_path: Path) -> None:
     assert notes == (
         '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
         "- First. Second ([#2](https://github.com/tox-dev/example/pull/2)) by @alice.\n\n"
-        "[Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+        "[📜 Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
     )
 
 
