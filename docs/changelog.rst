@@ -3,6 +3,19 @@ Changelog
 
 .. towncrier release notes start
 
+.. _release-4-3-2:
+
+4.3.2 (2026-10-30)
+------------------
+
+.. _release-4-3-2-fixed:
+
+Fixed
+~~~~~
+
+- The ``fragments`` command links nothing and succeeds when the fragment directory does not exist, as in a checkout with
+  no pending fragments, instead of failing the release (:pr:`56`) by :user:`gaborbernat`.
+
 .. _release-4-3-1:
 
 4.3.1 (2026-10-30)
