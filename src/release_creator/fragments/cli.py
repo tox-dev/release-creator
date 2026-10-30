@@ -31,6 +31,10 @@ def _link(args: argparse.Namespace) -> None:
     else:
         directory, source = Path(".changeset" if knope else "changelog.d"), f"default for {args.format}"
     explain(f"Fragment directory: {directory.as_posix()} ({source})")
+    # Git tracks no empty directories, so a checkout with no pending fragments has no fragment directory either.
+    if not directory.is_dir():
+        explain("No fragment directory, so there is nothing to link")
+        return
     if is_shallow_clone(directory):
         explain("Shallow clone: the history that added the fragments is cut off, so they stay unchanged")
         return

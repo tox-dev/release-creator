@@ -128,6 +128,25 @@ def test_fragments_cli_leaves_fragments_in_shallow_clone(
     assert (checkout / "changelog.d" / "+topic.feature.md").read_text() == "Add a feature.\n"
 
 
+@pytest.mark.parametrize("fragment_format", ["towncrier", "knope"])
+def test_fragments_cli_skips_missing_fragment_directory(
+    git_repository: tuple[Path, str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    fragment_format: str,
+) -> None:
+    checkout, git = git_repository
+    assert run_text([git, "commit", "-q", "--allow-empty", "-m", "Start"]).returncode == 0
+    monkeypatch.setattr(
+        sys, "argv", ["release-creator", "fragments", "--format", fragment_format, "--repository", "tox-dev/example"]
+    )
+
+    main()
+
+    assert capsys.readouterr().err.splitlines()[-1] == "No fragment directory, so there is nothing to link"
+    assert sorted(path.name for path in checkout.iterdir()) == [".git"]
+
+
 def test_fragments_cli_reports_missing_history(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
