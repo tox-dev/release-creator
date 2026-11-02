@@ -16,7 +16,7 @@ lazy from markdown_it.token import Token
 lazy from release_creator.explain import counted, explain
 lazy from release_creator.fragments.git import FragmentCommit
 lazy from release_creator.fragments.knope import changeset_parts
-lazy from release_creator.fragments.names import pending_changesets, pending_fragments
+lazy from release_creator.fragments.names import is_bare_fragment, pending_changesets, pending_fragments
 lazy from release_creator.fragments.pull_requests import PullRequest, PullRequestCredit
 lazy from release_creator.fragments.shape import markdown_visible_children
 
@@ -77,11 +77,22 @@ def add_pull_request_links(
     explain(
         f"Linking {counted(len(fragments), 'pending fragment')} in {directory.as_posix()} to {repository} pull requests"
     )
-    updates: list[tuple[Path, str]] = [
-        (fragment, _link_fragment(fragment, repository, pull_requests, commits, mode=mode)) for fragment in fragments
+    updates = [
+        (
+            fragment,
+            fragment.with_name(f"+{fragment.name}") if mode == "towncrier" and is_bare_fragment(fragment) else fragment,
+            _link_fragment(fragment, repository, pull_requests, commits, mode=mode),
+        )
+        for fragment in fragments
     ]
-    for fragment, content in updates:
-        fragment.write_text(content, encoding="utf-8")
+    for fragment, destination, _ in updates:
+        if destination != fragment and destination.exists():
+            msg = f"fragment name conflicts with {destination}"
+            raise ValueError(msg)
+    for fragment, destination, content in updates:
+        if destination != fragment:
+            fragment.rename(destination)
+        destination.write_text(content, encoding="utf-8")
 
 
 def _link_fragment(

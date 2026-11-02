@@ -39,6 +39,7 @@ def news_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     ("filename", "content", "count", "error"),
     [
         pytest.param("+topic.feature.md", "Add a feature.\n", 1, "", id="named"),
+        pytest.param("topic.feature.md", "Add a feature.\n", 1, "", id="bare-name"),
         pytest.param(
             "+topic.feature.md",
             "- Add a feature.\n",
@@ -74,7 +75,6 @@ def news_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         pytest.param("+topic.feature.1.md", "Add a feature.\n", 1, "", id="multiple-entries"),
         pytest.param("42.feature.2.md", "Add a feature.\n", 1, "", id="numbered-counter"),
         pytest.param("+topic.doc.md", "Add a feature.\n", 0, "unsupported changelog fragment", id="category"),
-        pytest.param("topic.feature.md", "Add a feature.\n", 0, "unsupported changelog fragment", id="name"),
         pytest.param("+topic.feature.md", " \n", 0, "empty changelog fragment", id="empty"),
         pytest.param(
             "+topic.feature.md", "Add a feature.\n\n```\ncode\n", 0, "unclosed Markdown code fence", id="unclosed-fence"
@@ -419,25 +419,56 @@ def test_changed_fragments_rejects_towncrier_duplicate(news_repository: Path) ->
         changed_fragments(news_repository / "pyproject.toml", "main")
 
 
-def test_towncrier_check_rejects_unprefixed_fragment(news_repository: Path) -> None:
-    config = Path(__file__).resolve().parents[3] / "pyproject.toml"
-    shutil.copyfile(config, news_repository / "pyproject.toml")
-    (news_repository / "docs").mkdir()
-    (news_repository / "docs" / "changelog.md").write_text("# Changelog\n", encoding="utf-8")
+def test_towncrier_check_accepts_unprefixed_fragment(news_repository: Path) -> None:
+    config = news_repository / "pyproject.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8").replace("[tool.towncrier]", '[tool.towncrier]\nissue_pattern = "\\\\d+"'),
+        encoding="utf-8",
+    )
     (news_repository / "changelog.d" / "topic.feature.md").write_text("Add a feature.\n", encoding="utf-8")
     _git("add", ".")
     _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
 
-    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]  # Installed CLI in a temporary repo.
-        [str(Path(sys.executable).with_name("towncrier")), "check", "--compare-with", "origin/main"],
-        cwd=news_repository,
-        capture_output=True,
-        check=False,
-        text=True,
-    )
+    assert changed_fragments(config, "main") == 1
 
-    assert result.returncode == 1
-    assert "Issue name 'topic' does not match the configured pattern" in result.stderr
+
+def test_changed_fragments_rejects_bare_name_collision(news_repository: Path) -> None:
+    directory = news_repository / "changelog.d"
+    for filename in ("topic.feature.md", "+topic.feature.md"):
+        (directory / filename).write_text("Add a feature.\n", encoding="utf-8")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+
+    with pytest.raises(ValueError, match="fragment name conflicts"):
+        changed_fragments(news_repository / "pyproject.toml", "main")
+
+
+def test_changed_fragments_rejects_existing_bare_name_collision(news_repository: Path) -> None:
+    directory = news_repository / "changelog.d"
+    (directory / "topic.feature.md").write_text("Add a feature.\n", encoding="utf-8")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Add bare news")
+    _git("update-ref", "refs/remotes/origin/main", "HEAD")
+    (directory / "+topic.feature.md").write_text("Add another feature.\n", encoding="utf-8")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Add prefixed news")
+
+    with pytest.raises(ValueError, match="fragment name conflicts"):
+        changed_fragments(news_repository / "pyproject.toml", "main")
+
+
+def test_towncrier_check_rejects_unchecked_bare_fragment(news_repository: Path) -> None:
+    config = news_repository / "pyproject.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8").replace('name = "Added"', 'name = "Added", check = false'),
+        encoding="utf-8",
+    )
+    (news_repository / "changelog.d/topic.feature.md").write_text("Add a feature.\n", encoding="utf-8")
+    _git("add", ".")
+    _git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "Change")
+
+    with pytest.raises(ValueError, match="No new newsfragments found"):
+        changed_fragments(config, "main")
 
 
 def test_changed_fragments_rejects_missing_base(news_repository: Path) -> None:

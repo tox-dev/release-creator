@@ -77,6 +77,22 @@ def test_markdown_template_links_two_fragments_from_one_pull_request(tmp_path: P
     ) in notes
 
 
+def test_markdown_template_builds_bare_name_without_issue_link(tmp_path: Path) -> None:
+    changelog = _build_markdown_fragments(
+        tmp_path,
+        {"named.bugfix.md": "Fix a named bug.\n"},
+        {"named.bugfix.md": _alice_pull("42")},
+        issue_format="[#{issue}](https://github.com/tox-dev/example/issues/{issue})",
+    )
+
+    assert render_markdown(changelog, ReleaseContext(tag="1.2.3", repository="tox-dev/example")) == (
+        '<a name="release-1-2-3-fixed"></a>\n\n### Bug fixes\n\n'
+        "- Fix a named bug ([#42](https://github.com/tox-dev/example/pull/42)) "
+        "by [@alice](https://github.com/alice).\n\n"
+        "[📜 Full Changelog](https://github.com/tox-dev/example/commits/1.2.3)\n"
+    )
+
+
 @pytest.mark.parametrize(
     ("source", "entry"),
     [

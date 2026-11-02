@@ -13,10 +13,11 @@ if TYPE_CHECKING:
 
 
 @pytest.mark.parametrize("extension", [pytest.param("md", id="markdown"), pytest.param("rst", id="rst")])
+@pytest.mark.parametrize("prefix", [pytest.param("+", id="orphan"), pytest.param("", id="bare")])
 def test_tags_next(
-    extension: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    extension: str, prefix: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    (tmp_path / f"+one.feature.{extension}").write_text("Add a feature.\n")
+    (tmp_path / f"{prefix}one.feature.{extension}").write_text("Add a feature.\n")
     monkeypatch.setattr(sys, "argv", ["release-creator", "tags", "--next", "auto", "--directory", str(tmp_path)])
     monkeypatch.setattr(sys, "stdin", StringIO("0.1.0\njunk\n"))
 
@@ -87,7 +88,6 @@ def test_tags_next_scopes_package(
 @pytest.mark.parametrize(
     "filename",
     [
-        pytest.param("topic.feature.md", id="missing-plus"),
         pytest.param("+.feature.md", id="empty-name"),
         pytest.param("\N{ARABIC-INDIC DIGIT ONE}.feature.md", id="non-ascii-number"),
     ],
