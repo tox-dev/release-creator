@@ -116,6 +116,44 @@ def test_add_pull_request_links(
 
 
 @pytest.mark.parametrize(
+    ("filename", "pull_requests", "expected"),
+    [
+        pytest.param(
+            "first.feature.md",
+            True,
+            "Add a feature ([#42](https://github.com/tox-dev/example/pull/42)) by [@alice](https://github.com/alice).\n",
+            id="linked",
+        ),
+        pytest.param("first.feature.2.md", False, "Add a feature.\n", id="counter-without-pull-request"),
+        pytest.param("first.feature.rst", False, "Add a feature.\n", id="rst-without-pull-request"),
+    ],
+)
+def test_add_pull_request_links_prefixes_bare_names(
+    tmp_path: Path, filename: str, pull_requests: bool, expected: str
+) -> None:
+    fragment = tmp_path / filename
+    fragment.write_text("Add a feature.\n", encoding="utf-8")
+
+    _link(tmp_path, "tox-dev/example", {filename: "Add release notes (#42)"} if pull_requests else {})
+
+    assert not fragment.exists()
+    assert (tmp_path / f"+{filename}").read_text(encoding="utf-8") == expected
+
+
+def test_add_pull_request_links_rejects_bare_name_collision(tmp_path: Path) -> None:
+    bare = tmp_path / "first.feature.md"
+    prefixed = tmp_path / "+first.feature.md"
+    bare.write_text("First feature.\n", encoding="utf-8")
+    prefixed.write_text("Second feature.\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="fragment name conflicts"):
+        add_pull_request_links(tmp_path, "tox-dev/example", {}, commits={})
+
+    assert bare.read_text(encoding="utf-8") == "First feature.\n"
+    assert prefixed.read_text(encoding="utf-8") == "Second feature.\n"
+
+
+@pytest.mark.parametrize(
     "label", [pytest.param("![@alice](https://example.com/a.png)", id="image"), pytest.param("", id="empty")]
 )
 def test_add_pull_request_links_ignores_nontext_profile_label(tmp_path: Path, label: str) -> None:

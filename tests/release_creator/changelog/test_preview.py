@@ -100,7 +100,6 @@ def test_render_preview_keeps_fenced_package_headings(changelog: Path, tmp_path:
 @pytest.mark.parametrize(
     ("filename", "content", "error"),
     [
-        pytest.param("missing.feature.md", "Valid.\n", "invalid changelog fragment", id="unprefixed-name"),
         pytest.param("+name.other.md", "Valid.\n", "invalid changelog fragment", id="unknown-category"),
         pytest.param("+name.feature.md", " \n", "one nonempty paragraph", id="empty"),
         pytest.param("+name.feature.md", "First.\n\nSecond.\n", "one nonempty paragraph", id="two-paragraphs"),
@@ -115,6 +114,12 @@ def test_render_preview_rejects_bad_fragment(
 
     with pytest.raises(ValueError, match=error):
         render_preview(changelog, "pyproject-fmt", tmp_path)
+
+
+def test_render_preview_accepts_bare_name(changelog: Path, tmp_path: Path) -> None:
+    (tmp_path / "missing.feature.md").write_text("Valid.\n", encoding="utf-8")
+
+    assert "- Valid." in render_preview(changelog, "pyproject-fmt", tmp_path)
 
 
 def test_render_preview_ignores_directory_marker(changelog: Path, tmp_path: Path) -> None:

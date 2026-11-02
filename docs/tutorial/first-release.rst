@@ -41,8 +41,9 @@ This minimal ``pyproject.toml`` maps ``bugfix`` fragments to the ``Fixed`` categ
       { directory = "bugfix", name = "Fixed", showcontent = true },
     ]
 
-The orphan prefix lets a contributor name a fragment before a pull request exists. The issue pattern reserves bare
-numeric stems for issue or pull request numbers, so ``topic.bugfix.md`` cannot become a misleading issue reference.
+The orphan prefix lets a contributor name a fragment before a pull request exists. The issue pattern reserves numeric
+stems for issue or pull request numbers. The linker prefixes ``topic.bugfix.md`` before Towncrier builds the release so
+its name cannot become a misleading issue reference.
 
 Create ``docs/changelog.md`` with the insertion marker:
 

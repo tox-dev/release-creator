@@ -2,9 +2,13 @@
 
 lazy import sys
 lazy import tomllib
+lazy from dataclasses import replace
 lazy from fnmatch import fnmatch
 lazy from pathlib import Path
 lazy from typing import Any
+
+lazy from towncrier._builder import find_fragments  # ruff: ignore[import-private-name]  # No public fragment parser.
+lazy from towncrier._settings import load_config_from_options  # ruff: ignore[import-private-name]  # CLI lacks overrides.
 
 lazy from release_creator.explain import counted, explain
 lazy from release_creator.fragments.knope import changeset_parts, changeset_versioning, knope_kinds, load_knope_package
@@ -13,7 +17,7 @@ lazy from release_creator.fragments.links import (
     has_hand_written_pull_request_link,
     has_unclosed_code_fence,
 )
-lazy from release_creator.fragments.names import fragment_category
+lazy from release_creator.fragments.names import fragment_category, is_bare_fragment, pending_fragments
 lazy from release_creator.fragments.shape import validate_towncrier_fragment
 lazy from release_creator.notes.rst import TILDE_PLACEHOLDER, rst_errors
 lazy from release_creator.process import run_text
@@ -28,8 +32,9 @@ def changed_fragments(config: Path, base: str) -> int:
     :raises ValueError: The configuration or a changed fragment is invalid.
     """
     config, directory, suffix, categories, ignored = _towncrier_settings(config, base)
+    paths = _git_paths(directory, base)
     count = 0
-    for path in _git_paths(directory, base):
+    for path in paths:
         count += _validate_changed_fragment(path, directory, suffix, categories, ignored)
     if not count:
         explain("Towncrier check skipped: no changed fragments")
@@ -38,23 +43,39 @@ def changed_fragments(config: Path, base: str) -> int:
         if root.returncode:
             msg = root.stderr.strip() or "could not locate repository root"
             raise ValueError(msg)
-        result = run_text(
-            [
-                sys.executable,
-                "-m",
-                "towncrier",
-                "check",
-                "--config",
-                str(config.resolve()),
-                "--compare-with",
-                f"origin/{base}",
-            ],
-            cwd=Path(root.stdout.strip()),
-        )
-        if result.returncode:
-            msg = result.stderr.strip() or result.stdout.strip()
-            raise ValueError(msg)
-        sys.stderr.write(f"{result.stdout}{result.stderr}")
+        repository = Path(root.stdout.strip())
+        if bare := [fragment for fragment in pending_fragments(directory) if is_bare_fragment(fragment)]:
+            if conflict := next(
+                (destination for fragment in bare if (destination := fragment.with_name(f"+{fragment.name}")).exists()),
+                None,
+            ):
+                msg = f"fragment name conflicts with {conflict}"
+                raise ValueError(msg)
+            _, towncrier = load_config_from_options(str(repository), str(config.resolve()))
+            # Towncrier's pattern rejects bare stems before it checks for duplicate fragments.
+            fragments = find_fragments(str(repository), replace(towncrier, issue_pattern=""), strict=True)[1]
+            checked = {Path(name).resolve() for name, category in fragments if towncrier.types[category]["check"]}
+            if not any(path.resolve() in checked for path in paths):
+                msg = "No new newsfragments found on this branch."
+                raise ValueError(msg)
+        else:
+            result = run_text(
+                [
+                    sys.executable,
+                    "-m",
+                    "towncrier",
+                    "check",
+                    "--config",
+                    str(config.resolve()),
+                    "--compare-with",
+                    f"origin/{base}",
+                ],
+                cwd=repository,
+            )
+            if result.returncode:
+                msg = result.stderr.strip() or result.stdout.strip()
+                raise ValueError(msg)
+            sys.stderr.write(f"{result.stdout}{result.stderr}")
         explain(f"Towncrier check passed against origin/{base}")
     return count
 
@@ -74,6 +95,9 @@ def _validate_changed_fragment(
         raise ValueError(msg)
     if fragment_category(path, categories) is None:
         msg = f"unsupported changelog fragment: {path}"
+        raise ValueError(msg)
+    if is_bare_fragment(path) and (destination := path.with_name(f"+{path.name}")).exists():
+        msg = f"fragment name conflicts with {destination}"
         raise ValueError(msg)
     if not (content := path.read_text(encoding="utf-8")).strip():
         msg = f"empty changelog fragment: {path}"
