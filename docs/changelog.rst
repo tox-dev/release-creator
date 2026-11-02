@@ -3,6 +3,19 @@ Changelog
 
 .. towncrier release notes start
 
+.. _release-4-4-0:
+
+4.4.0 (2026-11-02)
+------------------
+
+.. _release-4-4-0-added:
+
+Added
+~~~~~
+
+- Accept descriptive Towncrier fragment names without a ``+`` prefix and add it before release so Towncrier does not
+  create a false issue reference (:pr:`57`) by :user:`gaborbernat`.
+
 .. _release-4-3-2:
 
 4.3.2 (2026-10-30)
